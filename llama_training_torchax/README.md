@@ -44,3 +44,13 @@ python run.py --model_impl=<orig|scan|scan_manual>
 
 Run `CLUSTER_NAME=foobar PROJECT_ID=something ./run_xpk.sh` will build the dockerfile and launch it on XPK.
 Replace `CLUSTER_NAME` and `PROJECT_ID` with appropiate values.
+
+
+## Benchmarks (WIP)
+|device| Model size | Batch size | seq length | step time | MFU | NOTEs|
+|-------| ----- | ----- | ----- | ----- | ----- | ---|
+|TPU v6e-8| 8B |        8 |      8192 | 1.7s | 30% | Scan, fsdp, host-offload|
+|TPU v6e-256 x 2| 405B | 256 | 8192 | 46.12s | 25.8% | Scan, fsdp + tp, host-offload|
+
+
+
