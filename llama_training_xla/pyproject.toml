@@ -12,9 +12,13 @@ license = {file = "LICENSE"}
 authors = [
     {name = "Jiewen Tan", email = "jwtan@google.com"},
 ]
+dependencies = [
+    "transformers",
+    "datasets",
+]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["torchprime"]
 include = ["torchprime", "torchprime.*"]
 
 [tool.setuptools.package-data]
