@@ -13,8 +13,12 @@ authors = [
     {name = "Jiewen Tan", email = "jwtan@google.com"},
 ]
 dependencies = [
-    "transformers",
-    "datasets",
+    "accelerate==1.2.1",
+    "transformers==4.47.1",
+    "datasets==3.2.0",
+
+    # `transformers` requires `tensorflow` now.
+    "tensorflow==2.15.0",
 ]
 
 [tool.setuptools.packages.find]

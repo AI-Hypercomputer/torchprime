@@ -152,7 +152,9 @@ class Trainer:
                                lr=args.learning_rate,
                                betas=(args.adam_beta1, args.adam_beta2),
                                eps=args.adam_epsilon)
-        self._prime_optimizer()
+
+        # TODO: this OOMs the TPU.
+        # self._prime_optimizer()
 
         self.lr_scheduler = get_scheduler(name=args.lr_scheduler_type,
                                           optimizer=self.optimizer,
@@ -172,10 +174,12 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         num_replicas = xr.process_count()
+        logger.info(f"Num replicas: {num_replicas}")
         sampler = torch.utils.data.DistributedSampler(
             self.train_dataset,
             num_replicas=num_replicas,
             rank=xr.process_index())
+        assert self.global_batch_size is not None
         dataloader = DataLoader(
             self.train_dataset,
             # Data collator will default to DataCollatorWithPadding, so we change it.
@@ -246,6 +250,7 @@ class Trainer:
     def train_loop(self):
         self.model.train()
         self.model.zero_grad()
+
         # For now we assume that we wil never train for mor than one epoch
         max_step = self.args.max_steps
         train_loader = self._get_train_dataloader()
@@ -261,18 +266,14 @@ class Trainer:
             except StopIteration:
                 break
 
-            # For logging step, we expcliity isolate this step from tracing and execution overlapping.
+            # For logging step, we explicitly isolate this step from tracing and execution overlapping.
             if step % self.args.logging_steps == 0:
                 xm.wait_device_ops()
             trace_start_time = timer()
 
-            outputs = self.model(**batch)
-            loss = outputs.loss
-            loss.backward()
-            self.optimizer.step()
-            self.lr_scheduler.step()
-            self.model.zero_grad()
+            loss = self.train_step(batch)
             xm.mark_step()
+
             trace_end_time = timer()
             if step % self.args.logging_steps == 0:
                 xm.wait_device_ops()
@@ -291,6 +292,15 @@ class Trainer:
                                   self.args.profile_duration)
 
         logger.info("Finished training run")
+
+    def train_step(self, batch):
+        outputs = self.model(**batch)
+        loss = outputs.loss
+        loss.backward()
+        self.optimizer.step()
+        self.lr_scheduler.step()
+        self.model.zero_grad()
+        return loss
 
 
 def main():
