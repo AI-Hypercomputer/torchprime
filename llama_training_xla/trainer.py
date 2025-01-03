@@ -145,13 +145,15 @@ class Trainer:
         self.input_sharding_spec = xs.ShardingSpec(xs.get_global_mesh(),
                                                    ("fsdp", None),
                                                    minibatch=True)
-        self.model = self._shard_model(model)
+        self.model = model.to(self.device)
+        # self.model = self._shard_model(model)
 
         # Set up optimizers
         self.optimizer = AdamW(params=model.parameters(),
                                lr=args.learning_rate,
                                betas=(args.adam_beta1, args.adam_beta2),
                                eps=args.adam_epsilon)
+        self.gradient_accumulation_steps = 4
 
         # TODO: this OOMs the TPU.
         # self._prime_optimizer()
@@ -271,7 +273,8 @@ class Trainer:
                 xm.wait_device_ops()
             trace_start_time = timer()
 
-            loss = self.train_step(batch)
+            loss = self.train_step(batch, step)
+            print(f"Training loss at step {step}: {loss}")
             xm.mark_step()
 
             trace_end_time = timer()
@@ -293,13 +296,16 @@ class Trainer:
 
         logger.info("Finished training run")
 
-    def train_step(self, batch):
+    def train_step(self, batch, step):
         outputs = self.model(**batch)
-        loss = outputs.loss
-        loss.backward()
-        self.optimizer.step()
-        self.lr_scheduler.step()
-        self.model.zero_grad()
+        loss = outputs.loss / self.gradient_accumulation_steps
+        if (step + 1) % self.gradient_accumulation_steps == 0:
+            loss.backward()
+            self.optimizer.step()
+            self.lr_scheduler.step()
+            self.model.zero_grad()
+        else:
+            loss.backward(retain_graph=True)
         return loss
 
 
