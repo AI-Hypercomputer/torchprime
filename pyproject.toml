@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torchprime"
+version = "0.1.0"
+description = "TorchPrime, reference model implementations for PyTorch on TPU/GPU using torch_xla and torchax"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    { name = "PyTorch/XLA team", email = "pytorchxla-dev@google.com" },
+]
+dependencies = [
+    "transformers==4.44.2",
+    "transformers[torch]==4.44.2",
+    "datasets==3.0.0",
+    "optax==0.2.4",
+    "fire==0.7.0",
+    "tensorflow-cpu==2.18.0",
+    "tensorboard==2.18.0",
+    "tensorboard-plugin-profile==2.18.0",
+    "tf_keras==2.18.0",
+]
+
+[tool.setuptools.packages.find]
+where = [""]
+include = ["torchprime*"]
+exclude = ["torchprime.*.tests.*"]
+
+[tool.setuptools.package-data]
+"torchprime" = ["py.typed"]

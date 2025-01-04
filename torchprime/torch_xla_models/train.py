@@ -43,7 +43,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 
 # TorchPrime imports
-from torchprime.models.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.llama import LlamaForCausalLM
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
@@ -80,8 +80,8 @@ class ModelArguments:
 class MoreTrainingArguments(TrainingArguments):
     profile_step: Optional[int] = field(default=-1,
                                         metadata={"help": "Step to profile"})
-    profile_logdir: Optional[str] = field(
-        default=".", metadata={"help": "Directory to store the profile"})
+    profile_dir: Optional[str] = field(
+        default="profile/", metadata={"help": "Directory to store the profile"})
     profile_duration: Optional[int] = field(
         default=20000, metadata={"help": "Duration (ms) to capture profile"})
     global_batch_size: Optional[int] = field(
@@ -195,7 +195,7 @@ class Trainer:
         return loader
 
     def _shard_model(self, model):
-        default_transformer_cls_names_to_wrap = None
+        default_transformer_cls_names_to_wrap = []
         fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
             "transformer_layer_cls_to_wrap",
             default_transformer_cls_names_to_wrap)
@@ -288,7 +288,7 @@ class Trainer:
                 # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
                 # for the step, the interruption will be minimal.
                 xm.wait_device_ops()
-                xp.trace_detached('127.0.0.1:9012', self.args.profile_logdir,
+                xp.trace_detached('127.0.0.1:9012', self.args.profile_dir,
                                   self.args.profile_duration)
 
         logger.info("Finished training run")

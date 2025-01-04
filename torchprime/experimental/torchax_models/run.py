@@ -4,9 +4,7 @@ import jax
 import jax.numpy as jnp
 from jax.sharding import PartitionSpec as P, NamedSharding
 import torch
-import model
-import model_with_scan
-import model_with_collectives
+from llama import model, model_with_scan, model_with_collectives
 import train
 import torch_xla2
 from torch_xla2 import interop

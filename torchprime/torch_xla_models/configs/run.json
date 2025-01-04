@@ -5,7 +5,15 @@
     "cache_dir": "/tmp",
     "global_batch_size": 8,
     "logging_steps": 10,
-    "fsdp_config": "./configs/fsdp_config.json",
+    "fsdp": "full_shard",
+    "fsdp_config": {
+        "transformer_layer_cls_to_wrap": [
+            "LlamaDecoderLayer"
+        ],
+        "xla": true,
+        "xla_fsdp_v2": true,
+        "xla_fsdp_grad_ckpt": true
+    },
     "max_steps": 15,
     "profile_step": 5,
     "model_id": "meta-llama/Meta-Llama-3-8B",

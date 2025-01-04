@@ -24,6 +24,6 @@ print(f"Dumping XLA compiler outputs to {xla_dump_path}")
 profile_dir = f'{gcs_mount}/llama3-{slice_id}-{worker_id}/'
 
 # Exec into the training script.
-args = [sys.executable, "run.py"] + sys.argv[1:] + ['--profile_dir', profile_dir]
+args = [sys.executable] + sys.argv[1:] + ['--profile_dir', profile_dir]
 env = os.environ.copy()
 os.execve(sys.executable, args, env)

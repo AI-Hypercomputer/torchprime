@@ -3,9 +3,9 @@ import unittest
 from transformers import AutoConfig, LlamaForCausalLM as HfLlamaForCausalLM
 
 import torch
-import torch_xla.core.xla_model as xm
+import torch_xla
 
-from torchprime.models.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.llama import LlamaForCausalLM
 
 
 class TestYourModule(unittest.TestCase):
@@ -20,19 +20,21 @@ class TestYourModule(unittest.TestCase):
         )
         config.flash_attention = False
 
-        device = xm.xla_device()
-        torch.manual_seed(
-            42)  # Such that the two models are initialized the same way
-        hf_model = HfLlamaForCausalLM(config).to(device)
-        torch.manual_seed(
-            42)  # Such that the two models are initialized the same way
-        model = LlamaForCausalLM(config).to(device)
+        device = torch_xla.device()
+        torch.manual_seed(42)
+        torch_xla.manual_seed(42)
+        with device:
+            hf_model = HfLlamaForCausalLM(config)
+            model = LlamaForCausalLM(config)
+            model.load_state_dict(hf_model.state_dict())
+        torch_xla.sync()
 
         input_sizes = [8, 128, 256]
         for input_size in input_sizes:
             input = torch.randint(128, ((2, input_size // 2))).to(device)
             hf_output = hf_model(input, labels=input, attention_mask=torch.ones_like(input))
             llama_output = model(input, labels=input, attention_mask=torch.ones_like(input))
+            torch_xla.sync()
             self.assertTrue(torch.allclose(hf_output.logits, llama_output.logits, atol=1e-6),
                             "logits are not equal")
             self.assertTrue(torch.allclose(hf_output.loss, llama_output.loss, atol=1e-6),
