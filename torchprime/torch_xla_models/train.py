@@ -12,6 +12,7 @@ import numpy as np
 import torch
 
 # PyTorch XLA imports
+import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.parallel_loader as pl
@@ -178,7 +179,7 @@ class Trainer:
         p.grad = torch.zeros_like(p)
         p.grad.requires_grad_(False)
     self.optimizer.step()
-    xm.mark_step()
+    torch_xla.sync()
 
   def _get_train_dataloader(self):
     if self.train_dataset is None:
@@ -282,7 +283,6 @@ class Trainer:
       trace_start_time = timer()
 
       loss = self.train_step(batch)
-      xm.mark_step()
 
       trace_end_time = timer()
       if step % self.args.logging_steps == 0:
@@ -306,6 +306,7 @@ class Trainer:
 
     logger.info("Finished training run")
 
+  @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
     outputs = self.model(**batch)
     loss = outputs.loss
