@@ -24,6 +24,13 @@ dependencies = [
     "tf_keras==2.18.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff~=0.8.6",
+    "pytest~=8.3.4",
+    "yapf~=0.43.0"
+]
+
 [tool.setuptools.packages.find]
 where = [""]
 include = ["torchprime*"]
@@ -31,3 +38,27 @@ exclude = ["torchprime.*.tests.*"]
 
 [tool.setuptools.package-data]
 "torchprime" = ["py.typed"]
+
+[tool.ruff]
+indent-width = 4
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = [
+    "E501",  # Line too long. Some copied GPU code has lengthy comments.
+]
+
