@@ -3,6 +3,7 @@ import math
 
 import custom_mesh
 import jax
+from jax import numpy as np
 import numpy as np
 import splash_attn
 import torch
@@ -142,17 +143,27 @@ def make_weight_shard(weight_meta, slice_index):
 
 
 def create_sharded_weights(model, mesh, sharding_map):
-  res = {}
-  for name, weight_meta in model.state_dict().items():
-    sharding_spec = sharding_map.get(_process_sharding_name(name))
-    if sharding_spec is None:
-      print("Skipping weight:", name)
-      continue
-    sharding = NamedSharding(mesh, P(*sharding_spec))
-    res[name] = jax.make_array_from_callback(
-        weight_meta.shape, sharding,
-        functools.partial(make_weight_shard, weight_meta))
-  return res
+  name_to_sharding = {
+    name: NamedSharding(mesh, P(*sharding_map.get(_process_sharding_name(name))))
+    for name in model.state_dict().keys()
+    if _process_sharding_name(name) in sharding_map
+  }
+
+  kaiming = jax.nn.initializers.he_uniform(dtype=jnp.bfloat16)
+  key = jax.random.PRNGKey(0)
+  
+  @functools.partial(
+    jax.jit, 
+    out_shardings=name_to_sharding,
+  )
+  def create_weights():
+    res = {}
+    for name, weight_meta in model.state_dict().items():
+      res[name] = kaiming(key, weight_meta.shape, interop.jax_view(weight_meta.dtype))
+    return res
+  
+  weights = create_weights()
+  return interop.torch_view(weights)
 
 
 def sharded_device_put(tensor, sharding):
