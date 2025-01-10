@@ -134,6 +134,13 @@ def register_attention(fn):
       k, fn, is_jax_function=False, is_user_defined=True, needs_env=False)
 
 
+def make_weight_shard(weight_meta, slice_index):
+  weight_shard_meta = weight_meta[slice_index]
+  with torch_xla2.default_env():
+    return interop.jax_view(
+        torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype))
+
+
 def create_sharded_weights(model, mesh, sharding_map):
   res = {}
   for name, weight_meta in model.state_dict().items():
@@ -142,12 +149,9 @@ def create_sharded_weights(model, mesh, sharding_map):
       print("Skipping weight:", name)
       continue
     sharding = NamedSharding(mesh, P(*sharding_spec))
-    with jax.default_device(jax.devices("cpu")[0]):
-      weight_torch = torch.randn(weight_meta.shape, dtype=weight_meta.dtype)
-      weight_jax = torch_xla2.default_env().to_xla(weight_torch).jax()
-    callback = (lambda weight_jax: lambda a: weight_jax[a])(weight_jax)
-    res[name] = jax.make_array_from_callback(weight_jax.shape, sharding,
-                                             callback)
+    res[name] = jax.make_array_from_callback(
+        weight_meta.shape, sharding,
+        functools.partial(make_weight_shard, weight_meta))
   return res
 
 
