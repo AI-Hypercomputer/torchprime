@@ -135,19 +135,36 @@ def register_attention(fn):
 
 
 def create_sharded_weights(model, mesh, sharding_map):
+
+  def make_callback(weight_jax):
+
+    def my_callback(a):
+      print(
+          f"I'm fetching slice {a} from weight jax of shape {weight_jax.shape}",
+          flush=True)
+      return weight_jax[a]  # This slice operations OOMs
+
+    return my_callback
+
   res = {}
   for name, weight_meta in model.state_dict().items():
+    print(
+        f"Creating sharded param. Name: {name}. Shape: {weight_meta.shape}. \
+          Dtype: {weight_meta.dtype}",
+        flush=True)
     sharding_spec = sharding_map.get(_process_sharding_name(name))
     if sharding_spec is None:
       print("Skipping weight:", name)
       continue
     sharding = NamedSharding(mesh, P(*sharding_spec))
+    print(f"Sharding for {name}: {sharding}", flush=True)
     with jax.default_device(jax.devices("cpu")[0]):
       weight_torch = torch.randn(weight_meta.shape, dtype=weight_meta.dtype)
       weight_jax = torch_xla2.default_env().to_xla(weight_torch).jax()
-    callback = (lambda weight_jax: lambda a: weight_jax[a])(weight_jax)
+    my_callback = make_callback(weight_jax)
     res[name] = jax.make_array_from_callback(weight_jax.shape, sharding,
-                                             callback)
+                                             my_callback)
+    print(f"Done with {name}", flush=True)
   return res
 
 

@@ -15,7 +15,7 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 pushd "$SCRIPT_DIR"
 
 # Always build a new image. This is fast when cached.
-./buildpush.sh
+# ./buildpush.sh
 
 # You can override these by setting corresponding environment variables.
 : "${CLUSTER_NAME:=bodaborg-v6e-256}"

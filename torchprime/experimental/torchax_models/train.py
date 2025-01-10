@@ -4,6 +4,7 @@ import functools
 import time
 
 import jax
+import pathlib
 import optax
 import torch
 import torch_xla2
@@ -115,7 +116,7 @@ def make_train_step(model_forward, loss_fn, optax_optimizer, policy):
   return step
 
 
-def _prelower_step(step, weights, opt_state, args, label, mesh):
+def _prelower_step(step, weights, opt_state, args, label, mesh, profile_dir):
   wshardings = tree_map(
       lambda a: a.sharding if isinstance(a, jax.Array) else None, weights)
   oshardings = tree_map(
@@ -129,7 +130,12 @@ def _prelower_step(step, weights, opt_state, args, label, mesh):
       # in_shardings=shardings,
       out_shardings=(NamedSharding(mesh, P()), wshardings, oshardings),
   ).lower(weights, opt_state, args, label)
-  # print(lowered.as_text())
+  print("Lowered graph:", flush=True)
+  lowered_str = lowered.as_text()
+  # print(lowered_str, flush=True)
+  pathlib.Path(f'{profile_dir}/lowered_stablehlo.txt').write_text(
+      lowered_str, encoding='utf-8')
+
   # import pdb; pdb.set_trace()
   print("program size:", len(lowered.as_text()) / 1e6, "m chars")
   step_compiled = lowered.compile()
@@ -256,14 +262,9 @@ def train_loop(
       if i == 0:
         # NOTE: this is not necessary; but I want to print out
         # Stablehlo, and compile times
-        train_step = _prelower_step(
-            train_step,
-            jax_params,
-            opt_state,
-            (input_seq, pos, freqs_cis, mask),
-            labels,
-            mesh,
-        )
+        train_step = _prelower_step(train_step, jax_params, opt_state,
+                                    (input_seq, pos, freqs_cis, mask), labels,
+                                    mesh, profile_dir)
 
       if i == 5:
         jax.profiler.start_trace(profile_dir)
