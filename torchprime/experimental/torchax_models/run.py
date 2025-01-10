@@ -161,6 +161,8 @@ def create_sharded_weights(model, mesh, sharding_map):
   def create_weights(rng):
     res = {}
     for name, weight_meta in model.state_dict().items():
+      if _process_sharding_name(name) not in sharding_map:
+        continue
       rng, subkey = jax.random.split(rng)
       if len(weight_meta.shape) < 2:
         res[name] = jax.random.normal(subkey, weight_meta.shape, 
