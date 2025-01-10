@@ -3,7 +3,7 @@ import math
 
 import custom_mesh
 import jax
-from jax import numpy as np
+from jax import numpy as jnp
 import numpy as np
 import splash_attn
 import torch
@@ -150,19 +150,26 @@ def create_sharded_weights(model, mesh, sharding_map):
   }
 
   kaiming = jax.nn.initializers.he_uniform(dtype=jnp.bfloat16)
+
   key = jax.random.PRNGKey(0)
+  key = jax.device_put(key, NamedSharding(mesh, P()))  # replicate
   
   @functools.partial(
     jax.jit, 
     out_shardings=name_to_sharding,
   )
-  def create_weights():
+  def create_weights(rng):
     res = {}
     for name, weight_meta in model.state_dict().items():
-      res[name] = kaiming(key, weight_meta.shape, interop.jax_view(weight_meta.dtype))
+      rng, subkey = jax.random.split(rng)
+      if len(weight_meta.shape) < 2:
+        res[name] = jax.random.normal(subkey, weight_meta.shape, 
+                                      interop.jax_view(weight_meta.dtype))
+      else:
+        res[name] = kaiming(subkey, weight_meta.shape, interop.jax_view(weight_meta.dtype))
     return res
   
-  weights = create_weights()
+  weights = create_weights(key)
   return interop.torch_view(weights)
 
 
