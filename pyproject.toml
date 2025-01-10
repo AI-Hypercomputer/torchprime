@@ -28,6 +28,7 @@ dependencies = [
 dev = [
     "ruff~=0.8.6",
     "pytest~=8.3.4",
+    "pytest-forked~=1.6.0",
     "yapf~=0.43.0"
 ]
 
@@ -38,6 +39,10 @@ exclude = ["torchprime.*.tests.*"]
 
 [tool.setuptools.package-data]
 "torchprime" = ["py.typed"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--forked"  # ensure torchax and torch_xla tests don't conflict
 
 [tool.ruff]
 indent-width = 4
@@ -61,4 +66,3 @@ select = [
 ignore = [
     "E501",  # Line too long. Some copied GPU code has lengthy comments.
 ]
-

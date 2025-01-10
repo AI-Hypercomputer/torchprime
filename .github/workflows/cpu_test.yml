@@ -18,6 +18,9 @@ jobs:
       image: us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_${{ matrix.python-version }}_tpuvm
     steps:
     - uses: actions/checkout@v4
+    - name: Install torchax
+      run: |
+        pip install 'torch_xla2 @ git+https://git@github.com/pytorch/xla.git#subdirectory=experimental/torch_xla2'
     - name: Install dev dependencies
       run: |
         python -m pip install --upgrade pip
