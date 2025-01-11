@@ -1,7 +1,7 @@
 import unittest
-from multiprocessing import Process
 
 import torch
+
 from torchprime.experimental.torchax_models.llama import model as llama_model
 
 
@@ -59,7 +59,7 @@ class LlamaTest(unittest.TestCase):
           mask=torch.ones_like(self.input)).to("cpu").to(torch.bfloat16)
     self.assertTrue(
         torch.allclose(output.to("cpu"), self.native_output, atol=1e-1),
-        f"pytorch native and torchax are not equal")
+        "pytorch native and torchax are not equal")
 
 
 """

@@ -31,7 +31,7 @@ class TestYourModule(unittest.TestCase):
       self.model = LlamaForCausalLM(config)
       self.model.load_state_dict(self.hf_model.state_dict())
 
-  def test_model_forward(self):
+  def test_forward_our_model_against_hf_model(self):
     device = torch_xla.device()
     model_xla = copy.deepcopy(self.model).to(device)
     hf_model_xla = copy.deepcopy(self.hf_model).to(device)
