@@ -73,12 +73,12 @@ class TestYourModule(unittest.TestCase):
             llama_output_native.logits,
             llama_output.logits.to('cpu'),
             atol=1e-2),
-        "CPU run and TPU run logits are not equal",
+        "CPU run and XLA run logits are not equal",
     )
     self.assertTrue(
         torch.allclose(
             llama_output_native.loss, llama_output.loss.to('cpu'), atol=1e-2),
-        "CPU run and TPU run loss is not equal",
+        "CPU run and XLA run loss is not equal",
     )
 
 
