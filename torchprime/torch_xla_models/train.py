@@ -1,6 +1,7 @@
 # Standard library imports
 import functools
 import logging
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -21,7 +22,6 @@ import torch_xla.runtime as xr
 import transformers
 from datasets import load_dataset
 from torch import nn
-from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
@@ -40,6 +40,7 @@ from transformers import (
     set_seed,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
@@ -156,11 +157,11 @@ class Trainer:
     self.model = self._shard_model(model)
 
     # Set up optimizers
-    self.optimizer = AdamW(
+    self.optimizer = Adafactor(
         params=model.parameters(),
         lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        eps=args.adam_epsilon,
+        relative_step=False,
+        scale_parameter=False,
     )
 
     # TODO: this OOMs the TPU.
@@ -291,6 +292,8 @@ class Trainer:
         logger.info(
             f"Step: {step}, loss: {loss:0.4f}, trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms, step time: {(execute_end_time - trace_end_time) * 1000:0.2f} ms"
         )
+        if math.isnan(loss):
+          raise ValueError(f"Loss is NaN at step {step}")
 
       # Capture profile at the prefer step
       if step == self.args.profile_step:
