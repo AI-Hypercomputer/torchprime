@@ -1,5 +1,8 @@
 # TorchPrime
 
+**Note: this repository is under experimental status. We don't yet have correctness
+guarantees for the model implementations.**
+
 TorchPrime is a reference model implementation for PyTorch on TPU/GPU using
 `torch_xla` and `torchax`. It is designed to showcase best practices for
 high-performance model training with these frameworks.
