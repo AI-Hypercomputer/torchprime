@@ -335,6 +335,7 @@ class TransformerBlock(nn.Module):
       freqs_cis: torch.Tensor,
       mask: torch.Tensor | None,
   ):
+    x = with_sharding_constraint(x, P("fsdp", None, "tp"))
     x = interop.call_jax(checkpoint_name, x, "decoder_layer_input")
     h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
     out = h + self.feed_forward(self.ffn_norm(h))

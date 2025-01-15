@@ -19,7 +19,8 @@ jobset_name = os.getenv("JOBSET_NAME", date_string)
 xla_dump_path = (
     f"{gcs_mount}/llama3-{slice_id}-{worker_id}/xla_dumps/{jobset_name}/")
 os.environ["XLA_FLAGS"] = (
-    os.getenv("XLA_FLAGS", "") + f" --xla_dump_to={xla_dump_path}")
+    os.getenv("XLA_FLAGS", "") +
+    f" --xla_dump_to={xla_dump_path} --xla_dump_hlo_as_proto")
 print(f"Dumping XLA compiler outputs to {xla_dump_path}")
 
 # Determine the profile dir

@@ -55,7 +55,7 @@ Replace `CLUSTER_NAME`, `PROJECT_ID`, and `ZONE` with appropiate values.
 |device| Model size | Batch size | seq length | step time | MFU | NOTEs|
 |-------| ----- | ----- | ----- | ----- | ----- | ---|
 |TPU v6e-8| 8B |        8 |      8192 | 1.7s | 30% | Scan, fsdp, host-offload|
-|TPU v6e-256 x 2| 405B | 256 | 8192 | 46.12s | 25.8% | Scan, fsdp + tp, host-offload|
+|TPU v6e-256 x 2| 405B | 256 | 8192 | 46.12s | 28.7% | Scan, fsdp + tp, host-offload|
 
 <!-- TODO: support specifying different XLA flags -->
 
