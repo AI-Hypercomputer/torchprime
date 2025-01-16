@@ -56,3 +56,9 @@ htmlcov/
 
 # Ignore profiler outputs
 /profile/
+
+# Direnv config
+.envrc
+
+# torchprime config
+.config

@@ -11,6 +11,6 @@ else
     SUDO="sudo"
 fi
 
-$SUDO docker build --network=host -t llama3 ../ -f Dockerfile
+$SUDO docker build --network=host -t llama3 ../../ -f Dockerfile
 $SUDO docker tag llama3 gcr.io/tpu-pytorch/llama3:latest
 $SUDO docker push gcr.io/tpu-pytorch/llama3:latest

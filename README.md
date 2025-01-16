@@ -15,8 +15,10 @@ Install `torchprime`:
 ```sh
 git clone https://github.com/AI-Hypercomputer/torchprime.git
 cd torchprime
-pip install -e .
+pip install -e '.[dev]'
 ```
+
+### Local training
 
 Train Llama 3 8B using torch_xla:
 
@@ -35,6 +37,35 @@ python3 torchprime/experimental/torchax_models/run.py --batch_size=16
 Refer to `README.md` in `torchprime/torch_xla_models` and
 `torchprime/experimental/torchax_models` for more details.
 
+### Distributed training
+
+torchprime uses [xpk][xpk] as the standard path for iterating on
+distributed training code.
+
+First teach torchprime about the XPK cluster it is using, the artifact
+storage location, etc. You only need to do this on first clone or when
+switching to a different topology or cluster. Example:
+
+```sh
+tp use \
+    --cluster <XPK CLUSTER NAME> \
+    --project my-gcp-project \
+    --zone us-east5-b \
+    --num-slices 1 \
+    --tpu-type v6e-256 \
+    --artifact-dir gs://bucket/dir
+```
+
+Then prepend `tp run` to a particular Python file you would like to
+run remotely, including arguments, e.g.
+
+```sh
+tp run torchprime/experimental/torchax_models/run.py --batch_size=256
+```
+
+`tp run` will broadcast this command to all VMs in the XPK cluster,
+which is the convention for running SPMD distributed workloads.
+
 ## Structure
 
 This repo will contain a set of reference models that we have optimized and
@@ -44,7 +75,7 @@ will be provided for ease of reproducibility.
 
 `docs` contains guides for optimizing performance and debugging issues.
 
-`launcher` contains scripts to train a model on a large TPU cluster.
+`torchprime/launcher` contains scripts to train a model on a large TPU cluster.
 
 `torchprime/data` contains dataset and data loading utilities.
 
@@ -97,3 +128,4 @@ For more information on PyTorch/XLA, visit the
 
 [1]: https://github.com/pytorch/xla
 [2]: https://github.com/pytorch/xla/tree/master/experimental/torch_xla2
+[xpk]: https://github.com/AI-Hypercomputer/xpk

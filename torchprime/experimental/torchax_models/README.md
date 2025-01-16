@@ -44,11 +44,9 @@ python run.py --model_impl=<orig|scan|scan_manual>
 
 ## Run on XPK
 
-Run
-`CLUSTER_NAME=... PROJECT_ID=.. ZONE=... launcher/run_xpk.sh <local command>`
-will build the dockerfile and launch it on XPK.
-Replace `CLUSTER_NAME`, `PROJECT_ID`, and `ZONE` with appropiate values.
+Follow the guide in `tp use` to setup the cluster information.
 
+Run `tp run <loal command>` to run the training command on the XPK cluster.
 
 ## Benchmarks (WIP)
 
@@ -62,8 +60,7 @@ Replace `CLUSTER_NAME`, `PROJECT_ID`, and `ZONE` with appropiate values.
 Llama 3.1 405B on v6e-256 x 2 command:
 
 ```sh
-NUM_SLICES=2 TPU_TYPE=v6e-256 launcher/run_xpk.sh \
-    torchprime/experimental/torchax_models/run.py \
+tp run torchprime/experimental/torchax_models/run.py \
     --batch_size=256 \
     --model_type=405B \
     --seqlen=8192 \

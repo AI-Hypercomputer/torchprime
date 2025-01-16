@@ -30,24 +30,21 @@
 
 ## Running on XPK
 
-Replace `HF_TOKEN`, `CLUSTER_NAME`, `PROJECT_ID`, and `ZONE` with appropriate
-values.
+Follow the guide in `tp use` to setup the cluster information.
 
 ```sh
 export HF_TOKEN='... hugging face token ...'
-export CLUSTER_NAME='...'
-export PROJECT_ID='...'
-export ZONE='...'
+export XLA_IR_DEBUG=1
+export XLA_HLO_DEBUG=1 
 
-NUM_SLICES=1 TPU_TYPE=v6e-256 launcher/run_xpk.sh \
-   torchprime/torch_xla_models/train.py \
+tp run torchprime/torch_xla_models/train.py \
    --dataset_name wikitext \
-   --dataset_config_name 'wikitext-2-raw-v1' \
+   --dataset_config_name 'wikitext-103-raw-v1' \
    --output_dir /tmp \
    --cache_dir /tmp \
    --global_batch_size 256 \
    --logging_steps 10 \
-   --max_steps 15 \
+   --max_steps 30 \
    --profile_step 5 \
    --model_id 'meta-llama/Meta-Llama-3-8B' \
    --tokenizer_name 'meta-llama/Meta-Llama-3-8B' \
