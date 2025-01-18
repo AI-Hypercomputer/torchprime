@@ -22,6 +22,10 @@ with regular `torch.nn` layers.
 Choosing which version of the model to run can be controlled by passing
 `--model_impl` flag to the `run.py` script.
 
+If passing `--model_impl=titan` It will import the llama model from torchtitan 
+and use that instead, if so, please install torchtitan in the current environment,
+following instructions here: https://github.com/pytorch/torchtitan
+
 
 ## Install dependencies
 

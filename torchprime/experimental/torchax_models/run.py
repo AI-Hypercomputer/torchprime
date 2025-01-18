@@ -174,6 +174,20 @@ def sharded_device_put(tensor, sharding):
   return jax.make_array_from_single_device_arrays(shape, sharding, x_split)
 
 
+class TitanModel(torch.nn.Module):
+  """A wraper to make titan model has the input signature as the models we had."""
+
+  def __init__(self, config):
+    super().__init__()
+    from torchtitan.models.llama import model as titan
+    self.model = titan.Transformer(config)
+
+  def forward(self, tokens: torch.Tensor, start_pos: int, freqs_cis, mask):
+    self.model.freqs_cis = freqs_cis
+    return self.model(tokens)
+
+
+
 def main(
   batch_size: int = 64,
   model_type: str = "8B",
@@ -250,17 +264,28 @@ def main(
     elif model_impl == "orig":
       sharding_map = sharding_map_original
       llama = model.Transformer(args)
+    elif model_impl == "titan":
+      from torchtitan.models.llama import llama3_configs
+      from torchtitan.models.llama import model as titan
+      sharding_map = {'model.' + key: value for key, value in sharding_map_original.items()}
+      args = llama3_configs[model_type]
+      args.vocab_size = 128256
+      args.max_seq_len = seqlen
+      llama = TitanModel(args)
     else:
       raise AssertionError("unknown impl: " + model_impl)
 
   sharded_weights = create_sharded_weights(llama, mesh, sharding_map)
   with torch.device("cpu"):
-    freqs_cis = model.precompute_freqs_cis(
-      args.dim // args.n_heads,
-      args.max_seq_len * 2,
-      args.rope_theta,
-      args.use_scaled_rope,
-    ).numpy()
+    if model_impl == 'titan':
+      freqs_cis = llama.model._precompute_freqs_cis().numpy()
+    else:
+      freqs_cis = model.precompute_freqs_cis(
+          args.dim // args.n_heads,
+          args.max_seq_len * 2,
+          args.rope_theta,
+          args.use_scaled_rope,
+      ).numpy()
   sharding = NamedSharding(mesh, P())  # replicated
 
   env = torch_xla2.default_env()
