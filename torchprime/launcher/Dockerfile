@@ -31,8 +31,15 @@ RUN pip install torch_xla[pallas] \
 RUN pip install -e .
 
 # Install torchprime
+# Optimization: we rerun `pip install -e .` only if `pyproject.toml` changes.
+# Copy only the installation-related files first to make Docker cache them separately.
 WORKDIR /workspaces/torchprime
-COPY . /workspaces/torchprime
+COPY pyproject.toml /workspaces/torchprime/
 RUN pip install -e .
+
+# Now copy the rest of the repo
+COPY . /workspaces/torchprime
+# This should not install any packages. Only symlink the source code.
+RUN pip install --no-deps -e .
 
 ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
