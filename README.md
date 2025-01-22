@@ -105,6 +105,12 @@ How to run tests:
 pytest
 ```
 
+How to run some of the tests, and re-run them whenever you change a file:
+
+```sh
+tp -i test ... # replace with path to tests/directories
+```
+
 How to format:
 
 ```sh
