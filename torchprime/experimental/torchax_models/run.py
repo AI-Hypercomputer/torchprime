@@ -187,7 +187,6 @@ class TitanModel(torch.nn.Module):
     return self.model(tokens)
 
 
-
 def main(
   batch_size: int = 64,
   model_type: str = "8B",
@@ -266,7 +265,9 @@ def main(
       llama = model.Transformer(args)
     elif model_impl == "titan":
       from torchtitan.models.llama import llama3_configs
-      sharding_map = {'model.' + key: value for key, value in sharding_map_original.items()}
+      sharding_map = {
+          'model.' + key: value for key, value in sharding_map_original.items()
+      }
       args = llama3_configs[model_type]
       args.vocab_size = 128256
       args.max_seq_len = seqlen

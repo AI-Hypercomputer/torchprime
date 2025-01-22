@@ -26,8 +26,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
-  SpmdFullyShardedDataParallel as FSDPv2,
-)
+    SpmdFullyShardedDataParallel as FSDPv2,)
 
 # yapf: disable
 # Transformers imports
