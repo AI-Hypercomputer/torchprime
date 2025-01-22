@@ -29,6 +29,7 @@ from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
   SpmdFullyShardedDataParallel as FSDPv2,
 )
 
+# yapf: disable
 # Transformers imports
 from transformers import (
   AutoConfig,

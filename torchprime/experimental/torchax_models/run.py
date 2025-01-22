@@ -266,7 +266,6 @@ def main(
       llama = model.Transformer(args)
     elif model_impl == "titan":
       from torchtitan.models.llama import llama3_configs
-      from torchtitan.models.llama import model as titan
       sharding_map = {'model.' + key: value for key, value in sharding_map_original.items()}
       args = llama3_configs[model_type]
       args.vocab_size = 128256
