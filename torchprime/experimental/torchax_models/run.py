@@ -180,6 +180,7 @@ class TitanModel(torch.nn.Module):
   def __init__(self, config):
     super().__init__()
     from torchtitan.models.llama import model as titan
+
     self.model = titan.Transformer(config)
 
   def forward(self, tokens: torch.Tensor, start_pos: int, freqs_cis, mask):
@@ -265,8 +266,9 @@ def main(
       llama = model.Transformer(args)
     elif model_impl == "titan":
       from torchtitan.models.llama import llama3_configs
+
       sharding_map = {
-          'model.' + key: value for key, value in sharding_map_original.items()
+        "model." + key: value for key, value in sharding_map_original.items()
       }
       args = llama3_configs[model_type]
       args.vocab_size = 128256
@@ -277,14 +279,14 @@ def main(
 
   sharded_weights = create_sharded_weights(llama, mesh, sharding_map)
   with torch.device("cpu"):
-    if model_impl == 'titan':
+    if model_impl == "titan":
       freqs_cis = llama.model._precompute_freqs_cis().numpy()
     else:
       freqs_cis = model.precompute_freqs_cis(
-          args.dim // args.n_heads,
-          args.max_seq_len * 2,
-          args.rope_theta,
-          args.use_scaled_rope,
+        args.dim // args.n_heads,
+        args.max_seq_len * 2,
+        args.rope_theta,
+        args.use_scaled_rope,
       ).numpy()
   sharding = NamedSharding(mesh, P())  # replicated
 
