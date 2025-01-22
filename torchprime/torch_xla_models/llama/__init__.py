@@ -1,3 +1,3 @@
 from .model import LlamaForCausalLM
 
-__all__ = ['LlamaForCausalLM']
+__all__ = ["LlamaForCausalLM"]

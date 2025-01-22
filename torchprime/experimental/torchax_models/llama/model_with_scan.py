@@ -31,9 +31,7 @@ class ModelArgs:
   n_heads: int = 32
   n_kv_heads: int | None = None
   vocab_size: int = -1
-  multiple_of: int = (
-      256  # make SwiGLU hidden layer size multiple of large power of 2
-  )
+  multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
   ffn_dim_multiplier: float | None = None
   norm_eps: float = 1e-5
   rope_theta: float = 500000
@@ -64,47 +62,46 @@ class ModelArgs:
 # (requirements.txt) of the `llama-models` package.
 
 transformer_configs = {
-    "8B": {
-        "dim": 4096,
-        "ffn_dim_multiplier": 1.3,
-        "multiple_of": 1024,
-        "n_heads": 32,
-        "n_kv_heads": 8,
-        "n_layers": 32,
-        "norm_eps": 1e-05,
-        "rope_theta": 500000.0,
-        "use_scaled_rope": True,
-        "vocab_size": 128256,
-    },
-    "70B": {
-        "dim": 8192,
-        "ffn_dim_multiplier": 1.3,
-        "multiple_of": 4096,
-        "n_heads": 64,
-        "n_kv_heads": 8,
-        "n_layers": 80,
-        "norm_eps": 1e-05,
-        "rope_theta": 500000.0,
-        "use_scaled_rope": True,
-        "vocab_size": 128256,
-    },
-    "405B": {
-        "dim": 16384,
-        "ffn_dim_multiplier": 1.2,
-        "multiple_of": 4096,
-        "n_heads": 128,
-        "n_kv_heads": 16,
-        "n_layers": 126,
-        "norm_eps": 1e-05,
-        "rope_theta": 500000.0,
-        "use_scaled_rope": True,
-        "vocab_size": 128256,
-    },
+  "8B": {
+    "dim": 4096,
+    "ffn_dim_multiplier": 1.3,
+    "multiple_of": 1024,
+    "n_heads": 32,
+    "n_kv_heads": 8,
+    "n_layers": 32,
+    "norm_eps": 1e-05,
+    "rope_theta": 500000.0,
+    "use_scaled_rope": True,
+    "vocab_size": 128256,
+  },
+  "70B": {
+    "dim": 8192,
+    "ffn_dim_multiplier": 1.3,
+    "multiple_of": 4096,
+    "n_heads": 64,
+    "n_kv_heads": 8,
+    "n_layers": 80,
+    "norm_eps": 1e-05,
+    "rope_theta": 500000.0,
+    "use_scaled_rope": True,
+    "vocab_size": 128256,
+  },
+  "405B": {
+    "dim": 16384,
+    "ffn_dim_multiplier": 1.2,
+    "multiple_of": 4096,
+    "n_heads": 128,
+    "n_kv_heads": 16,
+    "n_layers": 126,
+    "norm_eps": 1e-05,
+    "rope_theta": 500000.0,
+    "use_scaled_rope": True,
+    "vocab_size": 128256,
+  },
 }
 
 
 class RMSNorm(torch.nn.Module):
-
   def __init__(self, dim: int, eps: float = 1e-6):
     super().__init__()
     self.eps = eps
@@ -137,16 +134,16 @@ def apply_scaling(freqs: torch.Tensor):
     else:
       assert low_freq_wavelen != high_freq_wavelen
       smooth = (old_context_len / wavelen - low_freq_factor) / (
-          high_freq_factor - low_freq_factor)
+        high_freq_factor - low_freq_factor
+      )
       new_freqs.append((1 - smooth) * freq / scale_factor + smooth * freq)
   return torch.tensor(new_freqs, dtype=freqs.dtype, device=freqs.device)
 
 
-def precompute_freqs_cis(dim: int,
-                         end: int,
-                         theta: float = 10000.0,
-                         use_scaled: bool = False):
-  freqs = 1.0 / (theta**(torch.arange(0, dim, 2)[:(dim // 2)].float() / dim))
+def precompute_freqs_cis(
+  dim: int, end: int, theta: float = 10000.0, use_scaled: bool = False
+):
+  freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
   t = torch.arange(end, device=freqs.device, dtype=torch.float32)
   if use_scaled:
     freqs = apply_scaling(freqs)
@@ -164,9 +161,9 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
 
 
 def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
+  xq: torch.Tensor,
+  xk: torch.Tensor,
+  freqs_cis: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
   xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
   xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
@@ -181,50 +178,49 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
   bs, slen, n_kv_heads, head_dim = x.shape
   if n_rep == 1:
     return x
-  return (x[:, :, :,
-            None, :].expand(bs, slen, n_kv_heads, n_rep,
-                            head_dim).reshape(bs, slen, n_kv_heads * n_rep,
-                                              head_dim))
+  return (
+    x[:, :, :, None, :]
+    .expand(bs, slen, n_kv_heads, n_rep, head_dim)
+    .reshape(bs, slen, n_kv_heads * n_rep, head_dim)
+  )
 
 
 class Attention(nn.Module):
-
   def __init__(self, args: ModelArgs):
     super().__init__()
-    self.n_kv_heads = (
-        args.n_heads if args.n_kv_heads is None else args.n_kv_heads)
+    self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
     self.n_local_heads = args.n_heads
     self.n_local_kv_heads = self.n_kv_heads
     self.n_rep = self.n_local_heads // self.n_local_kv_heads
     self.head_dim = args.dim // args.n_heads
 
     self.wq = nn.Linear(
-        args.dim,
-        args.n_heads * self.head_dim,
-        bias=False,
+      args.dim,
+      args.n_heads * self.head_dim,
+      bias=False,
     )
     self.wk = nn.Linear(
-        args.dim,
-        self.n_kv_heads * self.head_dim,
-        bias=False,
+      args.dim,
+      self.n_kv_heads * self.head_dim,
+      bias=False,
     )
     self.wv = nn.Linear(
-        args.dim,
-        self.n_kv_heads * self.head_dim,
-        bias=False,
+      args.dim,
+      self.n_kv_heads * self.head_dim,
+      bias=False,
     )
     self.wo = nn.Linear(
-        args.n_heads * self.head_dim,
-        args.dim,
-        bias=False,
+      args.n_heads * self.head_dim,
+      args.dim,
+      bias=False,
     )
 
   def forward(
-      self,
-      x: torch.Tensor,
-      start_pos: int,
-      freqs_cis: torch.Tensor,
-      mask: torch.Tensor | None,
+    self,
+    x: torch.Tensor,
+    start_pos: int,
+    freqs_cis: torch.Tensor,
+    mask: torch.Tensor | None,
   ):
     bsz, seqlen, _ = x.shape
     xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
@@ -248,18 +244,19 @@ class Attention(nn.Module):
 
     # repeat k/v heads if n_kv_heads < n_heads
     keys = repeat_kv(
-        keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
+      keys, self.n_rep
+    )  # (bs, cache_len + seqlen, n_local_heads, head_dim)
     values = repeat_kv(
-        values, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
+      values, self.n_rep
+    )  # (bs, cache_len + seqlen, n_local_heads, head_dim)
 
     xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
-    keys = keys.transpose(
-        1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
-    values = values.transpose(
-        1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
+    keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
+    values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
     output = torch.nn.functional.scaled_dot_product_attention(
-        xq, keys, values, is_causal=(mask is not None))
+      xq, keys, values, is_causal=(mask is not None)
+    )
 
     output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
     out = self.wo(output)
@@ -269,13 +266,12 @@ class Attention(nn.Module):
 
 
 class FeedForward(nn.Module):
-
   def __init__(
-      self,
-      dim: int,
-      hidden_dim: int,
-      multiple_of: int,
-      ffn_dim_multiplier: float | None,
+    self,
+    dim: int,
+    hidden_dim: int,
+    multiple_of: int,
+    ffn_dim_multiplier: float | None,
   ):
     super().__init__()
     hidden_dim = int(2 * hidden_dim / 3)
@@ -285,19 +281,19 @@ class FeedForward(nn.Module):
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
     self.w1 = nn.Linear(
-        dim,
-        hidden_dim,
-        bias=False,
+      dim,
+      hidden_dim,
+      bias=False,
     )
     self.w2 = nn.Linear(
-        hidden_dim,
-        dim,
-        bias=False,
+      hidden_dim,
+      dim,
+      bias=False,
     )
     self.w3 = nn.Linear(
-        dim,
-        hidden_dim,
-        bias=False,
+      dim,
+      hidden_dim,
+      bias=False,
     )
 
   def forward(self, x):
@@ -311,7 +307,6 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-
   def __init__(self, layer_id: int, args: ModelArgs):
     super().__init__()
     self.n_heads = args.n_heads
@@ -319,21 +314,21 @@ class TransformerBlock(nn.Module):
     self.head_dim = args.dim // args.n_heads
     self.attention = Attention(args)
     self.feed_forward = FeedForward(
-        dim=args.dim,
-        hidden_dim=4 * args.dim,
-        multiple_of=args.multiple_of,
-        ffn_dim_multiplier=args.ffn_dim_multiplier,
+      dim=args.dim,
+      hidden_dim=4 * args.dim,
+      multiple_of=args.multiple_of,
+      ffn_dim_multiplier=args.ffn_dim_multiplier,
     )
     self.layer_id = layer_id
     self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
     self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
   def forward(
-      self,
-      x: torch.Tensor,
-      start_pos: int,
-      freqs_cis: torch.Tensor,
-      mask: torch.Tensor | None,
+    self,
+    x: torch.Tensor,
+    start_pos: int,
+    freqs_cis: torch.Tensor,
+    mask: torch.Tensor | None,
   ):
     x = with_sharding_constraint(x, P("fsdp", None, "tp"))
     x = interop.call_jax(checkpoint_name, x, "decoder_layer_input")
@@ -354,10 +349,9 @@ class ScanLayer(nn.Module):
     stacked_weights = self._stack_layer_weights(one_block_statedict, num_layers)
     # register those as parameters on this module
 
-    self.params = nn.ParameterDict({
-        self._param_name_new(k): nn.Parameter(v)
-        for k, v in stacked_weights.items()
-    })
+    self.params = nn.ParameterDict(
+      {self._param_name_new(k): nn.Parameter(v) for k, v in stacked_weights.items()}
+    )
 
   def _stack_layer_weights(self, orig_state_dict, num_layers):
     # Create weights such that, for every [n, m] weights
@@ -377,21 +371,19 @@ class ScanLayer(nn.Module):
 
   def forward(self, *args, **kwargs):
     assert not kwargs
-    weights = {
-        k: self.params[self._param_name_new(k)] for k in self.layer_weights_keys
-    }
+    weights = {k: self.params[self._param_name_new(k)] for k in self.layer_weights_keys}
     scan = interop.torch_view(jax.lax.scan)
     policy = jax.checkpoint_policies.save_and_offload_only_these_names(
-        names_which_can_be_saved=[],
-        names_which_can_be_offloaded=[
-            "decoder_layer_input",
-            "query_proj",
-            "key_proj",
-            "value_proj",
-            "out_proj",
-        ],
-        offload_src="device",
-        offload_dst="pinned_host",
+      names_which_can_be_saved=[],
+      names_which_can_be_offloaded=[
+        "decoder_layer_input",
+        "query_proj",
+        "key_proj",
+        "value_proj",
+        "out_proj",
+      ],
+      offload_src="device",
+      offload_dst="pinned_host",
     )
 
     def eval_one_layer(args, weight):
@@ -402,20 +394,19 @@ class ScanLayer(nn.Module):
       return (newh, *rest), torch.ones(1)
 
     _eval_one_layer = interop.call_jax(
-        jax.checkpoint,
-        eval_one_layer,
-        policy=policy,
+      jax.checkpoint,
+      eval_one_layer,
+      policy=policy,
     )
     h, _ = scan(
-        _eval_one_layer,
-        args,
-        weights,
+      _eval_one_layer,
+      args,
+      weights,
     )
     return h[0]
 
 
 class Transformer(nn.Module):
-
   def __init__(self, params: ModelArgs):
     super().__init__()
     self.params = params
@@ -423,8 +414,8 @@ class Transformer(nn.Module):
     self.n_layers = params.n_layers
 
     self.tok_embeddings = nn.Embedding(
-        params.vocab_size,
-        params.dim,
+      params.vocab_size,
+      params.dim,
     )
 
     # self.layers = torch.nn.ModuleList()
@@ -434,9 +425,9 @@ class Transformer(nn.Module):
 
     self.norm = RMSNorm(params.dim, eps=params.norm_eps)
     self.output = nn.Linear(
-        params.dim,
-        params.vocab_size,
-        bias=False,
+      params.dim,
+      params.vocab_size,
+      bias=False,
     )
 
   def forward(self, tokens: torch.Tensor, start_pos: int, freqs_cis, mask):

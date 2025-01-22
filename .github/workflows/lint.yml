@@ -28,7 +28,7 @@ jobs:
     - name: Lint the code with ruff
       run: |
         ruff check
-    - name: Check formatting with yapf
+    - name: Check formatting with ruff
       shell: bash
       run: |
         git_status=$(git status --porcelain)
@@ -38,12 +38,12 @@ jobs:
           exit 1
         fi
 
-        yapf --recursive -i '*.py' torchprime launcher
+        ruff format
         git_status=$(git status --porcelain)
         if [[ $git_status ]]; then
           git diff
-          echo "yapf recommends the changes above, please manually apply them OR automatically apply the changes "
-          echo "by running `yapf -i /PATH/TO/foo.py` to the following files"
+          echo "ruff recommends the changes above, please manually apply them OR automatically apply the changes "
+          echo "by running `ruff format` to format the following files"
           echo "${git_status}"
           exit 1
         else

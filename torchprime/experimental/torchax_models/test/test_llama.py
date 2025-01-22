@@ -6,7 +6,6 @@ from torchprime.experimental.torchax_models.llama import model as llama_model
 
 
 class LlamaTest(unittest.TestCase):
-
   def setUp(self):
     super().setUp()
     torch.manual_seed(42)
@@ -19,29 +18,29 @@ class LlamaTest(unittest.TestCase):
     with torch.no_grad():
       self.input = torch.randint(0, self.vocab_size, (1, self.max_seq_len))
       self.model_args = llama_model.ModelArgs(
-          block_size=self.block_size,
-          vocab_size=self.vocab_size,
-          n_layer=self.n_layer,
-          n_heads=self.n_heads,
-          dim=self.dim,
-          max_seq_len=self.max_seq_len)
+        block_size=self.block_size,
+        vocab_size=self.vocab_size,
+        n_layer=self.n_layer,
+        n_heads=self.n_heads,
+        dim=self.dim,
+        max_seq_len=self.max_seq_len,
+      )
       self.freqs_cis = llama_model.precompute_freqs_cis(
-          self.model_args.dim // self.model_args.n_heads,
-          self.model_args.max_seq_len,
-          self.model_args.rope_theta,
-          self.model_args.use_scaled_rope,
+        self.model_args.dim // self.model_args.n_heads,
+        self.model_args.max_seq_len,
+        self.model_args.rope_theta,
+        self.model_args.use_scaled_rope,
       ).to(torch.bfloat16)
       self.m = llama_model.Transformer(self.model_args)
       self.m.to(torch.bfloat16)
       self.native_output = self.m(
-          self.input,
-          0,
-          freqs_cis=self.freqs_cis,
-          mask=torch.ones_like(self.input))
+        self.input, 0, freqs_cis=self.freqs_cis, mask=torch.ones_like(self.input)
+      )
 
   def test_forward_torchax_against_native(self):
     import torch_xla2
     import torch_xla2.config
+
     torch_xla2.enable_accuracy_mode()
     env = torch_xla2.default_env()
     # TODO(zpcore): uncomment the following once torch_xla2 support config input
@@ -52,14 +51,15 @@ class LlamaTest(unittest.TestCase):
       input_tensor = self.input.to("jax")
       freqs_cis = self.freqs_cis.to("jax")
       self.m.to("jax")
-      output = self.m(
-          input_tensor,
-          0,
-          freqs_cis=freqs_cis,
-          mask=torch.ones_like(self.input)).to("cpu").to(torch.bfloat16)
+      output = (
+        self.m(input_tensor, 0, freqs_cis=freqs_cis, mask=torch.ones_like(self.input))
+        .to("cpu")
+        .to(torch.bfloat16)
+      )
     self.assertTrue(
-        torch.allclose(output.to("cpu"), self.native_output, atol=1e-1),
-        "pytorch native and torchax are not equal")
+      torch.allclose(output.to("cpu"), self.native_output, atol=1e-1),
+      "pytorch native and torchax are not equal",
+    )
 
 
 """

@@ -23,7 +23,6 @@ SEQLEN = 2048
 
 
 class TraininableLlama:
-
   def __init__(self, model):
     self.orig_model = model
 
@@ -31,8 +30,9 @@ class TraininableLlama:
   def call(self, weights, buffers, args, kwargs):
     weights_and_buffers = copy.copy(weights)
     weights_and_buffers.update(buffers)
-    return torch.func.call_functional(self.orig_model, weights_and_buffers,
-                                      args, kwargs)
+    return torch.func.call_functional(
+      self.orig_model, weights_and_buffers, args, kwargs
+    )
 
 
 def fake_dataloader(size, seqlen, batch_size):
@@ -74,8 +74,8 @@ def sharded_device_put(tensor, sharding):
 
   shape = tensor.shape
   x_split = [
-      jax.device_put(tensor[i], device)
-      for device, i in sharding.addressable_devices_indices_map(shape).items()
+    jax.device_put(tensor[i], device)
+    for device, i in sharding.addressable_devices_indices_map(shape).items()
   ]
   return jax.make_array_from_single_device_arrays(shape, sharding, x_split)
 
@@ -117,17 +117,19 @@ def make_train_step(model_forward, loss_fn, optax_optimizer, policy):
 
 def _prelower_step(step, weights, opt_state, args, label, mesh):
   wshardings = tree_map(
-      lambda a: a.sharding if isinstance(a, jax.Array) else None, weights)
+    lambda a: a.sharding if isinstance(a, jax.Array) else None, weights
+  )
   oshardings = tree_map(
-      lambda a: a.sharding if isinstance(a, jax.Array) else None, opt_state)
+    lambda a: a.sharding if isinstance(a, jax.Array) else None, opt_state
+  )
 
   print("Start compiling")
   start = time.perf_counter()
   lowered = jax.jit(
-      step,
-      donate_argnums=(0, 1),
-      # in_shardings=shardings,
-      out_shardings=(NamedSharding(mesh, P()), wshardings, oshardings),
+    step,
+    donate_argnums=(0, 1),
+    # in_shardings=shardings,
+    out_shardings=(NamedSharding(mesh, P()), wshardings, oshardings),
   ).lower(weights, opt_state, args, label)
   # print(lowered.as_text())
   # import pdb; pdb.set_trace()
@@ -144,17 +146,17 @@ def _prelower_step(step, weights, opt_state, args, label, mesh):
 
 
 def train_loop(
-    mesh,
-    model,
-    weights,
-    data_loader,
-    input_freqs_cis,
-    lr,
-    seqlen,
-    policy,
-    batch_size,
-    use_shmap,
-    profile_dir: str,
+  mesh,
+  model,
+  weights,
+  data_loader,
+  input_freqs_cis,
+  lr,
+  seqlen,
+  policy,
+  batch_size,
+  use_shmap,
+  profile_dir: str,
 ):
   print("start training")
   min_loop_time = 10000
@@ -177,14 +179,13 @@ def train_loop(
   model_forward_orig = functools.partial(torch.func.functional_call, model)
 
   @functools.partial(
-      shard_map.shard_map,
-      mesh=mesh,
-      in_specs=(wspecs, (P("fsdp"), P(), P(), P())),
-      out_specs=(P("fsdp")),
-      check_rep=False,
+    shard_map.shard_map,
+    mesh=mesh,
+    in_specs=(wspecs, (P("fsdp"), P(), P(), P())),
+    out_specs=(P("fsdp")),
+    check_rep=False,
   )
   def model_forward_shmap(weight, args):
-
     def gather_weights(w, spec):
       try:
         index = spec.index("fsdp")
@@ -209,10 +210,10 @@ def train_loop(
     model_forward = model_forward_orig
 
   train_step = make_train_step(
-      model_forward,
-      loss_fn=torch.nn.CrossEntropyLoss(),
-      optax_optimizer=jax_optimizer,
-      policy=policy,
+    model_forward,
+    loss_fn=torch.nn.CrossEntropyLoss(),
+    optax_optimizer=jax_optimizer,
+    policy=policy,
   )
 
   def _expand_input(input_seq):
@@ -235,8 +236,7 @@ def train_loop(
   def _replicate(x):
     with jax.default_device(jax.devices("cpu")[0]):
       xj = env.to_xla(x).jax()
-    xj = jax.make_array_from_callback(xj.shape, replicated_sharding,
-                                      lambda a: xj)
+    xj = jax.make_array_from_callback(xj.shape, replicated_sharding, lambda a: xj)
     return xj
 
   data_iter = fake_dataloader(1000, seqlen, batch_size)
@@ -257,31 +257,32 @@ def train_loop(
         # NOTE: this is not necessary; but I want to print out
         # Stablehlo, and compile times
         train_step = _prelower_step(
-            train_step,
-            jax_params,
-            opt_state,
-            (input_seq, pos, freqs_cis, mask),
-            labels,
-            mesh,
+          train_step,
+          jax_params,
+          opt_state,
+          (input_seq, pos, freqs_cis, mask),
+          labels,
+          mesh,
         )
 
       if i == 5:
         jax.profiler.start_trace(profile_dir)
       step_start = time.perf_counter()
       loss, jax_params, opt_state = train_step(
-          jax_params, opt_state, (input_seq, pos, freqs_cis, mask), labels)
+        jax_params, opt_state, (input_seq, pos, freqs_cis, mask), labels
+      )
       jax.block_until_ready((loss, jax_params))
       step_end = time.perf_counter()
       if i == 6:
         jax.profiler.stop_trace()
 
       print(
-          i,
-          "loss",
-          loss,
-          loss.dtype,
-          "step latency: ",
-          step_end - step_start,
+        i,
+        "loss",
+        loss,
+        loss.dtype,
+        "step latency: ",
+        step_end - step_start,
       )
       min_loop_time = min(min_loop_time, step_end - step_start)
       print("======")

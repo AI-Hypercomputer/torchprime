@@ -5,11 +5,12 @@ from datetime import datetime
 from pathlib import Path
 
 # Get the artifact dir from env var.
-gcs_artifact_dir = os.environ['TORCHPRIME_ARTIFACT_DIR']
+gcs_artifact_dir = os.environ["TORCHPRIME_ARTIFACT_DIR"]
 assert gcs_artifact_dir.startswith(
-    "gs://"), f"{gcs_artifact_dir} must be in a GCS bucket (start with gs://)"
+  "gs://"
+), f"{gcs_artifact_dir} must be in a GCS bucket (start with gs://)"
 gcs_artifact_dir = gcs_artifact_dir.removeprefix("gs://")
-gcs_bucket, *gcs_artifact_subdir = gcs_artifact_dir.split('/')
+gcs_bucket, *gcs_artifact_subdir = gcs_artifact_dir.split("/")
 
 # Some passes in XLA can only dump to regular folders. Hence,
 # mount the GCS bucket at `/tmp/gcs-mount` using gcsfuse.
@@ -30,10 +31,13 @@ date_string = datetime.now().strftime("%Y%m%d-%H%M")
 host_name = f"{slice_id}-{worker_id}"
 jobset_name = os.getenv("JOBSET_NAME", date_string)
 xla_dump_path = f"{mounted_artifact_dir}/{host_name}/xla_dumps/{jobset_name}/"
-os.environ["XLA_FLAGS"] = ' '.join([
-    os.getenv("XLA_FLAGS", ""), f"--xla_dump_to={xla_dump_path}",
-    "--xla_dump_hlo_as_proto"
-])
+os.environ["XLA_FLAGS"] = " ".join(
+  [
+    os.getenv("XLA_FLAGS", ""),
+    f"--xla_dump_to={xla_dump_path}",
+    "--xla_dump_hlo_as_proto",
+  ]
+)
 print(f"Dumping XLA compiler outputs to {xla_dump_path}", flush=True)
 
 # Determine the profile dir

@@ -108,10 +108,8 @@ pytest
 How to format:
 
 ```sh
-yapf --recursive -i '*.py' torchprime launcher
+ruff format
 ```
-
-The VSCode yapf plugin should be able to pickup the `.style.yapf` file just fine.
 
 How to lint:
 
@@ -119,7 +117,8 @@ How to lint:
 ruff check [--fix]
 ```
 
-You can install a Ruff VSCode plugin to check errors in the editor.
+You can install a Ruff VSCode plugin to check errors and format files from
+the editor.
 
 ## License
 
