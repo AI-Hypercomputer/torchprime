@@ -30,4 +30,6 @@ jobs:
         # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        pytest
+        export PJRT_DEVICE=CPU
+        export JAX_PLATFORMS=cpu
+        pytest -v
