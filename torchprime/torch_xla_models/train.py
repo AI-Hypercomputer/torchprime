@@ -26,18 +26,18 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
-    SpmdFullyShardedDataParallel as FSDPv2,)
+    SpmdFullyShardedDataParallel as FSDPv2,
+)  # yapf: disable
 
-# yapf: disable
 # Transformers imports
 from transformers import (
-  AutoConfig,
-  AutoTokenizer,
-  HfArgumentParser,
-  TrainingArguments,
-  default_data_collator,
-  get_scheduler,
-  set_seed,
+    AutoConfig,
+    AutoTokenizer,
+    HfArgumentParser,
+    TrainingArguments,
+    default_data_collator,
+    get_scheduler,
+    set_seed,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.optimization import Adafactor
