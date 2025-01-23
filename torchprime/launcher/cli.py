@@ -2,21 +2,21 @@
 tp is a CLI for common torchprime workflows.
 """
 
-import json  # noqa: I001
+import json
 import os
 import subprocess
 import sys
-import time
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 import click
-from pathspec import PathSpec
-from pathspec.patterns import GitWildMatchPattern  # type: ignore
 import toml
 from dataclasses_json import dataclass_json
+from pathspec import PathSpec
+from pathspec.patterns import GitWildMatchPattern  # type: ignore
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -30,6 +30,7 @@ class Config:
   num_slices: int
   tpu_type: str
   artifact_dir: str
+  docker_project: str | None = None
 
 
 def interactive(f):
@@ -75,6 +76,13 @@ def cli(ctx, interactive):
   help="A Google Cloud Storage directory where artifacts such as profiles will be stored. \
 E.g. gs://foo/bar",
 )
+@click.option(
+  "--docker-project",
+  required=False,
+  default=None,
+  help="GCP project to upload docker containers to. If not set, defaults to the cluster's\
+    GCP project",
+)
 def use(
   cluster: str,
   project: str,
@@ -82,6 +90,7 @@ def use(
   num_slices: int,
   tpu_type: str,
   artifact_dir: str,
+  docker_project: str | None,
 ):
   """
   Sets up various config like XPK cluster name, GCP project, etc for all
@@ -98,6 +107,7 @@ def use(
     num_slices=num_slices,
     tpu_type=tpu_type,
     artifact_dir=artifact_dir,
+    docker_project=docker_project,
   )
   gcloud_config_name = f"torchprime-{project}-{zone}"
   create_and_activate_gcloud(gcloud_config_name, config)
@@ -173,6 +183,10 @@ def run(args):
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
+  docker_project = config.docker_project
+  if docker_project is None:
+    docker_project = config.project
+  os.environ["TORCHPRIME_PROJECT_ID"] = docker_project
   assert os.system(Path(__file__).parent / "buildpush.sh") == 0
 
   # Submit xpk workload
