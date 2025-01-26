@@ -42,12 +42,17 @@ def interactive(f):
     return run_with_watcher(ctx)(f)(*args, **kwargs)
 
   wrapper.__name__ = f.__name__
+  wrapper.__doc__ = f.__doc__
   return wrapper
 
 
 @click.group()
 @click.option(
-  "-i", "--interactive", is_flag=True, default=False, help="Enable shouting mode."
+  "-i",
+  "--interactive",
+  is_flag=True,
+  default=False,
+  help="Re-run the command whenever a file is edited (useful for fast dev/test iteration)",
 )
 @click.pass_context
 def cli(ctx, interactive):
@@ -274,6 +279,9 @@ def test(args):
 @cli.command()
 @interactive
 def doctor():
+  """
+  Checks for any problems in your environment (missing packages, credentials, etc.).
+  """
   torchprime.launcher.doctor.check_all()
 
 

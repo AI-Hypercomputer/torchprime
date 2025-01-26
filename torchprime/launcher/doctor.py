@@ -21,12 +21,9 @@ def check_gcr_io():
     docker_config = json.loads(
       Path(os.path.expanduser("~/.docker/config.json")).read_text()
     )
-  except FileNotFoundError as e:
-    raise CheckFailedError("docker config not found. Please install docker.") from e
-  try:
     cred_helpers = docker_config["credHelpers"]
     _gcr_io = cred_helpers["gcr.io"]
-  except KeyError:
+  except (FileNotFoundError, KeyError, json.JSONDecodeError):
     raise CheckFailedError(
       """
 Did not find a handler for `gcr.io` in docker credential helpers.
@@ -40,14 +37,6 @@ To setup the credentials, please run:
 
 """.lstrip()
     ) from None
-  try:
-    subprocess.run(
-      ["gcloud", "auth", "configure-docker", "gcr.io"], check=True, capture_output=True
-    )
-  except subprocess.CalledProcessError as e:
-    raise CheckFailedError(
-      f"gcloud auth configure-docker gcr.io failed: {e.stderr.decode()}"
-    ) from e
 
 
 def check_gcloud_auth_login():
@@ -70,8 +59,7 @@ def check_kubectl():
     raise CheckFailedError(
       f"""kubectl not found.
 
-{get_kubectl_install_instructions()}
-""".strip()
+{get_kubectl_install_instructions()}"""
     ) from None
 
 
@@ -82,8 +70,7 @@ def check_gke_gcloud_auth_plugin():
   raise CheckFailedError(
     f"""The `gke-gcloud-auth-plugin` gcloud component is not installed
 
-{get_gke_gcloud_auth_plugin_instructions()}
-"""
+{get_gke_gcloud_auth_plugin_instructions()}"""
   )
 
 
