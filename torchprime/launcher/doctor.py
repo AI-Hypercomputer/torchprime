@@ -77,16 +77,14 @@ def check_kubectl():
 
 def check_gke_gcloud_auth_plugin():
   """Check that gke-gcloud-auth-plugin is installed."""
-  try:
-    subprocess.run(
-      ["gcloud", "components", "list", "--filter=gke-gcloud-auth-plugin"],
-      check=True,
-      capture_output=True,
-    )
-  except subprocess.CalledProcessError as e:
-    raise CheckFailedError(
-      f"gcloud components list --filter=gke-gcloud-auth-plugin failed: {e.stderr.decode()}"
-    ) from e
+  if is_gcloud_plugin_installed("gke-gcloud-auth-plugin"):
+    return
+  raise CheckFailedError(
+    f"""The `gke-gcloud-auth-plugin` gcloud component is not installed
+
+{get_gke_gcloud_auth_plugin_instructions()}
+"""
+  )
 
 
 def check_all():
@@ -109,7 +107,7 @@ def check_all():
       sys.exit(-1)
     click.echo(" ✅")
   click.echo(
-    "🎉 All checks passed. You should be ready to launch distributed training."
+    "🎉 All checks passed. You should be ready to launch distributed training. 🎉"
   )
 
 
@@ -128,6 +126,21 @@ Since `gcloud` is installed with `apt`, please install `kubectl` with:
 https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-access-for-kubectl#install_kubectl"
 
 
+def get_gke_gcloud_auth_plugin_instructions():
+  # If gcloud is installed via `apt`, then we should do the same for this plugin.
+  if is_package_installed("google-cloud-cli"):
+    return """
+Since `gcloud` is installed with `apt`, please install `gke-gcloud-auth-plugin` with:
+
+  sudo apt install google-cloud-sdk-gke-gcloud-auth-plugin
+
+""".lstrip()
+
+  # Otherwise, point users to the docs.
+  return "Please visit \
+https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-access-for-kubectl#install_plugin"
+
+
 def is_package_installed(package_name):
   try:
     # Run the dpkg-query command to check for the package
@@ -138,6 +151,33 @@ def is_package_installed(package_name):
     )
     return True
   except subprocess.CalledProcessError:
+    return False
+
+
+def is_gcloud_plugin_installed(plugin_name):
+  try:
+    # Run `gcloud components list` to get installed components
+    result = subprocess.run(
+      ["gcloud", "components", "list", "--format=json", f"--filter={plugin_name}"],
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+    # Parse the output and look for the plugin
+    components = json.loads(result.stdout)
+    for component in components:
+      if component.get("id") == plugin_name:
+        state = component.get("state")
+        if state == "Installed" or (
+          isinstance(state, dict) and state.get("name") == "Installed"
+        ):
+          return True
+    return False
+  except subprocess.CalledProcessError as e:
+    print(f"Error running gcloud command: {e.stderr}")
+    return False
+  except json.JSONDecodeError:
+    print("Error parsing JSON output from gcloud.")
     return False
 
 
