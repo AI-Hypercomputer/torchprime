@@ -2,6 +2,8 @@
 Doctor checks for essential programs needed to launch distributed training.
 """
 
+import getpass
+import grp
 import json
 import os
 import subprocess
@@ -15,6 +17,14 @@ class CheckFailedError(Exception):
   pass
 
 
+def check_docker():
+  """Check that docker is installed."""
+  try:
+    subprocess.run(["docker", "help"], check=True, capture_output=True)
+  except FileNotFoundError:
+    raise CheckFailedError("docker not found. Please install docker first.") from None
+
+
 def check_gcr_io():
   """Check that docker config contains gcr.io credential helper."""
   try:
@@ -24,8 +34,13 @@ def check_gcr_io():
     cred_helpers = docker_config["credHelpers"]
     _gcr_io = cred_helpers["gcr.io"]
   except (FileNotFoundError, KeyError, json.JSONDecodeError):
+    user = getpass.getuser()
+    groups_for_user = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
+    setup_cmd = "gcloud auth configure-docker"
+    if "docker" not in groups_for_user:
+      setup_cmd = f"sudo {setup_cmd}"
     raise CheckFailedError(
-      """
+      f"""
 Did not find a handler for `gcr.io` in docker credential helpers.
 
 TorchPrime uploads docker containers to the `gcr.io` docker registry, which
@@ -33,7 +48,7 @@ requires valid credentials.
 
 To setup the credentials, please run:
 
-  gcloud auth configure-docker
+  {setup_cmd}
 
 """.lstrip()
     ) from None
@@ -77,6 +92,7 @@ def check_gke_gcloud_auth_plugin():
 def check_all():
   click.echo("Checking environment...")
   for check in [
+    check_docker,
     check_gcloud_auth_login,
     check_gcr_io,
     check_kubectl,
