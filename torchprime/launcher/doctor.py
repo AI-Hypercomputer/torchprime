@@ -68,8 +68,10 @@ def check_docker_access():
     ).stdout.strip()
     raise CheckFailedError(
       f"""The current gcloud account `{account}` cannot access the gcr.io registry.
+The account may not have the required permissions. If it's a service account, the
+VM may not have the correct scopes.
 
-Please login with:
+The easiest way to resolve this is to login with your own account:
 
   gcloud auth login
 
