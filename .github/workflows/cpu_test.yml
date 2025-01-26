@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install torchax
       run: |
-        pip install 'torchax @ git+https://git@github.com/pytorch/xla.git#subdirectory=experimental/torchax'
+        pip install 'torchax @ git+https://git@github.com/pytorch/xla.git#subdirectory=torchax'
     - name: Install dev dependencies
       run: |
         python -m pip install --upgrade pip
