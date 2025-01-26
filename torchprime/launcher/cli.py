@@ -113,9 +113,9 @@ def use(
   )
   gcloud_config_name = f"torchprime-{project}-{zone}"
   create_and_activate_gcloud(gcloud_config_name, config)
-  assert artifact_dir.startswith(
-    "gs://"
-  ), f"{artifact_dir} must be in a GCS bucket (start with gs://)"
+  assert artifact_dir.startswith("gs://"), (
+    f"{artifact_dir} must be in a GCS bucket (start with gs://)"
+  )
 
   path = write_config(config)
   click.echo(f"Written config {path.relative_to(os.getcwd())}")
@@ -149,6 +149,15 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
       ["gcloud", "config", "configurations", "create", gcloud_config_name, "--activate"]
     )
 
+  subprocess.check_output(
+    [
+      "gcloud",
+      "auth",
+      "application-default",
+      "set-quota-project",
+      config.project,
+    ]
+  )
   subprocess.check_output(
     [
       "gcloud",
