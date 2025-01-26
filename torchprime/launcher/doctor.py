@@ -54,6 +54,29 @@ To setup the credentials, please run:
     ) from None
 
 
+def check_docker_access():
+  """Check that the gcloud account can access the gcr.io artifact registry."""
+  try:
+    subprocess.run(
+      ["gcloud", "artifacts", "repositories", "describe", "gcr.io", "--location=us"],
+      check=True,
+      capture_output=True,
+    )
+  except subprocess.CalledProcessError as e:
+    account = subprocess.run(
+      ["gcloud", "config", "get-value", "account"], capture_output=True, text=True
+    ).stdout.strip()
+    raise CheckFailedError(
+      f"""The current gcloud account `{account}` cannot access the gcr.io registry.
+
+Please login with:
+
+  gcloud auth login
+
+"""
+    ) from e
+
+
 def check_gcloud_auth_login():
   """Check that gcloud is logged in."""
   try:
@@ -95,6 +118,7 @@ def check_all():
     check_docker,
     check_gcloud_auth_login,
     check_gcr_io,
+    check_docker_access,
     check_kubectl,
     check_gke_gcloud_auth_plugin,
   ]:
