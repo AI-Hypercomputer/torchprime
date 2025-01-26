@@ -29,12 +29,12 @@ following instructions here: https://github.com/pytorch/torchtitan
 
 ## Install dependencies
 
-First one need a valid installation of `torch_xla2`, torch, and jax
+First one need a valid installation of `torchax`, torch, and jax
 
 ```
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 git clone https://github.com/pytorch/xla.git
-cd xla/experimental/torch_xla2
+cd xla/experimental/torchax
 pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 pip install optax fire tensorflow tensorboard-plugin-profile
 pip install -e .[tpu] -f https://storage.googleapis.com/libtpu-releases/index.html

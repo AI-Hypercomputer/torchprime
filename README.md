@@ -135,5 +135,5 @@ For more information on PyTorch/XLA, visit the
 [official documentation](https://github.com/pytorch/xla).
 
 [1]: https://github.com/pytorch/xla
-[2]: https://github.com/pytorch/xla/tree/master/experimental/torch_xla2
+[2]: https://github.com/pytorch/xla/tree/master/experimental/torchax
 [xpk]: https://github.com/AI-Hypercomputer/xpk

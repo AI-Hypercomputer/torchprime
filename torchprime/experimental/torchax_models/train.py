@@ -6,12 +6,12 @@ import time
 import jax
 import optax
 import torch
-import torch_xla2
+import torchax
 from jax.experimental import shard_map
 from jax.sharding import NamedSharding
 from jax.sharding import PartitionSpec as P
 from jax.tree_util import tree_map
-from torch_xla2 import interop
+from torchax import interop
 
 SEQLEN = 2048
 
@@ -86,7 +86,7 @@ mark_sharding = interop.torch_view(jax.lax.with_sharding_constraint)
 
 
 def make_train_step(model_forward, loss_fn, optax_optimizer, policy):
-  env = torch_xla2.default_env()
+  env = torchax.default_env()
 
   @functools.partial(remat, policy=policy)
   def loss(weights, args, label):  # inputs are XLATensor
@@ -161,7 +161,7 @@ def train_loop(
   print("start training")
   min_loop_time = 10000
 
-  env = torch_xla2.default_env()
+  env = torchax.default_env()
 
   jax_params = env.t2j_iso(weights)
   # jax_optimizer = optax.adamw(lr)

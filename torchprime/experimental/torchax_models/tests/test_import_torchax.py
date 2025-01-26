@@ -6,4 +6,4 @@ class TestImportTorchax(unittest.TestCase):
     """
     This test checks that `torchax` is installed.
     """
-    import torch_xla2  # noqa: F401
+    import torchax  # noqa: F401

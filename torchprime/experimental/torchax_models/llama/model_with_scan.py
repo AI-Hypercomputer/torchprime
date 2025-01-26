@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from jax.ad_checkpoint import checkpoint_name
 from jax.sharding import PartitionSpec as P
 from torch import nn
-from torch_xla2 import interop
+from torchax import interop
 
 with_sharding_constraint = interop.torch_view(jax.lax.with_sharding_constraint)
 

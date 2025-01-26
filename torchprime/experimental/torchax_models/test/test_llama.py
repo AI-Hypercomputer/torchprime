@@ -38,15 +38,15 @@ class LlamaTest(unittest.TestCase):
       )
 
   def test_forward_torchax_against_native(self):
-    import torch_xla2
-    import torch_xla2.config
+    import torchax
+    import torchax.config
 
-    torch_xla2.enable_accuracy_mode()
-    env = torch_xla2.default_env()
-    # TODO(zpcore): uncomment the following once torch_xla2 support config input
-    # torch_xla2_config = torch_xla2.config.Configuration()
+    torchax.enable_accuracy_mode()
+    env = torchax.default_env()
+    # TODO(zpcore): uncomment the following once torchax support config input
+    # torch_xla2_config = torchax.config.Configuration()
     # torch_xla2_config.use_tpu_flash_attention = True
-    # env = torch_xla2.default_env(torch_xla2_config)
+    # env = torchax.default_env(torch_xla2_config)
     with env:
       input_tensor = self.input.to("jax")
       freqs_cis = self.freqs_cis.to("jax")

@@ -6,7 +6,7 @@ import jax
 import numpy as np
 import splash_attn
 import torch
-import torch_xla2
+import torchax
 import train
 from jax.experimental.mesh_utils import (
   create_device_mesh,
@@ -15,7 +15,7 @@ from jax.experimental.mesh_utils import (
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
 from llama import model, model_with_collectives, model_with_scan
-from torch_xla2 import interop
+from torchax import interop
 
 sharding_map_original = {
   "freqs_cis": (),  #  torch.complex64 (2048, 64)
@@ -126,9 +126,9 @@ def _process_sharding_name(name):
 
 
 def register_attention(fn):
-  from torch_xla2.ops import ops_registry
+  from torchax.ops import ops_registry
 
-  env = torch_xla2.default_env()
+  env = torchax.default_env()
   k = torch.nn.functional.scaled_dot_product_attention
   env._ops[k] = ops_registry.Operator(
     k, fn, is_jax_function=False, is_user_defined=True, needs_env=False
@@ -137,7 +137,7 @@ def register_attention(fn):
 
 def make_weight_shard(weight_meta, slice_index):
   weight_shard_meta = weight_meta[slice_index]
-  with torch_xla2.default_env():
+  with torchax.default_env():
     return interop.jax_view(
       torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype)
     )
@@ -204,12 +204,12 @@ def main(
   print(locals())
   torch.manual_seed(0)
   torch.set_default_dtype(torch.bfloat16)
-  torch_xla2.enable_performance_mode()
+  torchax.enable_performance_mode()
 
   print("Local devices:", jax.local_device_count())
   fsdp_size = len(jax.devices()) // tp
 
-  env = torch_xla2.default_env()
+  env = torchax.default_env()
   env.config.use_torch_native_for_cpu_tensor = False
 
   if use_custom_mesh:
@@ -290,7 +290,7 @@ def main(
       ).numpy()
   sharding = NamedSharding(mesh, P())  # replicated
 
-  env = torch_xla2.default_env()
+  env = torchax.default_env()
   freqs_cis = env.j2t_iso(jax.device_put(freqs_cis, sharding))
 
   # NOTE: overriding attention to capture mesh and sharding info

@@ -24,7 +24,7 @@ WORKDIR /workspaces
 
 # Install torchax
 RUN git clone https://github.com/pytorch/xla.git
-WORKDIR /workspaces/xla/experimental/torch_xla2
+WORKDIR /workspaces/xla/experimental/torchax
 RUN pip install torch_xla[pallas] \
     -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \
     -f https://storage.googleapis.com/jax-releases/jaxlib_nightly_releases.html

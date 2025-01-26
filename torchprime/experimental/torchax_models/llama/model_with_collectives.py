@@ -18,7 +18,7 @@ import torch
 import torch.nn.functional as F
 from jax.ad_checkpoint import checkpoint_name
 from torch import nn
-from torch_xla2 import interop
+from torchax import interop
 
 all_gather = interop.torch_view(jax.lax.all_gather)
 all_reduce_sum = interop.torch_view(jax.lax.psum)
