@@ -20,6 +20,8 @@ from pathspec.patterns import GitWildMatchPattern  # type: ignore
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from torchprime.launcher.buildpush import buildpush
+
 
 @dataclass_json
 @dataclass
@@ -186,8 +188,7 @@ def run(args):
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project
-  os.environ["TORCHPRIME_PROJECT_ID"] = docker_project
-  assert os.system(Path(__file__).parent / "buildpush.sh") == 0
+  docker_url = buildpush(docker_project)
 
   # Submit xpk workload
   datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -212,7 +213,7 @@ def run(args):
       "--cluster",
       config.cluster,
       "--docker-image",
-      "gcr.io/tpu-pytorch/llama3:latest",
+      docker_url,
       "--workload",
       f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}",
       "--tpu-type",
