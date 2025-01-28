@@ -100,7 +100,7 @@ class Trainer:
       name=self.config.lr_scheduler.type,
       optimizer=self.optimizer,
       num_warmup_steps=self.config.lr_scheduler.warmup_steps,
-      num_training_steps=args.max_steps,
+      num_training_steps=self.config.max_steps,
     )
 
   def _prime_optimizer(self):
@@ -253,7 +253,7 @@ class Trainer:
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="base")
-def main():
+def main(config: DictConfig):
   # Configure logging
   print(OmegaConf.to_yaml(config))  # Print the config for debugging
   log_level = logging.INFO
@@ -264,7 +264,7 @@ def main():
   transformers.utils.logging.enable_default_handler()
   transformers.utils.logging.enable_explicit_format()
 
-  set_seed(training_args.seed)
+  set_seed(config.seed)
   server = xp.start_server(9012)
   logger.info(f"Profiling server started: {str(server)}")
 
@@ -282,7 +282,7 @@ def main():
   data = load_dataset(
     config.dataset_name,
     config.dataset_config_name,
-    cache_dir=model_args.cache_dir,
+    cache_dir=config.cache_dir,
   )["train"]
   column_names = list(data.features)
   data = data.map(
@@ -315,7 +315,7 @@ def main():
 
   trainer = Trainer(
     model=model,
-    args=training_args,
+    config=config,
     train_dataset=data,
   )
 
