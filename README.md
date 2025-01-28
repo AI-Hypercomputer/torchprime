@@ -27,8 +27,7 @@ Train Llama 3 8B using torch_xla:
 
 ```sh
 export HF_TOKEN='...your huggingface token...'
-XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py \
-    torchprime/torch_xla_models/configs/run.json
+XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 ```
 
 Train Llama 3 8B using torchax:
