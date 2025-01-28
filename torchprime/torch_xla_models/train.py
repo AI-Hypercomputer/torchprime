@@ -9,8 +9,10 @@ from timeit import default_timer as timer
 
 # Third-party library imports
 import datasets
+import hydra
 import numpy as np
 import torch
+from omegaconf import DictConfig, OmegaConf
 
 # PyTorch XLA imports
 import torch_xla
@@ -54,91 +56,18 @@ xr.use_spmd()
 assert xr.is_spmd() is True
 
 
-@dataclass
-class ModelArguments:
-  """
-  Arguments pertaining to which model/config/tokenizer we are going to fine-tune,
-  or train from scratch.
-  """
-
-  model_id: str | None = field(
-    default="meta-llama/Llama-2-7b-hf",
-    metadata={"help": "Pretrained config name or path if not the same as model_name"},
-  )
-  tokenizer_name: str | None = field(
-    default=None,
-    metadata={"help": "Name of the tokenizer if different from model_id"},
-  )
-  cache_dir: str | None = field(
-    default=None,
-    metadata={
-      "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
-    },
-  )
-
-
-@dataclass
-class MoreTrainingArguments(TrainingArguments):
-  profile_step: int | None = field(default=-1, metadata={"help": "Step to profile"})
-  profile_dir: str | None = field(
-    default="profile/", metadata={"help": "Directory to store the profile"}
-  )
-  profile_duration: int | None = field(
-    default=20000, metadata={"help": "Duration (ms) to capture profile"}
-  )
-  global_batch_size: int | None = field(
-    default=None, metadata={"help": "Global batch size"}
-  )
-
-
-@dataclass
-class DataTrainingArguments:
-  """
-  Arguments pertaining to what data we are going to input our model for training.
-  """
-
-  dataset_name: str | None = field(
-    default=None,
-    metadata={"help": "The name of the dataset to use (via the datasets library)."},
-  )
-  dataset_config_name: str | None = field(
-    default=None,
-    metadata={
-      "help": "The configuration name of the dataset to use (via the datasets library)."
-    },
-  )
-  block_size: int | None = field(
-    default=None,
-    metadata={
-      "help": (
-        "Optional input sequence length after tokenization. "
-        "The training dataset will be truncated in block of this size for training. "
-        "Default to the model max input length for single sentence inputs (take into account special tokens)."
-      )
-    },
-  )
-
-  def __post_init__(self):
-    if (
-      self.dataset_name is None
-      and self.train_file is None
-      and self.validation_file is None
-    ):
-      raise ValueError("Need either a dataset name or a training/validation file.")
-
-
 class Trainer:
   """The trainer."""
 
   def __init__(
     self,
     model: nn.Module,
-    args: MoreTrainingArguments,
+    config: DictConfig,
     train_dataset: Dataset | IterableDataset | None,
   ):
-    self.args = args
+    self.config = config
     self.device = xm.xla_device()
-    self.global_batch_size = args.global_batch_size
+    self.global_batch_size = self.config.global_batch_size
     self.train_dataset = train_dataset
 
     # Set up SPMD mesh and shard the model
@@ -159,7 +88,7 @@ class Trainer:
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
-      lr=args.learning_rate,
+      lr=self.config.optimizer.learning_rate,
       relative_step=False,
       scale_parameter=False,
     )
@@ -168,9 +97,9 @@ class Trainer:
     # self._prime_optimizer()
 
     self.lr_scheduler = get_scheduler(
-      name=args.lr_scheduler_type,
+      name=self.config.lr_scheduler.type,
       optimizer=self.optimizer,
-      num_warmup_steps=args.warmup_steps,
+      num_warmup_steps=self.config.lr_scheduler.warmup_steps,
       num_training_steps=args.max_steps,
     )
 
@@ -210,7 +139,7 @@ class Trainer:
 
   def _shard_model(self, model):
     default_transformer_cls_names_to_wrap = []
-    fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
+    fsdp_transformer_layer_cls_to_wrap = self.config.fsdp.get(
       "transformer_layer_cls_to_wrap",
       default_transformer_cls_names_to_wrap,
     )
@@ -231,7 +160,7 @@ class Trainer:
       transformer_layer_cls=transformer_cls_to_wrap,
     )
 
-    if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
+    if self.config.fsdp["xla_fsdp_grad_ckpt"]:
       # Apply gradient checkpointing to auto-wrapped sub-modules if specified
       logger.info("Enabling gradient checkpointing")
 
@@ -267,7 +196,7 @@ class Trainer:
     self.model.zero_grad()
 
     # For now we assume that we wil never train for mor than one epoch
-    max_step = self.args.max_steps
+    max_step = self.config.max_steps
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
@@ -282,14 +211,14 @@ class Trainer:
         break
 
       # For logging step, we explicitly isolate this step from tracing and execution overlapping.
-      if step % self.args.logging_steps == 0:
+      if step % self.config.logging_steps == 0:
         xm.wait_device_ops()
       trace_start_time = timer()
 
       loss = self.train_step(batch)
 
       trace_end_time = timer()
-      if step % self.args.logging_steps == 0:
+      if step % self.config.logging_steps == 0:
         xm.wait_device_ops()
         execute_end_time = timer()
         logger.info(
@@ -299,15 +228,15 @@ class Trainer:
           raise ValueError(f"Loss is NaN at step {step}")
 
       # Capture profile at the prefer step
-      if step == self.args.profile_step:
+      if step == self.config.profile_step:
         # Wait until device execution catches up to tracing before triggering the profile. This will
         # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
         # for the step, the interruption will be minimal.
         xm.wait_device_ops()
         xp.trace_detached(
           "127.0.0.1:9012",
-          self.args.profile_dir,
-          self.args.profile_duration,
+          self.config.profile_dir,
+          self.config.profile_duration,
         )
 
     logger.info("Finished training run")
@@ -323,27 +252,12 @@ class Trainer:
     return loss
 
 
+@hydra.main(version_base=None, config_path="configs", config_name="base")
 def main():
-  # Parse CLI arguments
-  parser = HfArgumentParser(
-    (ModelArguments, DataTrainingArguments, MoreTrainingArguments)
-  )
-
-  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-    # If we pass only one argument to the script and it's the path to a json file,
-    # let's parse it to get our arguments.
-    model_args, data_args, training_args = parser.parse_json_file(
-      json_file=os.path.abspath(sys.argv[1])
-    )
-  else:
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
   # Configure logging
-  if training_args.should_log:
-    # The default of training_args.log_level is passive, so we set log level at info here to have that default.
-    transformers.utils.logging.set_verbosity_info()
-
-  log_level = training_args.get_process_log_level()
+  print(OmegaConf.to_yaml(config))  # Print the config for debugging
+  log_level = logging.INFO
+  logger.setLevel(log_level)
   logger.setLevel(log_level)
   datasets.utils.logging.set_verbosity(log_level)
   transformers.utils.logging.set_verbosity(log_level)
@@ -354,13 +268,10 @@ def main():
   server = xp.start_server(9012)
   logger.info(f"Profiling server started: {str(server)}")
 
-  tokenizer_name = (
-    model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_id
-  )
+  # TODO: Add tokenizer models to torchprime
+  tokenizer_name = config.model.tokenizer_name
   tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-  config = AutoConfig.from_pretrained(model_args.model_id)
-  config.flash_attention = True
-  model = LlamaForCausalLM(config)
+  model = LlamaForCausalLM(config.model)
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
@@ -369,8 +280,8 @@ def main():
 
   # Downloading and loading a dataset from the hub.
   data = load_dataset(
-    data_args.dataset_name,
-    data_args.dataset_config_name,
+    config.dataset_name,
+    config.dataset_config_name,
     cache_dir=model_args.cache_dir,
   )["train"]
   column_names = list(data.features)
@@ -381,7 +292,7 @@ def main():
   )
 
   # Taken from run_clm.py. It's important to group texts evenly to avoid recompilations in TPU.
-  block_size = data_args.block_size
+  block_size = config.block_size
 
   def group_texts(examples):
     from itertools import chain

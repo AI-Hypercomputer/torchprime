@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -19,16 +20,18 @@
 """PyTorch LLaMA model."""
 
 import math
+from typing import Optional
+from omegaconf import DictConfig
 
 import torch
-import torch_xla.debug.profiler as xp
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
 from transformers.activations import ACT2FN
-from transformers.modeling_utils import PreTrainedModel
-from transformers.models.llama.configuration_llama import LlamaConfig
-from transformers.models.llama.modeling_llama import CausalLMOutputWithPast
 from transformers.utils import logging
+from transformers.models.llama.modeling_llama import CausalLMOutputWithPast
+
+import torch_xla.debug.profiler as xp
 
 logger = logging.get_logger(__name__)
 
@@ -52,12 +55,7 @@ class LlamaRMSNorm(nn.Module):
 
 class LlamaRotaryEmbedding(nn.Module):
   def __init__(
-    self,
-    dim,
-    max_position_embeddings=2048,
-    base=10000,
-    device=None,
-    scaling_factor=1.0,
+    self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0
   ):
     super().__init__()
     self.scaling_factor = scaling_factor
@@ -161,7 +159,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
   """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-  def __init__(self, config: LlamaConfig, layer_idx: int | None = None):
+  def __init__(self, config: DictConfig, layer_idx: int | None = None):
     super().__init__()
     self.config = config
     self.layer_idx = layer_idx
@@ -290,7 +288,7 @@ class LlamaAttention(nn.Module):
 
 
 class LlamaDecoderLayer(nn.Module):
-  def __init__(self, config: LlamaConfig, layer_idx: int):
+  def __init__(self, config: DictConfig, layer_idx: int):
     super().__init__()
     self.hidden_size = config.hidden_size
 
@@ -338,35 +336,19 @@ class LlamaDecoderLayer(nn.Module):
     return hidden_states
 
 
-class LlamaPreTrainedModel(PreTrainedModel):
-  def _init_weights(self, module):
-    std = self.config.initializer_range
-    if isinstance(module, nn.Linear):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.bias is not None:
-        module.bias.data.zero_()
-    elif isinstance(module, nn.Embedding):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.padding_idx is not None:
-        module.weight.data[module.padding_idx].zero_()
-
-
-class LlamaModel(LlamaPreTrainedModel):
+class LlamaModel(nn.Module):
   """
   Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
   Args:
-      config: LlamaConfig
+      config: DictConfig
   """
 
-  def __init__(self, config: LlamaConfig):
-    super().__init__(config)
-    self.padding_idx = config.pad_token_id
+  def __init__(self, config: DictConfig):
+    super().__init__()
     self.vocab_size = config.vocab_size
 
-    self.embed_tokens = nn.Embedding(
-      config.vocab_size, config.hidden_size, self.padding_idx
-    )
+    self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
     self.layers = nn.ModuleList(
       [
         LlamaDecoderLayer(config, layer_idx)
@@ -374,9 +356,6 @@ class LlamaModel(LlamaPreTrainedModel):
       ]
     )
     self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    # Initialize weights and apply final processing
-    self.post_init()
 
   @xp.trace_me("LlamaModel")
   def forward(
@@ -393,11 +372,7 @@ class LlamaModel(LlamaPreTrainedModel):
     # Create a causal mask without calling the current method
     seq_length = inputs_embeds.size(1)
     causal_mask = torch.triu(
-      torch.full(
-        (seq_length, seq_length),
-        float("-inf"),
-        device=inputs_embeds.device,
-      ),
+      torch.full((seq_length, seq_length), float("-inf"), device=inputs_embeds.device),
       diagonal=1,
     )
     causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # Add batch and head dimension
@@ -411,24 +386,34 @@ class LlamaModel(LlamaPreTrainedModel):
     # decoder layers
     for decoder_layer in self.layers:
       hidden_states = decoder_layer(
-        hidden_states,
-        attention_mask=causal_mask,
-        position_ids=position_ids,
+        hidden_states, attention_mask=causal_mask, position_ids=position_ids
       )
 
     hidden_states = self.norm(hidden_states)
     return hidden_states
 
 
-class LlamaForCausalLM(LlamaPreTrainedModel):
+class LlamaForCausalLM(nn.Module):
   def __init__(self, config):
-    super().__init__(config)
+    super().__init__()
+    self.config = config
     self.model = LlamaModel(config)
     self.vocab_size = config.vocab_size
     self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     # Initialize weights and apply final processing
-    self.post_init()
+    self.apply(self._init_weights)
+
+  def _init_weights(self, module):
+    std = self.config.initializer_range
+    if isinstance(module, nn.Linear):
+      module.weight.data.normal_(mean=0.0, std=std)
+      if module.bias is not None:
+        module.bias.data.zero_()
+    elif isinstance(module, nn.Embedding):
+      module.weight.data.normal_(mean=0.0, std=std)
+      if module.padding_idx is not None:
+        module.weight.data[module.padding_idx].zero_()
 
   @xp.trace_me("LlamaForCausalLM")
   def forward(

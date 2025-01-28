@@ -1,5 +1,6 @@
 import copy
 import unittest
+from omegaconf import DictConfig, OmegaConf
 
 import torch
 import torch_xla
@@ -24,10 +25,28 @@ class TestYourModule(unittest.TestCase):
       vocab_size=self.vocab_size,
     )
     config.flash_attention = False
+    torchprime_config = OmegaConf.create(
+      {
+        "vocab_size": 128,
+        "hidden_size": 8,
+        "intermediate_size": 16,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 8,
+        "num_key_value_heads": 8,
+        "hidden_act": "silu",
+        "max_position_embeddings": 8192,
+        "initializer_range": 0.02,
+        "rms_norm_eps": 1.0e-05,
+        "attention_dropout": False,
+        "attention_bias": False,
+        "flash_attention": False,
+        "rope_theta": 500000.0,
+      }
+    )
     # place model on CPU device first
     with torch.device("cpu"):
       self.hf_model = HfLlamaForCausalLM(config)
-      self.model = LlamaForCausalLM(config)
+      self.model = LlamaForCausalLM(torchprime_config)
       self.model.load_state_dict(self.hf_model.state_dict())
 
   def test_forward_our_model_against_hf_model(self):
