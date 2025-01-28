@@ -2,9 +2,7 @@
 import functools
 import logging
 import math
-import os
 import sys
-from dataclasses import dataclass, field
 from timeit import default_timer as timer
 
 # Third-party library imports
@@ -12,7 +10,6 @@ import datasets
 import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
 
 # PyTorch XLA imports
 import torch_xla
@@ -23,6 +20,7 @@ import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
 import transformers
 from datasets import load_dataset
+from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
@@ -33,10 +31,7 @@ from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
 
 # Transformers imports
 from transformers import (
-  AutoConfig,
   AutoTokenizer,
-  HfArgumentParser,
-  TrainingArguments,
   default_data_collator,
   get_scheduler,
   set_seed,

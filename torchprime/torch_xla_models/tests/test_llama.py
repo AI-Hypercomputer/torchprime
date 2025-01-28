@@ -1,9 +1,9 @@
 import copy
 import unittest
-from omegaconf import DictConfig, OmegaConf
 
 import torch
 import torch_xla
+from omegaconf import OmegaConf
 from transformers import AutoConfig
 from transformers import LlamaForCausalLM as HfLlamaForCausalLM
 

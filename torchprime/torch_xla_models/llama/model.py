@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -20,18 +19,15 @@
 """PyTorch LLaMA model."""
 
 import math
-from typing import Optional
-from omegaconf import DictConfig
 
 import torch
+import torch_xla.debug.profiler as xp
+from omegaconf import DictConfig
 from torch import nn
 from torch.nn import CrossEntropyLoss
-
 from transformers.activations import ACT2FN
-from transformers.utils import logging
 from transformers.models.llama.modeling_llama import CausalLMOutputWithPast
-
-import torch_xla.debug.profiler as xp
+from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
