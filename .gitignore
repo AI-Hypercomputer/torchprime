@@ -57,6 +57,9 @@ htmlcov/
 # Ignore profiler outputs
 /profile/
 
+# Ignore trained artifacts
+/outputs/
+
 # Direnv config
 .envrc
 
