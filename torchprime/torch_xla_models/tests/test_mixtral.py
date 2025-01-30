@@ -5,9 +5,9 @@ import torch
 import torch_xla
 from omegaconf import OmegaConf
 from transformers import AutoConfig
-from transformers import LlamaForCausalLM as HfLlamaForCausalLM
+from transformers import MixtralForCausalLM as HfMixtralForCausalLM
 
-from torchprime.torch_xla_models.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.mixtral import MixtralForCausalLM
 
 
 class TestYourModule(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestYourModule(unittest.TestCase):
     torch_xla.manual_seed(42)
     self.vocab_size = 128
     config = AutoConfig.from_pretrained(
-      "meta-llama/Meta-Llama-3-8B",
+      "mistralai/Mixtral-8x7B-v0.1",
       num_hidden_layers=1,
       num_attention_heads=8,
       hidden_size=8,
@@ -33,20 +33,23 @@ class TestYourModule(unittest.TestCase):
         "num_hidden_layers": 1,
         "num_attention_heads": 8,
         "num_key_value_heads": 8,
-        "hidden_act": "silu",
-        "max_position_embeddings": 8192,
+        "max_position_embeddings": 32768,
         "initializer_range": 0.02,
         "rms_norm_eps": 1.0e-05,
-        "attention_dropout": False,
+        "num_experts_per_tok": 2,
+        "num_local_experts": 8,
+        "rope_theta": 1000000.0,
+        "router_aux_loss_coef": 0.02,
+        "attention_dropout": 0.0,
         "attention_bias": False,
         "flash_attention": False,
-        "rope_theta": 500000.0,
+        "moe_implementation": "static",
       }
     )
     # place model on CPU device first
     with torch.device("cpu"):
-      self.hf_model = HfLlamaForCausalLM(config)
-      self.model = LlamaForCausalLM(torchprime_config)
+      self.hf_model = HfMixtralForCausalLM(config)
+      self.model = MixtralForCausalLM(torchprime_config)
       self.model.load_state_dict(self.hf_model.state_dict())
 
   def test_forward_our_model_against_hf_model(self):

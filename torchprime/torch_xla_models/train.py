@@ -1,15 +1,14 @@
 # Standard library imports
 import functools
+import importlib
 import logging
 import math
 import sys
-import importlib
 from timeit import default_timer as timer
 
 # Third-party library imports
 import datasets
 import hydra
-import numpy as np
 import torch
 
 # PyTorch XLA imports
@@ -64,16 +63,17 @@ class Trainer:
     self.train_dataset = train_dataset
 
     # Set up SPMD mesh and shard the model
-    num_devices = xr.global_runtime_device_count()
     dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
     ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
-    mesh = xs.HybridMesh(ici_mesh_shape=ici_mesh_shape, dcn_mesh_shape=dcn_mesh_shape, axis_names=('dcn', 'fsdp', 'tensor', 'expert'))
+    mesh = xs.HybridMesh(
+      ici_mesh_shape=ici_mesh_shape,
+      dcn_mesh_shape=dcn_mesh_shape,
+      axis_names=("dcn", "fsdp", "tensor", "expert"),
+    )
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
     # TODO: Test this for multislice
-    self.input_sharding_spec = xs.ShardingSpec(
-      mesh, ("fsdp", None), minibatch=True
-    )
+    self.input_sharding_spec = xs.ShardingSpec(mesh, ("fsdp", None), minibatch=True)
     self.model = self._shard_model(model)
 
     # Set up optimizers
@@ -245,6 +245,7 @@ class Trainer:
     self.model.zero_grad()
     return loss
 
+
 def initialize_model_class(model_config):
   """Import and initalize model_class specified by the config."""
   full_model_class_string = model_config.model_class
@@ -261,6 +262,7 @@ def initialize_model_class(model_config):
     sys.exit(1)
   model = model_class(model_config)
   return model
+
 
 @hydra.main(version_base=None, config_path="configs", config_name="base")
 def main(config: DictConfig):
