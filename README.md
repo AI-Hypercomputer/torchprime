@@ -74,8 +74,8 @@ which is the convention for running SPMD distributed workloads.
 to the distributed workload, if found:
 
 - `HF_TOKEN`: HuggingFace token
-- `XLA_IR_DEBUG`: torch_xla debugging flag
-- `XLA_HLO_DEBUG`: torch_xla debugging flag
+- `XLA_IR_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
+- `XLA_HLO_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
 
 ## Structure
 
@@ -145,3 +145,4 @@ For more information on PyTorch/XLA, visit the
 [1]: https://github.com/pytorch/xla
 [2]: https://github.com/pytorch/xla/tree/master/torchax
 [xpk]: https://github.com/AI-Hypercomputer/xpk
+[torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
