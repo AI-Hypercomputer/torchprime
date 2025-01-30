@@ -1,3 +1,4 @@
+model_class: llama.LlamaForCausalLM # Used to import the model from this class
 vocab_size: 128256
 hidden_size: 4096
 intermediate_size: 14336
@@ -15,3 +16,7 @@ attention_dropout: false
 attention_bias: false
 flash_attention: true
 rope_theta: 500000.0
+fsdp:
+  transformer_layer_cls_to_wrap:
+    - LlamaDecoderLayer
+  xla_fsdp_grad_ckpt: true

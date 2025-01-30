@@ -2,25 +2,26 @@
 # override the earlier ones.
 defaults:
   - _self_ # refers to this config file
-  - model: llama-3-8b # refers to model/llama.yaml
+  - model: mixtral-8x7b # refers to model/llama.yaml
 
 dataset_name: wikitext
 dataset_config_name: wikitext-2-raw-v1
 global_batch_size: 8
 logging_steps: 10
 max_steps: 15
-block_size: 8192
+block_size: 4096
 cache_dir: /tmp/
 seed: 42
 profile_step: -1
 profile_logdir: /tmp/profile
 profile_duration: 100000
-fsdp:
-  transformer_layer_cls_to_wrap:
-    - LlamaDecoderLayer
-  xla_fsdp_grad_ckpt: true
 optimizer:
   learning_rate: 5.e-5
 lr_scheduler:
   type: linear
-  warmup_steps: 0 
+  warmup_steps: 0
+mesh:
+  dcn: 1
+  fsdp: 4
+  tensor: 1
+  expert: 1

@@ -26,7 +26,6 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers.activations import ACT2FN
-from transformers.models.llama.modeling_llama import CausalLMOutputWithPast
 from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
@@ -260,12 +259,13 @@ class LlamaAttention(nn.Module):
       from torch_xla.experimental.custom_kernel import flash_attention
 
       query_states /= math.sqrt(self.head_dim)
+
       attn_output = flash_attention(
         query_states,
         key_states,
         value_states,
         causal=True,
-        partition_spec=("fsdp", "tensor", None, None),
+        partition_spec=(("dcn", "fsdp"), "tensor", None, None),
       )
 
     if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -436,7 +436,4 @@ class LlamaForCausalLM(nn.Module):
       shift_labels = shift_labels.to(shift_logits.device)
       loss = loss_fct(shift_logits, shift_labels)
 
-    return CausalLMOutputWithPast(
-      loss=loss,
-      logits=logits,
-    )
+    return (logits, loss)

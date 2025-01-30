@@ -29,23 +29,10 @@ from torch.nn import CrossEntropyLoss, init
 import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 
-from ...modeling_outputs import (
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-)
-from ...utils import (
-    logging
-)
-
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
 import torch_xla.core.xla_model as xm
 import torch_xla
-
-
-
-logger = logging.get_logger(__name__)
-
 
 # TODO: Refactor and move layers to a separate folder and add unit tests
 class MixtralRMSNorm(nn.Module):
@@ -155,21 +142,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 class MixtralAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-    """
-
     def __init__(self, config: DictConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -589,18 +565,6 @@ class MixtralMoeBlock(nn.Module):
             case _: 
                 # gmm_stack and static initialize weights the same way.
                 self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
-        
-        
-        if self.capacity_factor > 0:
-            self.experts = MixtralExpertCapacityTop2MLP(config)
-        elif not self.gmm or self.gmm_stack:
-            self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
-        else:
-            self.experts = MixtralGmmTop2MLP(config)
-
-        # Jitter parameters
-        self.jitter_noise = config.router_jitter_noise
-        
 
     @xp.trace_me("generate_masks")
     def generate_masks(self, top_k_indices, softmax_probs, mesh):
@@ -666,8 +630,6 @@ class MixtralMoeBlock(nn.Module):
     @xp.trace_me("MixtralMoeBlock")
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
@@ -677,7 +639,7 @@ class MixtralMoeBlock(nn.Module):
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
         routing_weights = routing_weights.to(hidden_states.dtype)
-        loss = None
+        loss = 0.0
         match self.moe_implementation:
             case 'static':
                 final_hidden_states = torch.zeros(
@@ -772,13 +734,12 @@ class MixtralModel(nn.Module):
 
     def __init__(self, config: DictConfig):
         super().__init__()
+        self.config = config
         self.vocab_size = config.vocab_size
-
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
             [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._attn_implementation = config._attn_implementation
         self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
@@ -801,7 +762,7 @@ class MixtralModel(nn.Module):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None
-    ) -> Union[Tuple, MoeModelOutputWithPast]:
+    ) -> Tuple:
 
         batch_size, seq_length = input_ids.shape
 
@@ -839,16 +800,13 @@ class MixtralModel(nn.Module):
         total_loss = total_loss / len(self.layers)
 
         hidden_states = self.norm(hidden_states)
-        return MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            loss=total_loss,
-        )
+        return (hidden_states, total_loss)
 
 
 class MixtralForCausalLM(nn.Module):
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.config = config
         self.model = MixtralModel(config)
         self.vocab_size = config.vocab_size
@@ -876,7 +834,7 @@ class MixtralForCausalLM(nn.Module):
         input_ids: torch.LongTensor = None,
         labels: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
+    ) -> Tuple:
 
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -900,9 +858,6 @@ class MixtralForCausalLM(nn.Module):
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels) + self.router_aux_loss_coef * outputs.loss
+            loss = loss_fct(shift_logits, shift_labels) + self.router_aux_loss_coef * outputs[-1]
 
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-        )
+        return (logits, loss)
