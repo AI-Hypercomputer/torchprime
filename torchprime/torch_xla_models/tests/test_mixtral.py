@@ -63,16 +63,16 @@ class TestYourModule(unittest.TestCase):
       hf_output = hf_model_xla(
         input, labels=input, attention_mask=torch.ones_like(input)
       )
-      llama_output = model_xla(
+      mixtral_xla_logits, mixtral_xla_loss = model_xla(
         input, labels=input, attention_mask=torch.ones_like(input)
       )
       torch_xla.sync()
       self.assertTrue(
-        torch.allclose(hf_output.logits, llama_output[0], atol=1e-6),
+        torch.allclose(hf_output.logits, mixtral_xla_logits, atol=1e-6),
         "logits are not equal",
       )
       self.assertTrue(
-        torch.allclose(hf_output.loss, llama_output[1], atol=1e-6),
+        torch.allclose(hf_output.loss, mixtral_xla_loss, atol=1e-6),
         "loss is not equal",
       )
 
@@ -80,7 +80,7 @@ class TestYourModule(unittest.TestCase):
     input_size = 8
     device = torch.device("cpu")
     input = torch.randint(self.vocab_size, ((2, input_size // 2)))
-    llama_output_native = self.model(
+    mixtral_native_logits, mixtral_native_loss = self.model(
       input, labels=input, attention_mask=torch.ones_like(input)
     )
 
@@ -89,14 +89,16 @@ class TestYourModule(unittest.TestCase):
     model_xla = copy.deepcopy(self.model).to(device)
     torch_xla.sync()
 
-    llama_output = model_xla(input, labels=input, attention_mask=torch.ones_like(input))
+    mixtral_xla_logits, mixtral_xla_loss = model_xla(
+      input, labels=input, attention_mask=torch.ones_like(input)
+    )
     torch_xla.sync()
     self.assertTrue(
-      torch.allclose(llama_output_native[0], llama_output[0].to("cpu"), atol=1e-2),
+      torch.allclose(mixtral_native_logits, mixtral_xla_logits.to("cpu"), atol=1e-2),
       "CPU run and XLA run logits are not equal",
     )
     self.assertTrue(
-      torch.allclose(llama_output_native[1], llama_output[1].to("cpu"), atol=1e-2),
+      torch.allclose(mixtral_native_loss, mixtral_native_loss.to("cpu"), atol=1e-2),
       "CPU run and XLA run loss is not equal",
     )
 

@@ -45,6 +45,6 @@ profile_dir = mounted_artifact_dir / host_name
 print(f"Profile output directory: {profile_dir}", flush=True)
 
 # Exec into the training script.
-args = [sys.executable] + sys.argv[1:] + ["--profile_dir", str(profile_dir)]
+args = [sys.executable] + sys.argv[1:] + [f"profile_dir={str(profile_dir)}"]
 env = os.environ.copy()
 os.execve(sys.executable, args, env)

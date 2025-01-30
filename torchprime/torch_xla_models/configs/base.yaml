@@ -13,7 +13,8 @@ block_size: 8192
 cache_dir: /tmp/
 seed: 42
 profile_step: -1
-profile_logdir: /tmp/profile
+# This might be overwritten when using tp run to launch the run using XPK
+profile_dir: /tmp/profile 
 profile_duration: 100000
 optimizer:
   learning_rate: 5.e-5
@@ -22,6 +23,6 @@ lr_scheduler:
   warmup_steps: 0
 mesh:
   dcn: 1
-  fsdp: 4
+  fsdp: 2
   tensor: 1
   expert: 1

@@ -63,6 +63,10 @@ class Trainer:
     self.train_dataset = train_dataset
 
     # Set up SPMD mesh and shard the model
+    num_devices = xr.global_runtime_device_count()
+    assert num_devices == math.prod(
+      [i for i in config.mesh.values()]
+    ), "Mesh is not using all the available devices."
     dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
     ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
     mesh = xs.HybridMesh(
@@ -72,7 +76,7 @@ class Trainer:
     )
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
-    # TODO: Test this for multislice
+    # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
     self.input_sharding_spec = xs.ShardingSpec(mesh, ("fsdp", None), minibatch=True)
     self.model = self._shard_model(model)
 
@@ -171,10 +175,9 @@ class Trainer:
         raise ValueError(
           "Something went wrong, the output of the model shouldn't be `None`"
         )
-      # TODO: Find a better way to shard the output. It is expected that the
-      # first dimension of the output is the batch size which is usually sharded
-      # among all the devices except the tensor axis.
-      xs.mark_sharding(real_output, mesh, (("dcn", "fsdp", "expert"), None, None))
+      # It is expected that the first dimension of the output is the batch size 
+      # which is usually sharded among all the devices except the tensor axis.
+      xs.mark_sharding(real_output, mesh, (("dcn", "fsdp", "expert"), None, "tensor"))
 
     model = FSDPv2(
       model,
@@ -237,8 +240,7 @@ class Trainer:
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
-    outputs = self.model(**batch)
-    loss = outputs[-1]
+    _logits, loss = self.model(**batch)
     loss.backward()
     self.optimizer.step()
     self.lr_scheduler.step()

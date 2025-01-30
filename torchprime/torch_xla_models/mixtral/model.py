@@ -32,7 +32,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, init
 
 
-# TODO: Refactor and move layers to a separate folder and add unit tests
+# TODO (https://github.com/AI-Hypercomputer/torchprime/pull/60): Refactor and
+# move layers to a separate folder and add unit tests
 class MixtralRMSNorm(nn.Module):
   def __init__(self, hidden_size, eps=1e-6):
     """
@@ -271,7 +272,6 @@ class MixtralAttention(nn.Module):
         causal=True,
         partition_spec=partition_spec,
       )
-      # attn_output = FlashAttention.apply(query_states, key_states, value_states, True, None, None, 1.0, None, partition_spec, None)
 
     if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
       raise ValueError(
@@ -436,12 +436,8 @@ class Gmm(torch.autograd.Function):
     hidden_states_sorted = hidden_states[hidden_states_indices]
 
     group_sizes = _histogram(top_flat.to(torch.int32), 0, num_experts - 1)
-
-    # Replicated MixtralBlockSparseTop2MLP.forward
-    # Here we just use silu and ignore the configuration given we need to manually write the backward pass.
     gmm1 = gmm(hidden_states_sorted, w1, group_sizes, tiling=(512, 1024, 1024))
     gmm3 = gmm(hidden_states_sorted, w3, group_sizes, tiling=(512, 1024, 1024))
-    # Should I save silu activations?
     silu = F.silu(gmm1)
     sgmm = silu * gmm3
     gmm2 = gmm(sgmm, w2, group_sizes, tiling=(512, 1024, 1024))
@@ -936,7 +932,6 @@ class MixtralModel(nn.Module):
     self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     # Initialize weights and apply final processing
-    # TODO: Remove this
     self.apply(self._init_weights)
 
   def _init_weights(self, module):
