@@ -175,7 +175,7 @@ class Trainer:
         raise ValueError(
           "Something went wrong, the output of the model shouldn't be `None`"
         )
-      # It is expected that the first dimension of the output is the batch size 
+      # It is expected that the first dimension of the output is the batch size
       # which is usually sharded among all the devices except the tensor axis.
       xs.mark_sharding(real_output, mesh, (("dcn", "fsdp", "expert"), None, "tensor"))
 
