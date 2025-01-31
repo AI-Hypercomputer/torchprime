@@ -3,6 +3,7 @@ import json
 import jax
 import torch
 import torchax as tx
+import torchax.interop
 from model import ModelArgs, Transformer
 from transformers import AutoTokenizer
 
@@ -56,7 +57,6 @@ def generate(
   finished = torch.tensor([False] * len(prompt_tokens), device="cpu")
   prompt_mask = tokens != -1
 
-  env = tx.default_env()
   # env.to_xla(tokens).jax()
   # env.to_xla(prompt_mask).jax()
   # env.to_xla(finished).jax()
@@ -126,7 +126,7 @@ def main(
   with torch.device("cpu"):
     model = Transformer(args)
 
-  model = torchax.interop.JittableModule(model)
+  model = tx.interop.JittableModule(model)
 
   tokenizer = AutoTokenizer.from_pretrained(ckpt_path)
   tokenizer.decode(generate(model, [tokenizer.encode("DeepSeek")], 2, -1, 1.0)[0])
@@ -173,12 +173,12 @@ def main(
 
 
 def main_test():
-  env = tx.enable_globally()
+  _ = tx.enable_globally()
 
   torch.set_default_dtype(torch.bfloat16)
   torch.manual_seed(0)
   args = ModelArgs()
-  x = torch.randint(0, args.vocab_size, (2, 128))
+  # x = torch.randint(0, args.vocab_size, (2, 128))
 
   with torch.device("cpu"):
     model = Transformer(args)

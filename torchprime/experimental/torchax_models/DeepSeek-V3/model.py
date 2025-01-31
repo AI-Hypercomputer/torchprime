@@ -2,11 +2,9 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-import jax
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
-import torchax
 from torch import nn
 
 # from kernel import act_quant, weight_dequant, fp8_gemm #TODO: bring back
@@ -407,10 +405,7 @@ class MLA(nn.Module):
     """
     bsz, seqlen, _ = x.size()
     end_pos = start_pos + seqlen
-    if self.q_lora_rank == 0:
-      q = self.wq(x)
-    else:
-      q = self.wq_b(self.q_norm(self.wq_a(x)))
+    q = self.wq(x) if self.q_lora_rank == 0 else self.wq_b(self.q_norm(self.wq_a(x)))
     q = q.view(bsz, seqlen, self.n_local_heads, self.qk_head_dim)
     q_nope, q_pe = torch.split(
       q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
@@ -437,7 +432,7 @@ class MLA(nn.Module):
       wkv_b = (
         self.wkv_b.weight
         if self.wkv_b.scale is None
-        else weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
+        else self.wkv_b.weight #weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
       )
       wkv_b = wkv_b.view(self.n_local_heads, -1, self.kv_lora_rank)
       q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, : self.qk_nope_head_dim])
@@ -766,52 +761,20 @@ class Transformer(nn.Module):
     Returns:
         torch.Tensor: Logits tensor of shape (batch_size, vocab_size).
     """
-    env = torchax.default_env()
-    with env:
-      with jax.default_device(jax.devices("tpu")[0]):
-        seqlen = tokens.size(1)
-        h = self.embed(tokens)
-        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
-        mask = None
-        if seqlen > 1:
-          mask = torch.full(
-            (seqlen, seqlen), float("-inf"), device=tokens.device
-          ).triu_(1)
-        for layer in self.layers:
-          h = layer(h, start_pos, freqs_cis, mask)
-        h = self.norm(h)[:, -1]
-        logits = self.head(h)
-        if world_size > 1:
-          all_logits = [torch.empty_like(logits) for _ in range(world_size)]
-          dist.all_gather(all_logits, logits)
-          logits = torch.cat(all_logits, dim=-1)
-        return logits
-
-
-if __name__ == "__main__":
-  torch.set_default_dtype(torch.bfloat16)
-  torch.manual_seed(0)
-  args = ModelArgs()
-  x = torch.randint(0, args.vocab_size, (2, 128))
-  model = Transformer(args)
-
-  from transformers import AutoTokenizer
-
-  model_name = "deepseek-ai/DeepSeek-V3"
-  tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-  max_new_tokens = 100
-  temperature = 1.0
-  prompts = [
-    "my name is somethins you can never imagine would be",
-    "this is an engineer working at Google for",
-  ]  # , "the lady was very harsh when it came to"]
-  prompt_tokens = [
-    tokenizer.apply_chat_template(
-      [{"role": "user", "content": prompt}], add_generation_prompt=True
-    )
-    for prompt in prompts
-  ]
-  completion_tokens = test_generate(
-    model, prompt_tokens, max_new_tokens, 1000, temperature
-  )
-  print(completion_tokens)
+    seqlen = tokens.size(1)
+    h = self.embed(tokens)
+    freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
+    mask = None
+    if seqlen > 1:
+        mask = torch.full(
+        (seqlen, seqlen), float("-inf"), device=tokens.device
+        ).triu_(1)
+    for layer in self.layers:
+        h = layer(h, start_pos, freqs_cis, mask)
+    h = self.norm(h)[:, -1]
+    logits = self.head(h)
+    if world_size > 1:
+        all_logits = [torch.empty_like(logits) for _ in range(world_size)]
+        dist.all_gather(all_logits, logits)
+        logits = torch.cat(all_logits, dim=-1)
+    return logits

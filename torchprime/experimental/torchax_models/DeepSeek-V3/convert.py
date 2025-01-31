@@ -48,7 +48,7 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
 
   for file_path in tqdm(glob(os.path.join(hf_ckpt_path, "*.safetensors"))):
     with safe_open(file_path, framework="pt", device="cpu") as f:
-      for name in f.keys():
+      for name in f:
         if "model.layers.61" in name:
           continue
         param: torch.Tensor = f.get_tensor(name)
