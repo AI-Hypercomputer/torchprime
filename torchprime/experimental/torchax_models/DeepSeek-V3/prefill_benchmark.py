@@ -1,18 +1,12 @@
-import os
-import json
-from argparse import ArgumentParser
-from typing import List
 import functools
 import time
 
-import torch
-from safetensors.torch import load_model
-import torchax
 import jax
+import torch
+import torchax
 import torchax.interop
+from model import ModelArgs, Transformer
 from torchax.interop import JittableModule
-
-from model import Transformer, ModelArgs
 
 
 def single_device_compile():
