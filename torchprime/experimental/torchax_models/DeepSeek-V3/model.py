@@ -179,25 +179,26 @@ RowParallelLinear = torch.nn.Linear
 
 
 class RMSNorm(nn.Module):
-    """
-    Root Mean Square Layer Normalization (RMSNorm).
+  """
+  Root Mean Square Layer Normalization (RMSNorm).
 
-    Args:
-        dim (int): Dimension of the input tensor.
-        eps (float): Epsilon value for numerical stability. Defaults to 1e-6.
-    """
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.dim = dim
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+  Args:
+      dim (int): Dimension of the input tensor.
+      eps (float): Epsilon value for numerical stability. Defaults to 1e-6.
+  """
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+  def __init__(self, dim: int, eps: float = 1e-6):
+    super().__init__()
+    self.dim = dim
+    self.eps = eps
+    self.weight = nn.Parameter(torch.ones(dim))
 
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        return output * self.weight
+  def _norm(self, x):
+    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+  def forward(self, x):
+    output = self._norm(x.float()).type_as(x)
+    return output * self.weight
 
 
 def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
@@ -426,7 +427,7 @@ class MLA(nn.Module):
       wkv_b = (
         self.wkv_b.weight
         if self.wkv_b.scale is None
-        else self.wkv_b.weight #weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
+        else self.wkv_b.weight  # weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
       )
       wkv_b = wkv_b.view(self.n_local_heads, -1, self.kv_lora_rank)
       q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, : self.qk_nope_head_dim])
@@ -760,15 +761,13 @@ class Transformer(nn.Module):
     freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
     mask = None
     if seqlen > 1:
-        mask = torch.full(
-        (seqlen, seqlen), float("-inf"), device=tokens.device
-        ).triu_(1)
+      mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device).triu_(1)
     for layer in self.layers:
-        h = layer(h, start_pos, freqs_cis, mask)
+      h = layer(h, start_pos, freqs_cis, mask)
     h = self.norm(h)[:, -1]
     logits = self.head(h)
     if world_size > 1:
-        all_logits = [torch.empty_like(logits) for _ in range(world_size)]
-        dist.all_gather(all_logits, logits)
-        logits = torch.cat(all_logits, dim=-1)
+      all_logits = [torch.empty_like(logits) for _ in range(world_size)]
+      dist.all_gather(all_logits, logits)
+      logits = torch.cat(all_logits, dim=-1)
     return logits
