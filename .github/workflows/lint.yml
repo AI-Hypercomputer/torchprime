@@ -43,7 +43,7 @@ jobs:
         if [[ $git_status ]]; then
           git diff
           echo "ruff recommends the changes above, please manually apply them OR automatically apply the changes "
-          echo "by running `ruff format` to format the following files"
+          echo "by running 'ruff format' to format the following files"
           echo "${git_status}"
           exit 1
         else
