@@ -23,6 +23,7 @@ dependencies = [
     "tensorboard==2.18.0",
     "tensorboard-plugin-profile==2.18.0",
     "tf_keras==2.18.0",
+    "protobuf==4.25.5",
 ]
 
 [project.optional-dependencies]

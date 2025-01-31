@@ -41,6 +41,8 @@ from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
+from torchprime.metrics.step_duration import step_duration_from_latest_profile
+
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
 
@@ -207,22 +209,25 @@ class Trainer:
       except StopIteration:
         break
 
-      # For logging step, we explicitly isolate this step from tracing and execution overlapping.
-      if step % self.config.logging_steps == 0:
-        xm.wait_device_ops()
       trace_start_time = timer()
-
       loss = self.train_step(batch)
-
       trace_end_time = timer()
+
       if step % self.config.logging_steps == 0:
-        xm.wait_device_ops()
-        execute_end_time = timer()
-        logger.info(
-          f"Step: {step}, loss: {loss:0.4f}, trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms, step time: {(execute_end_time - trace_end_time) * 1000:0.2f} ms"
+
+        def step_closure(step, loss, trace_start_time, trace_end_time):
+          logger.info(
+            f"Step: {step}, loss: {loss:0.4f}, "
+            f"trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms"
+          )
+          if math.isnan(loss):
+            raise ValueError(f"Loss is NaN at step {step}")
+
+        xm.add_step_closure(
+          step_closure,
+          args=(step, loss, trace_start_time, trace_end_time),
+          run_async=True,
         )
-        if math.isnan(loss):
-          raise ValueError(f"Loss is NaN at step {step}")
 
       # Capture profile at the prefer step
       if step == self.config.profile_step:
@@ -236,7 +241,13 @@ class Trainer:
           self.config.profile_duration,
         )
 
+    xm.wait_device_ops()
     logger.info("Finished training run")
+
+    # Analyze the step duration from the latest profile
+    if self.config.profile_step >= 0:
+      step_duration = step_duration_from_latest_profile(self.config.profile_dir)
+      logger.info(f"Step duration: {step_duration:.3f} s")
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
