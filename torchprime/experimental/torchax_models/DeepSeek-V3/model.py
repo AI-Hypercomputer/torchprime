@@ -13,7 +13,7 @@ world_size = 1
 rank = 0
 block_size = 128
 gemm_impl: Literal["bf16", "fp8"] = "bf16"
-attn_impl: Literal["naive", "absorb"] = "absorb"
+attn_impl: Literal["naive", "absorb"] = "naive"
 
 
 @dataclass
@@ -179,31 +179,25 @@ RowParallelLinear = torch.nn.Linear
 
 
 class RMSNorm(nn.Module):
-  """
-  Root Mean Square Layer Normalization (RMSNorm).
-
-  Args:
-      dim (int): Dimension of the input tensor.
-      eps (float): Epsilon value for numerical stability. Defaults to 1e-6.
-  """
-
-  def __init__(self, dim: int, eps: float = 1e-6):
-    super().__init__()
-    self.dim = dim
-    self.eps = eps
-    self.weight = nn.Parameter(torch.ones(dim))
-
-  def forward(self, x: torch.Tensor):
     """
-    Forward pass for RMSNorm.
+    Root Mean Square Layer Normalization (RMSNorm).
 
     Args:
-        x (torch.Tensor): Input tensor.
-
-    Returns:
-        torch.Tensor: Normalized tensor with the same shape as input.
+        dim (int): Dimension of the input tensor.
+        eps (float): Epsilon value for numerical stability. Defaults to 1e-6.
     """
-    return F.rms_norm(x, (self.dim,), self.weight, self.eps)
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    def forward(self, x):
+        output = self._norm(x.float()).type_as(x)
+        return output * self.weight
 
 
 def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
