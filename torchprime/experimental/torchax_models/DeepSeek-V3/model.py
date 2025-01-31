@@ -13,7 +13,7 @@ world_size = 1
 rank = 0
 block_size = 128
 gemm_impl: Literal["bf16", "fp8"] = "bf16"
-attn_impl: Literal["naive", "absorb"] = "absorb"
+attn_impl: Literal["naive", "absorb"] = "naive"
 
 
 @dataclass
@@ -193,17 +193,12 @@ class RMSNorm(nn.Module):
     self.eps = eps
     self.weight = nn.Parameter(torch.ones(dim))
 
-  def forward(self, x: torch.Tensor):
-    """
-    Forward pass for RMSNorm.
+  def _norm(self, x):
+    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
-    Args:
-        x (torch.Tensor): Input tensor.
-
-    Returns:
-        torch.Tensor: Normalized tensor with the same shape as input.
-    """
-    return F.rms_norm(x, (self.dim,), self.weight, self.eps)
+  def forward(self, x):
+    output = self._norm(x.float()).type_as(x)
+    return output * self.weight
 
 
 def precompute_freqs_cis(args: ModelArgs) -> torch.Tensor:
@@ -432,7 +427,7 @@ class MLA(nn.Module):
       wkv_b = (
         self.wkv_b.weight
         if self.wkv_b.scale is None
-        else self.wkv_b.weight #weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
+        else self.wkv_b.weight  # weight_dequant(self.wkv_b.weight, self.wkv_b.scale, block_size)
       )
       wkv_b = wkv_b.view(self.n_local_heads, -1, self.kv_lora_rank)
       q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, : self.qk_nope_head_dim])
@@ -766,15 +761,13 @@ class Transformer(nn.Module):
     freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
     mask = None
     if seqlen > 1:
-        mask = torch.full(
-        (seqlen, seqlen), float("-inf"), device=tokens.device
-        ).triu_(1)
+      mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device).triu_(1)
     for layer in self.layers:
-        h = layer(h, start_pos, freqs_cis, mask)
+      h = layer(h, start_pos, freqs_cis, mask)
     h = self.norm(h)[:, -1]
     logits = self.head(h)
     if world_size > 1:
-        all_logits = [torch.empty_like(logits) for _ in range(world_size)]
-        dist.all_gather(all_logits, logits)
-        logits = torch.cat(all_logits, dim=-1)
+      all_logits = [torch.empty_like(logits) for _ in range(world_size)]
+      dist.all_gather(all_logits, logits)
+      logits = torch.cat(all_logits, dim=-1)
     return logits
