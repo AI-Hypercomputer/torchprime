@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from transformers import AutoTokenizer
 from safetensors.torch import load_model
-import torchax
+import torchax as tx
 import jax
 
 from model import Transformer, ModelArgs
@@ -60,33 +60,36 @@ def generate(
     finished = torch.tensor([False] * len(prompt_tokens), device="cpu")
     prompt_mask = tokens != -1
 
-    env = torchax.default_env()
-    env.to_xla(tokens).jax()
-    env.to_xla(prompt_mask).jax()
-    env.to_xla(finished).jax()
+    env = tx.default_env()
+# env.to_xla(tokens).jax()
+# env.to_xla(prompt_mask).jax()
+# env.to_xla(finished).jax()
 
-    with env:
-        print("device = ", jax.devices('tpu')[0])
-        with jax.default_device(jax.devices('tpu')[0]):
-            for cur_pos in range(min(prompt_lens), total_len):
-                logits = model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
-                if temperature > 0:
-                    next_token = sample(logits, temperature)
-                else:
-                    next_token = logits.argmax(dim=-1)
-                next_token = torch.where(prompt_mask[:, cur_pos], tokens[:, cur_pos], next_token)
-                tokens[:, cur_pos] = next_token
-                finished |= torch.logical_and(~prompt_mask[:, cur_pos], next_token == eos_id)
-                prev_pos = cur_pos
-                if finished.all():
-                    break
-            completion_tokens = []
-            for i, toks in enumerate(tokens.tolist()):
-                toks = toks[prompt_lens[i]:prompt_lens[i]+max_new_tokens]
-                if eos_id in toks:
-                    toks = toks[:toks.index(eos_id)]
-                completion_tokens.append(toks)
-            return completion_tokens
+    tpu = jax.devices('tpu')[0]
+
+    tokens = tokens.to('jax').apply_jax_(jax.device_put, tpu)
+    prompt_mask = prompt_mask.to('jax').apply_jax_(jax.device_put, tpu)
+    finished = finished.to('jax').apply_jax_(jax.device_put, tpu)
+
+    for cur_pos in range(min(prompt_lens), total_len):
+        logits = model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+        if temperature > 0:
+            next_token = sample(logits, temperature)
+        else:
+            next_token = logits.argmax(dim=-1)
+        next_token = torch.where(prompt_mask[:, cur_pos], tokens[:, cur_pos], next_token)
+        tokens[:, cur_pos] = next_token
+        finished |= torch.logical_and(~prompt_mask[:, cur_pos], next_token == eos_id)
+        prev_pos = cur_pos
+        if finished.all():
+            break
+    completion_tokens = []
+    for i, toks in enumerate(tokens.tolist()):
+        toks = toks[prompt_lens[i]:prompt_lens[i]+max_new_tokens]
+        if eos_id in toks:
+            toks = toks[:toks.index(eos_id)]
+        completion_tokens.append(toks)
+    return completion_tokens
 
 
 def main(
@@ -108,40 +111,36 @@ def main(
         max_new_tokens (int, optional): Maximum number of new tokens to generate. Defaults to 100.
         temperature (float, optional): Temperature for sampling. Defaults to 1.0.
     """
-    world_size = int(os.getenv("WORLD_SIZE", "1"))
-    rank = int(os.getenv("RANK", "0"))
-    local_rank = int(os.getenv("LOCAL_RANK", "0"))
-    if world_size > 1:
-        dist.init_process_group("nccl")
-    global print
-    if rank != 0:
-        print = lambda *_, **__: None
-    torch.cuda.set_device(local_rank)
+    # world_size = int(os.getenv("WORLD_SIZE", "1"))
+    # rank = int(os.getenv("RANK", "0"))
+    # local_rank = int(os.getenv("LOCAL_RANK", "0"))
+    # if world_size > 1:
+    #     dist.init_process_group("nccl")
+    # global print
+    # if rank != 0:
+    #     print = lambda *_, **__: None
+    # torch.cuda.set_device(local_rank)
     torch.set_default_dtype(torch.bfloat16)
     torch.set_num_threads(8)
     torch.manual_seed(965)
     with open(config) as f:
         args = ModelArgs(**json.load(f))
     print(args)
-    with torch.device("cuda"):
+
+    with torch.device("cpu"):
         model = Transformer(args)
+
+    model = torchax.interop.JittableModule(model)
+
     tokenizer = AutoTokenizer.from_pretrained(ckpt_path)
     tokenizer.decode(generate(model, [tokenizer.encode("DeepSeek")], 2, -1, 1.)[0])
-    load_model(model, os.path.join(ckpt_path, f"model{rank}-mp{world_size}.safetensors"))
+    # here need to load full weights
+    # load_model(model, os.path.join(ckpt_path, f"model{rank}-mp{world_size}.safetensors"))
 
     if interactive:
         messages = []
         while True:
-            if world_size == 1:
-                prompt = input(">>> ")
-            elif rank == 0:
-                prompt = input(">>> ")
-                objects = [prompt]
-                dist.broadcast_object_list(objects, 0)
-            else:
-                objects = [None]
-                dist.broadcast_object_list(objects, 0)
-                prompt = objects[0]
+            prompt = input(">>> ")
             if prompt == "/exit":
                 break
             elif prompt == "/clear":
@@ -165,15 +164,18 @@ def main(
             print("Completion:", completion)
             print()
 
-    if world_size > 1:
-        dist.destroy_process_group()
-
 def main_test():
+    env = tx.enable_globally()
+
     torch.set_default_dtype(torch.bfloat16)
     torch.manual_seed(0)
     args = ModelArgs()
     x = torch.randint(0, args.vocab_size, (2, 128))
-    model = Transformer(args)
+
+    with torch.device('cpu'):
+        model = Transformer(args)
+
+    model.to('jax')
 
     from transformers import AutoTokenizer
     model_name = "deepseek-ai/DeepSeek-V3"
@@ -210,5 +212,5 @@ if __name__ == "__main__":
     # parser.add_argument("--temperature", type=float, default=0.2)
     # args = parser.parse_args()
     # assert args.input_file or args.interactive
-    # main(args.ckpt_path, args.config, args.input_file, args.interactive, args.max_new_tokens, args.temperature)
+    #main(args.ckpt_path, args.config, args.input_file, args.interactive, args.max_new_tokens, args.temperature)
     main_test()

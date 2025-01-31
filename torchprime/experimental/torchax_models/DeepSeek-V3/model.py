@@ -85,52 +85,7 @@ class ModelArgs:
     mscale: float = 1.
 
 
-class ParallelEmbedding(nn.Module):
-    """
-    Embedding layer with parallelism support across distributed processes.
-
-    Args:
-        vocab_size (int): Vocabulary size.
-        dim (int): Embedding dimension.
-    """
-    def __init__(self, vocab_size: int, dim: int):
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.dim = dim
-        assert vocab_size % world_size == 0
-        self.part_vocab_size = (vocab_size // world_size)
-        self.vocab_start_idx = rank * self.part_vocab_size
-        self.vocab_end_idx = self.vocab_start_idx + self.part_vocab_size
-        self.weight = nn.Parameter(torch.empty(self.part_vocab_size, self.dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for parallel embedding layer.
-
-        Args:
-            x (torch.Tensor): Input tensor containing token indices.
-
-        Returns:
-            torch.Tensor: Embedded representations.
-
-        Raises:
-            ValueError: If `world_size` is not defined.
-        """
-        env = torchax.default_env()
-        with env:
-            with jax.default_device(jax.devices('tpu')[0]):
-                env.to_xla(self.weight).jax()
-                env.to_xla(x).jax()
-
-                if world_size > 1:
-                    mask = (x < self.vocab_start_idx) | (x >= self.vocab_end_idx)
-                    x = x - self.vocab_start_idx
-                    x[mask] = 0
-                y = F.embedding(x, self.weight)
-                if world_size > 1:
-                    y[mask] = 0
-                    dist.all_reduce(y)
-                return y
+ParallelEmbedding = torch.nn.Embedding
 
 
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -210,66 +165,8 @@ class Linear(nn.Module):
         return linear(x, self.weight, self.bias)
 
 
-class ColumnParallelLinear(Linear):
-    """
-    Linear layer with column parallelism, splitting output features across distributed processes.
-
-    Args:
-        in_features (int): Number of input features.
-        out_features (int): Total number of output features.
-        bias (bool): Whether to include a bias term. Defaults to False.
-        dtype (optional): Data type for the layer. Defaults to `torch.bfloat16`.
-    """
-    def __init__(self, in_features: int, out_features: int, bias: bool = False, dtype = None):
-        assert out_features % world_size == 0
-        self.part_out_features = out_features // world_size
-        super().__init__(in_features, self.part_out_features, bias, dtype)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for column parallel linear layer.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Transformed tensor with column-parallel computation.
-        """
-        y = linear(x, self.weight, self.bias)
-        return y
-
-
-class RowParallelLinear(Linear):
-    """
-    Linear layer with row parallelism, splitting input features across distributed processes.
-
-    Args:
-        in_features (int): Total number of input features.
-        out_features (int): Number of output features.
-        bias (bool): Whether to include a bias term. Defaults to False.
-        dtype (optional): Data type for the layer. Defaults to `torch.bfloat16`.
-    """
-    def __init__(self, in_features: int, out_features: int, bias: bool = False, dtype = None):
-        assert in_features % world_size == 0
-        self.part_in_features = in_features // world_size
-        super().__init__(self.part_in_features, out_features, bias, dtype)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for row parallel linear layer.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            torch.Tensor: Transformed tensor with row-parallel computation.
-        """
-        y = linear(x, self.weight)
-        if world_size > 1:
-            dist.all_reduce(y)
-        if self.bias is not None:
-            y += self.bias
-        return y
+ColumnParallelLinear = torch.nn.Linear
+RowParallelLinear = torch.nn.Linear
 
 
 class RMSNorm(nn.Module):
