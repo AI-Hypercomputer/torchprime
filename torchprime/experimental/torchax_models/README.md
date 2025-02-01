@@ -36,7 +36,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 git clone https://github.com/pytorch/xla.git
 cd xla/torchax
 pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
-pip install optax fire tensorflow tensorboard-plugin-profile
+pip install optax tensorflow tensorboard-plugin-profile
 pip install -e .[tpu] -f https://storage.googleapis.com/libtpu-releases/index.html
 ```
 
@@ -65,12 +65,12 @@ Llama 3.1 405B on v6e-256 x 2 command:
 
 ```sh
 tp run torchprime/experimental/torchax_models/run.py \
-    --batch_size=256 \
-    --model_type=405B \
-    --seqlen=8192 \
-    --use_custom_offload=True \
-    --use_custom_mesh=True \
-    --model_impl=scan \
-    --tp=4 \
-    --unroll_layers=1
+    global_batch_size=256 \
+    model_type=405B \
+    seqlen=8192 \
+    use_custom_offload=True \
+    use_custom_mesh=True \
+    model_impl=scan \
+    tp=4 \
+    unroll_layers=1
 ```

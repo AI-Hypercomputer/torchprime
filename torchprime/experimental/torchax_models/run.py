@@ -2,6 +2,7 @@ import functools
 import math
 
 import custom_mesh
+import hydra
 import jax
 import numpy as np
 import splash_attn
@@ -15,6 +16,7 @@ from jax.experimental.mesh_utils import (
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
 from llama import model, model_with_collectives, model_with_scan
+from omegaconf import DictConfig, OmegaConf
 from torchax import interop
 
 sharding_map_original = {
@@ -188,31 +190,21 @@ class TitanModel(torch.nn.Module):
     return self.model(tokens)
 
 
-def main(
-  batch_size: int = 64,
-  model_type: str = "8B",
-  lr: float = 0.001,
-  tp: int = 4,
-  seqlen: int = 2048,
-  model_impl: str = "scan",
-  use_custom_mesh: bool = False,
-  use_custom_offload: bool = True,
-  internal_override_layers: int = -1,
-  profile_dir: str = "profile/",
-  unroll_layers: int = 1,
-):
+@hydra.main(version_base=None, config_path="configs", config_name="default")
+def main(config: DictConfig):
+  print(OmegaConf.to_yaml(config))  # Print the config for debugging
   print(locals())
   torch.manual_seed(0)
   torch.set_default_dtype(torch.bfloat16)
   torchax.enable_performance_mode()
 
   print("Local devices:", jax.local_device_count())
-  fsdp_size = len(jax.devices()) // tp
+  fsdp_size = len(jax.devices()) // config.tp
 
   env = torchax.default_env()
   env.config.use_torch_native_for_cpu_tensor = False
 
-  if use_custom_mesh:
+  if config.use_custom_mesh:
     tp = 4
     if len(jax.devices()) == 512:
       dev_array = custom_mesh.create_custom_64x4_device_mesh(
@@ -224,16 +216,18 @@ def main(
         np.array(jax.devices()).reshape(8, 2, 8, 2).transpose(0, 2, 1, 3).reshape(64, 4)
       )
   else:
-    if fsdp_size * tp <= 256:
-      dev_array = create_device_mesh((fsdp_size, tp), allow_split_physical_axes=True)
+    if fsdp_size * config.tp <= 256:
+      dev_array = create_device_mesh(
+        (fsdp_size, config.tp), allow_split_physical_axes=True
+      )
     else:
       num_pod = len(jax.devices()) // 256
       dev_array = create_hybrid_device_mesh(
-        (fsdp_size // num_pod, tp), (num_pod, 1), jax.devices()
+        (fsdp_size // num_pod, config.tp), (num_pod, 1), jax.devices()
       )
   mesh = Mesh(dev_array, ("fsdp", "tp"))
 
-  if use_custom_offload:
+  if config.use_custom_offload:
     policy = jax.checkpoint_policies.save_and_offload_only_these_names(
       names_which_can_be_saved=[],
       names_which_can_be_offloaded=[
@@ -249,37 +243,37 @@ def main(
   else:
     policy = jax.checkpoint_policies.nothing_saveable
 
-  args = model.ModelArgs(**model.transformer_configs[model_type])
-  if internal_override_layers > 0:
-    args.n_layers = internal_override_layers
+  args = model.ModelArgs(**model.transformer_configs[config.model_type])
+  if config.internal_override_layers > 0:
+    args.n_layers = config.internal_override_layers
 
   with torch.device("meta"):
-    if model_impl == "scan":
+    if config.model_impl == "scan":
       sharding_map = sharding_map_scan
       llama = model_with_scan.Transformer(args)
-    elif model_impl == "scan_manual":
-      args.tp_size = tp
+    elif config.model_impl == "scan_manual":
+      args.tp_size = config.tp
       sharding_map = sharding_map_scan
-      llama = model_with_collectives.Transformer(args, unroll_layers)
-    elif model_impl == "orig":
+      llama = model_with_collectives.Transformer(config.args, config.unroll_layers)
+    elif config.model_impl == "orig":
       sharding_map = sharding_map_original
       llama = model.Transformer(args)
-    elif model_impl == "titan":
+    elif config.model_impl == "titan":
       from torchtitan.models.llama import llama3_configs
 
       sharding_map = {
         "model." + key: value for key, value in sharding_map_original.items()
       }
-      args = llama3_configs[model_type]
+      args = llama3_configs[config.model_type]
       args.vocab_size = 128256
-      args.max_seq_len = seqlen
+      args.max_seq_len = config.seqlen
       llama = TitanModel(args)
     else:
-      raise AssertionError("unknown impl: " + model_impl)
+      raise AssertionError("unknown impl: " + config.model_impl)
 
   sharded_weights = create_sharded_weights(llama, mesh, sharding_map)
   with torch.device("cpu"):
-    if model_impl == "titan":
+    if config.model_impl == "titan":
       freqs_cis = llama.model._precompute_freqs_cis().numpy()
     else:
       freqs_cis = model.precompute_freqs_cis(
@@ -299,7 +293,7 @@ def main(
     splash_attn.tpu_splash_attention,
     mesh,
     partition,
-    (model_impl != "scan_manual"),
+    (config.model_impl != "scan_manual"),
   )
   attention = jax.jit(attention)
 
@@ -327,16 +321,14 @@ def main(
       sharded_weights,
       None,
       freqs_cis,
-      lr,
-      seqlen,
+      config.lr,
+      config.seqlen,
       policy,
-      batch_size,
-      use_shmap=(model_impl == "scan_manual"),
-      profile_dir=profile_dir,
+      config.global_batch_size,
+      use_shmap=(config.model_impl == "scan_manual"),
+      profile_dir=config.profile_dir,
     )
 
 
 if __name__ == "__main__":
-  import fire
-
-  fire.Fire(main)
+  main()

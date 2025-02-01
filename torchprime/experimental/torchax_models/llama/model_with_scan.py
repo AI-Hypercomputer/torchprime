@@ -11,7 +11,6 @@
 # https://github.com/meta-llama/llama-models/blob/main/models/llama3/reference_impl/model.py
 
 import math
-from dataclasses import dataclass
 
 import jax
 import torch
@@ -21,40 +20,9 @@ from jax.sharding import PartitionSpec as P
 from torch import nn
 from torchax import interop
 
+from .model import ModelArgs
+
 with_sharding_constraint = interop.torch_view(jax.lax.with_sharding_constraint)
-
-
-@dataclass
-class ModelArgs:
-  dim: int = 4096
-  n_layers: int = 32
-  n_heads: int = 32
-  n_kv_heads: int | None = None
-  vocab_size: int = -1
-  multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
-  ffn_dim_multiplier: float | None = None
-  norm_eps: float = 1e-5
-  rope_theta: float = 500000
-  use_scaled_rope: bool = False
-
-  max_batch_size: int = 32
-  max_seq_len: int = 8192
-
-  # vision model params
-  vision_chunk_size: int = -1  # image resolution for image models
-  vision_max_num_chunks: int = 4
-  vision_num_cross_attention_layers: int = -1
-
-  def __init__(self, **kwargs):
-    for k, v in kwargs.items():
-      if hasattr(self, k):
-        setattr(self, k, v)
-
-    if self.n_kv_heads is None:
-      self.n_kv_heads = self.n_heads
-    assert self.n_kv_heads <= self.n_heads
-    assert self.n_heads % self.n_kv_heads == 0
-    assert self.dim % self.n_heads == 0
 
 
 # **NOTE**: This code is not runnable without installing `torch` and `fairscale`

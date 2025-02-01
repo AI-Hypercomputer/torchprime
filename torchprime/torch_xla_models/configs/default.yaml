@@ -1,3 +1,6 @@
+# The default config file. You may override configs with `key=value` arguments on the CLI
+# according to https://hydra.cc/docs/advanced/override_grammar/basic/.
+
 # This defines the order in which configs are loaded. The latter configs
 # override the earlier ones.
 defaults:
@@ -13,8 +16,9 @@ block_size: 8192
 cache_dir: /tmp/
 seed: 42
 profile_step: -1
+
 # This might be overwritten when using tp run to launch the run using XPK
-profile_dir: /tmp/profile 
+profile_dir: profile
 profile_duration: 100000
 optimizer:
   learning_rate: 5.e-5

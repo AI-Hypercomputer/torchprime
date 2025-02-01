@@ -277,7 +277,7 @@ def initialize_model_class(model_config):
   return model
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="base")
+@hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
   # Configure logging
   print(OmegaConf.to_yaml(config))  # Print the config for debugging

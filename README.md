@@ -33,7 +33,7 @@ XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 Train Llama 3 8B using torchax:
 
 ```sh
-python3 torchprime/experimental/torchax_models/run.py --batch_size=16
+python3 torchprime/experimental/torchax_models/run.py global_batch_size=16
 ```
 
 Refer to `README.md` in `torchprime/torch_xla_models` and
@@ -62,7 +62,7 @@ Then prepend `tp run` to a particular Python file you would like to
 run remotely, including arguments, e.g.
 
 ```sh
-tp run torchprime/experimental/torchax_models/run.py --batch_size=256
+tp run torchprime/experimental/torchax_models/run.py global_batch_size=256
 ```
 
 `tp run` will broadcast this command to all VMs in the XPK cluster,
