@@ -42,7 +42,7 @@ Refer to `README.md` in `torchprime/torch_xla_models` and
 ### Distributed training
 
 torchprime uses [xpk][xpk] as the standard path for iterating on
-distributed training code.
+distributed training code. To use `xpk`, you need to install `kubectl` by following the instruction [here](https://cloud.google.com/sdk/docs/install-sdk#deb).
 
 First teach torchprime about the XPK cluster it is using, the artifact
 storage location, etc. You only need to do this on first clone or when
