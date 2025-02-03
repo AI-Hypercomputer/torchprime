@@ -5,8 +5,12 @@ import jax
 import torch
 import torchax
 import torchax.interop
-from model import ModelArgs, Transformer
 from torchax.interop import JittableModule
+
+from .model import (
+  ModelArgs,
+  Transformer,
+)
 
 
 def single_device_compile():
