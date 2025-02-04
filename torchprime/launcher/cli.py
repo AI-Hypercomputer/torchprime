@@ -125,7 +125,7 @@ def use(
 
   path = write_config(config)
   click.echo(f"Written config {path.relative_to(os.getcwd())}")
-  torchprime.launcher.doctor.check_all()
+  torchprime.launcher.doctor.check_all(config)
 
 
 def create_and_activate_gcloud(gcloud_config_name, config: Config):

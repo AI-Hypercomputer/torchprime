@@ -12,6 +12,8 @@ from pathlib import Path
 
 import click
 
+from torchprime.launcher.cli import Config
+
 
 class CheckFailedError(Exception):
   pass
@@ -114,20 +116,64 @@ def check_gke_gcloud_auth_plugin():
   )
 
 
-def check_all():
+def check_gke_cluster_exist(config: Config):
+  """Check that the GKE cluster exists."""
+  try:
+    # Run `gcloud components list` to get installed components
+    result = subprocess.run(
+      [
+        "gcloud",
+        "container",
+        "clusters",
+        "describe",
+        f"{config.cluster}",
+        f"--project={config.project}",
+        f"--zone={config.zone}",
+      ],
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+  except subprocess.CalledProcessError as e:
+    print(
+      f"Error running gcloud command: {e.stderr} Please check the cluster name and project"
+    )
+    # get existing clusters in the project
+    try:
+      result = subprocess.run(
+        ["gcloud", "container", "clusters", "list", f"--project={config.project}"],
+        check=True,
+        capture_output=True,
+        text=True,
+      )
+      print(f"Available clusters in the project: \n{result.stdout}")
+    except subprocess.CalledProcessError as e:
+      print(f"Error running gcloud command: {e.stderr} Unable to get existing clusters")
+    raise CheckFailedError(
+      f"""The GKE cluster `{config.cluster}` does not exist in project `{config.project}` in zone `{config.zone}`"""
+    ) from e
+
+
+def check_all(config: Config | None = None):
   click.echo("Checking environment...")
-  for check in [
+  check_list = [
     check_docker,
     check_gcloud_auth_login,
     check_gcr_io,
     check_docker_access,
     check_kubectl,
     check_gke_gcloud_auth_plugin,
-  ]:
+  ]
+  if config:
+    check_list.append(check_gke_cluster_exist)
+  for check in check_list:
     assert check.__doc__ is not None
     click.echo(check.__doc__ + "..", nl=False)
     try:
-      check()
+      try:
+        check(config)
+      except TypeError:
+        check()
     except CheckFailedError as e:
       click.echo()
       click.echo()
