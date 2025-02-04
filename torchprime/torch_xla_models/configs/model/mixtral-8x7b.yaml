@@ -1,3 +1,9 @@
+# This defines the order in which configs are loaded. The latter configs
+# override the earlier ones.
+defaults:
+  - _self_  # refers to this config file
+  - scaling: mixtral-fsdp  # refers to scaling/llama-fsdp.yaml
+
 model_class: mixtral.MixtralForCausalLM # Used to import the model from this class
 bos_token_id: 1
 eos_token_id: 2
@@ -19,7 +25,3 @@ attention_dropout: 0.0
 flash_attention: true
 moe_implementation: gmm
 tokenizer_name: mistralai/Mixtral-8x7B-v0.1
-fsdp:
-  transformer_layer_cls_to_wrap:
-    - MixtralDecoderLayer
-  xla_fsdp_grad_ckpt: true

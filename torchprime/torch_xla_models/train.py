@@ -134,14 +134,14 @@ class Trainer:
     )
     return loader
 
-  def _shard_model(self, model):
+  def _shard_model(self, model: nn.Module):
     default_transformer_cls_names_to_wrap = []
     fsdp_transformer_layer_cls_to_wrap = self.config.model.fsdp.get(
       "transformer_layer_cls_to_wrap",
       default_transformer_cls_names_to_wrap,
     )
 
-    transformer_cls_to_wrap = set()
+    transformer_cls_to_wrap: set[type] = set()
     for layer_class in fsdp_transformer_layer_cls_to_wrap:
       transformer_cls = get_module_class_from_name(model, layer_class)
       if transformer_cls is None:
@@ -161,9 +161,12 @@ class Trainer:
       # Apply gradient checkpointing to auto-wrapped sub-modules if specified
       logger.info("Enabling gradient checkpointing")
 
-      def auto_wrapper_callable(m, *args, **kwargs):
-        target_cls = FSDPv2
-        return target_cls(checkpoint_module(m), *args, **kwargs)
+      def _wrapper(m, *args, **kwargs):
+        return FSDPv2(checkpoint_module(m), *args, **kwargs)
+
+      auto_wrapper_callable = _wrapper
+    else:
+      auto_wrapper_callable = None
 
     def shard_output(output, mesh):
       real_output = None
