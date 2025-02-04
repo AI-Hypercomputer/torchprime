@@ -9,10 +9,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypeVar
 
 import click
 
-from torchprime.launcher.cli import Config
+ConfigT = TypeVar("ConfigT", bound="Config")  # noqa: F821
 
 
 class CheckFailedError(Exception):
@@ -116,10 +117,9 @@ def check_gke_gcloud_auth_plugin():
   )
 
 
-def check_gke_cluster_exist(config: Config):
+def check_gke_cluster_exist(config: ConfigT | None = None):
   """Check that the GKE cluster exists."""
   try:
-    # Run `gcloud components list` to get installed components
     result = subprocess.run(
       [
         "gcloud",
@@ -154,7 +154,7 @@ def check_gke_cluster_exist(config: Config):
     ) from e
 
 
-def check_all(config: Config | None = None):
+def check_all(config: ConfigT | None = None):
   click.echo("Checking environment...")
   check_list = [
     check_docker,
