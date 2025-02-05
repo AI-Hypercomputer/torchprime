@@ -39,6 +39,26 @@ python3 torchprime/experimental/torchax_models/run.py global_batch_size=16
 Refer to `README.md` in `torchprime/torch_xla_models` and
 `torchprime/experimental/torchax_models` for more details.
 
+### Configuring training
+
+torchprime uses [hydra][hydra] to read configurations (e.g. model name,
+batch size) from the command line and `.yaml` files.
+
+In both `torch_xla_models` and `torchax_models` directories, you'll find
+a `configs/default.yaml`. That specifies the default configuration for the
+trainer. You may override configs on the command line with a `key=value`
+syntax. For example, the following command will train Mixtral 8x7B with a
+global batch size of 256, and set the FSDP SPMD mesh axis length to 64:
+
+```sh
+python3 torchprime/torch_xla_models/train.py \
+    model=mixtral-8x7b \
+    global_batch_size=256 \
+    mesh.fsdp=64
+```
+
+You may refer to the hydra docs for other ways to specify configs.
+
 ### Distributed training
 
 torchprime uses [xpk][xpk] as the standard path for iterating on
@@ -146,3 +166,4 @@ For more information on PyTorch/XLA, visit the
 [2]: https://github.com/pytorch/xla/tree/master/torchax
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
+[hydra]: https://hydra.cc/docs/intro/
