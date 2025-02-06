@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Optional
 
 import torch.nn
 
@@ -143,6 +144,60 @@ These names were not found in the model: {diff}.
 """
 
   return model
+
+
+def shard_torchax_model_from_config(
+  model: torch.nn.Module,
+  config: dict,
+  mesh: "jax.sharding.Mesh",  # type: ignore  # noqa: F821
+):
+  """
+  Given a config of pattern to partition spec, shard a torchax model accordingly.
+
+  See `shard_model_from_config` for more details on the config.
+  """
+  import jax
+  from jax.sharding import NamedSharding, PartitionSpec
+  from torchax.interop import torch_view
+
+  jax_mark_sharding = torch_view(jax.lax.with_sharding_constraint)
+
+  def shard_param(tensor, spec: tuple[str, ...]):
+    sharding = NamedSharding(mesh, PartitionSpec(*spec))
+    return torch_view(
+      jax.make_array_from_callback(
+        tensor.shape, sharding, lambda slice_index: tensor[slice_index]
+      )
+    )
+
+  def shard_output(tensor, spec: tuple[str, ...]):
+    sharding = NamedSharding(mesh, PartitionSpec(*spec))
+    return jax_mark_sharding(tensor, sharding)
+
+  return shard_model_from_config(model, config, shard_output, shard_param)
+
+
+def shard_torch_xla_model_from_config(
+  model: torch.nn.Module,
+  config: dict,
+  mesh: Optional["torch_xla.distributed.spmd.Mesh"] = None,  # type: ignore  # noqa: F821
+):
+  """
+  Given a config of pattern to partition spec, shard a torch_xla model accordingly.
+
+  See `shard_model_from_config` for more details on the config.
+
+  If `mesh` is not given, there must be a registered global mesh.
+  """
+  import torch_xla.distributed.spmd as xs
+
+  def shard_fn(tensor, spec: tuple[str, ...]):
+    the_mesh = mesh if mesh is not None else xs.get_global_mesh()
+    assert the_mesh is not None, "No mesh found"
+    # TODO(https://github.com/pytorch/xla/issues/8678): Shard the gradient too.
+    return xs.mark_sharding(tensor, the_mesh, spec).global_tensor
+
+  return shard_model_from_config(model, config, shard_fn)
 
 
 def _process_sharding_name(name):

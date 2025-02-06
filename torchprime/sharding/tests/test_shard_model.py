@@ -1,3 +1,4 @@
+import pytest
 import torch
 import torch.nn as nn
 
@@ -5,6 +6,8 @@ from torchprime.sharding.shard_model import (
   ShardedModule,
   shard_model,
   shard_model_from_config,
+  shard_torch_xla_model_from_config,
+  shard_torchax_model_from_config,
 )
 
 
@@ -147,8 +150,8 @@ def test_shard_model_from_config_torchax():
     import torchax
     import torchax.interop
     from jax.experimental import mesh_utils
-    from jax.sharding import Mesh, NamedSharding, PartitionSpec
-    from torchax.interop import JittableModule, jax_view, torch_view
+    from jax.sharding import Mesh
+    from torchax.interop import JittableModule, jax_view
 
     with torchax.default_env():
       model = SimpleLinear().to("jax")
@@ -161,25 +164,12 @@ def test_shard_model_from_config_torchax():
       "fc2.weight": [None, "fsdp"],
       "fc2.bias": [None],
     }
-    jax_mark_sharding = torch_view(jax.lax.with_sharding_constraint)
 
     # Define mesh for test
     devices = mesh_utils.create_device_mesh((jax.device_count(),))
     mesh = Mesh(devices, ("fsdp",))
 
-    def shard_param(tensor, spec: tuple[str, ...]):
-      sharding = NamedSharding(mesh, PartitionSpec(*spec))
-      return torch_view(
-        jax.make_array_from_callback(
-          tensor.shape, sharding, lambda slice_index: tensor[slice_index]
-        )
-      )
-
-    def shard_output(tensor, spec: tuple[str, ...]):
-      sharding = NamedSharding(mesh, PartitionSpec(*spec))
-      return jax_mark_sharding(tensor, sharding)
-
-    model = shard_model_from_config(model, config, shard_output, shard_param)
+    model = shard_torchax_model_from_config(model, config, mesh)
 
     # In order to shard activations, corresponding modules are
     # wrapped with ShardedModule.
@@ -214,7 +204,78 @@ def test_shard_model_from_config_torchax():
     assert jax_view(output).sharding.spec == ("fsdp",)
 
 
-# TODO(https://github.com/AI-Hypercomputer/torchprime/issues/83): Add a torch_xla based test.
+def test_shard_model_from_config_torch_xla():
+  import numpy as np
+  import torch_xla
+  import torch_xla.runtime as xr
+  from torch_xla.distributed.spmd import Mesh
+
+  # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
+  # work on PyTorch/XLA. We must run this on the TPU for now.
+  if xr.device_type() != "TPU":
+    pytest.skip("This test only works on TPU")
+
+  xr.use_spmd()
+
+  model = SimpleLinear().to(torch_xla.device())
+
+  config = {
+    "fc1": ["fsdp", None],
+    "fc1.weight": [None, "fsdp"],
+    "fc1.bias": [None],
+    "fc2": ["fsdp", None],
+    "fc2.weight": [None, "fsdp"],
+    "fc2.bias": [None],
+  }
+
+  # Define mesh for test
+  num_devices = xr.global_runtime_device_count()
+  mesh_shape = (num_devices,)
+  assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
+  device_ids = np.array(range(num_devices))
+  mesh = Mesh(device_ids, mesh_shape, ("fsdp",))
+
+  model = shard_torch_xla_model_from_config(model, config, mesh)
+  torch_xla.sync()
+
+  # In order to shard activations, corresponding modules are
+  # wrapped with ShardedModule.
+  assert isinstance(model.fc1, ShardedModule)
+  assert isinstance(model.fc2, ShardedModule)
+
+  # Check the sharding of weights.
+  state_dict = model.state_dict()
+  none_fsdp_sharded = (
+    f'{{devices=[1,{num_devices}]{",".join(str(v) for v in range(num_devices))}}}'
+  )
+  none_sharded = "{replicated}"
+  expected_sharding = {
+    "fc1._orig_mod.weight": none_fsdp_sharded,
+    "fc1._orig_mod.bias": none_sharded,
+    "fc2._orig_mod.weight": none_fsdp_sharded,
+    "fc2._orig_mod.bias": none_sharded,
+  }
+  seen_count = 0
+  for name, param in state_dict.items():
+    expectation = expected_sharding.get(name)
+    if expectation is None:
+      continue
+    sharding_spec = torch_xla._XLAC._get_xla_sharding_spec(param)
+    assert sharding_spec == expectation
+    seen_count += 1
+  assert seen_count == len(expected_sharding)
+
+  # Run the model and check the sharding of outputs.
+  inputs = torch.randn((32, 128), device=torch_xla.device())
+  torch_xla.sync()
+  output = model(inputs)
+  torch_xla.sync()
+  assert isinstance(output, torch.Tensor)
+  fsdp_none_sharded = (
+    f'{{devices=[{num_devices},1]{",".join(str(v) for v in range(num_devices))}}}'
+  )
+  sharding_spec = torch_xla._XLAC._get_xla_sharding_spec(output)
+  assert sharding_spec == fsdp_none_sharded
 
 
 def temporary_env(env_dict):
