@@ -1,5 +1,4 @@
 # Standard library imports
-import functools
 import importlib
 import logging
 import math
@@ -24,10 +23,6 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
-from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
-  SpmdFullyShardedDataParallel as FSDPv2,
-)
 
 # Transformers imports
 from transformers import (
@@ -36,12 +31,15 @@ from transformers import (
   get_scheduler,
   set_seed,
 )
-from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
+from torchprime.sharding.shard_model import (
+  shard_torch_xla_model_from_config,
+  wrap_module,
+)
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
@@ -82,7 +80,16 @@ class Trainer:
     self.input_sharding_spec = xs.ShardingSpec(
       mesh, (("dcn", "fsdp"), None), minibatch=True
     )
-    self.model = self._shard_model(model)
+    sharding_config = OmegaConf.to_container(
+      self.config.model.scaling.sharding, resolve=True
+    )
+    assert isinstance(
+      sharding_config, dict
+    ), f"Sharding config {sharding_config} must be a dict"
+    model = shard_torch_xla_model_from_config(model, config=sharding_config)
+    model = self._checkpoint_model(model)
+    model = self._add_optimization_barrier_model(model)
+    self.model = model
 
     # Set up optimizers
     self.optimizer = Adafactor(
@@ -101,6 +108,9 @@ class Trainer:
       num_warmup_steps=self.config.lr_scheduler.warmup_steps,
       num_training_steps=self.config.max_steps,
     )
+
+    # Execute all initialization work queued so far before starting training.
+    torch_xla.sync()
 
   def _prime_optimizer(self):
     for group in self.optimizer.param_groups:
@@ -136,61 +146,52 @@ class Trainer:
     )
     return loader
 
-  def _shard_model(self, model):
-    default_transformer_cls_names_to_wrap = []
-    fsdp_transformer_layer_cls_to_wrap = self.config.model.fsdp.get(
-      "transformer_layer_cls_to_wrap",
-      default_transformer_cls_names_to_wrap,
+  def _checkpoint_model(self, model: nn.Module):
+    classes = self._get_classes_by_names(
+      model, self.config.model.scaling.get("activation_checkpoint_layers", [])
     )
+    if not classes:
+      return model
 
-    transformer_cls_to_wrap = set()
-    for layer_class in fsdp_transformer_layer_cls_to_wrap:
-      transformer_cls = get_module_class_from_name(model, layer_class)
-      if transformer_cls is None:
+    logger.info(f"Enabling activation checkpointing on {classes}")
+
+    def maybe_checkpoint(mod, _name):
+      if isinstance(mod, tuple(classes)):
+        return checkpoint_module(mod)
+      return mod
+
+    return wrap_module(model, maybe_checkpoint)
+
+  def _add_optimization_barrier_model(self, model: nn.Module):
+    classes = self._get_classes_by_names(
+      model, self.config.model.scaling.get("optimization_barrier_layers", [])
+    )
+    if not classes:
+      return model
+
+    logger.info(f"Adding backward optimization barriers to {classes}")
+
+    def maybe_add_barrier(mod, _name):
+      if isinstance(mod, tuple(classes)):
+        # Register a backward hook to place optimization barrier to prevent
+        # gigantic fusions on syncing the gradients.
+        xs.apply_backward_optimization_barrier(mod)
+        return mod
+      return mod
+
+    return wrap_module(model, maybe_add_barrier)
+
+  def _get_classes_by_names(self, model, activation_checkpoint_layers: list[str]):
+    classes_to_checkpoint = set()
+    for layer_class in activation_checkpoint_layers:
+      cls = get_module_class_from_name(model, layer_class)
+      if cls is None:
         raise Exception(
-          "Could not find the transformer layer class to wrap in the model."
+          f"Could not find the transformer layer class {layer_class} in the model."
         )
       else:
-        transformer_cls_to_wrap.add(transformer_cls)
-    logger.info(f"Model classes to wrap: {transformer_cls_to_wrap}")
-    auto_wrap_policy = functools.partial(
-      transformer_auto_wrap_policy,
-      # Transformer layer class to wrap
-      transformer_layer_cls=transformer_cls_to_wrap,
-    )
-
-    if self.config.model.fsdp["xla_fsdp_grad_ckpt"]:
-      # Apply gradient checkpointing to auto-wrapped sub-modules if specified
-      logger.info("Enabling gradient checkpointing")
-
-      def auto_wrapper_callable(m, *args, **kwargs):
-        target_cls = FSDPv2
-        return target_cls(checkpoint_module(m), *args, **kwargs)
-
-    def shard_output(output, mesh):
-      real_output = None
-      if isinstance(output, torch.Tensor):
-        real_output = output
-      elif isinstance(output, tuple):
-        real_output = output[0]
-      elif isinstance(output, CausalLMOutputWithPast):
-        real_output = output.logits
-      if real_output is None:
-        raise ValueError(
-          "Something went wrong, the output of the model shouldn't be `None`"
-        )
-      # It is expected that the first dimension of the output is the batch size
-      # which is usually sharded among all the devices except the tensor axis.
-      xs.mark_sharding(real_output, mesh, (("dcn", "fsdp", "expert"), None, "tensor"))
-
-    model = FSDPv2(
-      model,
-      shard_output=shard_output,
-      auto_wrap_policy=auto_wrap_policy,
-      auto_wrapper_callable=auto_wrapper_callable,
-    )
-
-    return model
+        classes_to_checkpoint.add(cls)
+    return tuple(classes_to_checkpoint)
 
   def train_loop(self):
     self.model.train()
@@ -262,7 +263,7 @@ class Trainer:
 
 
 def initialize_model_class(model_config):
-  """Import and initalize model_class specified by the config."""
+  """Import and initialize model_class specified by the config."""
   full_model_class_string = model_config.model_class
   module_name, model_class_name = full_model_class_string.rsplit(".", 1)
   try:
@@ -292,6 +293,7 @@ def main(config: DictConfig):
   transformers.utils.logging.enable_explicit_format()
 
   set_seed(config.seed)
+  torch_xla.manual_seed(config.seed)
   server = xp.start_server(9012)
   logger.info(f"Profiling server started: {str(server)}")
 
@@ -305,6 +307,7 @@ def main(config: DictConfig):
 
   # Set the model dtype to bfloat16
   model = model.to(torch.bfloat16)
+  model = model.to("xla")
 
   # Downloading and loading a dataset from the hub.
   data = load_dataset(
