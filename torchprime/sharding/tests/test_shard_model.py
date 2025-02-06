@@ -143,6 +143,60 @@ def test_shard_model_from_config_mock():
   assert num_shard_output_calls == 6
 
 
+def test_shard_model_from_config_multi_output_mock():
+  class Foo(nn.Module):
+    def __init__(self) -> None:
+      super().__init__()
+
+    def forward(self, x):
+      return torch.tensor(100), x
+
+  class Bar(nn.Module):
+    def __init__(self) -> None:
+      super().__init__()
+
+    def forward(self, x):
+      return x, torch.tensor(100)
+
+  class MyMod(nn.Module):
+    def __init__(self) -> None:
+      super().__init__()
+      self.foo = Foo()
+      self.bar = Bar()
+
+    def forward(self, x):
+      a, b = self.foo(x)
+      c, d = self.bar((a, b))
+      return c, d
+
+  model = MyMod()
+  config = {
+    "foo[0]": ["fsdp", None],
+    "bar[1]": ["fsdp", None],
+  }
+
+  num_shard_output_calls = 0
+
+  def shard_output(output, spec):
+    nonlocal num_shard_output_calls
+    assert spec == ("fsdp", None)
+    torch.testing.assert_close(output, torch.tensor(100))
+    num_shard_output_calls += 1
+    return output
+
+  model = shard_model_from_config(model, config, shard_output, lambda x, _: x)
+
+  # Verify that output mark sharding is called for the right number of times.
+  # There should be 2 sharding calls for `foo` and `bar` in total.
+  x = torch.tensor(42)
+  c, d = model(x)
+  torch.testing.assert_close(d, torch.tensor(100))
+  a, b = c
+  torch.testing.assert_close(a, torch.tensor(100))
+  torch.testing.assert_close(b, x)
+  assert num_shard_output_calls == 2
+
+
 def test_shard_model_from_config_torchax():
   # Create 4 CPU devices for SPMD
   with temporary_env({"XLA_FLAGS": "--xla_force_host_platform_device_count=4"}):

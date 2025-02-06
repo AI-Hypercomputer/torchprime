@@ -29,7 +29,9 @@ import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 from torch import nn
-from torch.nn import CrossEntropyLoss, init
+from torch.nn import init
+
+from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 
 # TODO (https://github.com/AI-Hypercomputer/torchprime/pull/60): Refactor and
@@ -326,6 +328,7 @@ class MixtralExpertCapacityTop2MLP(nn.Module):
   @xp.trace_me("MixtralExpertCapacityTop2MLP")
   def forward(self, dispatch_input):
     mesh = xs.get_global_mesh()
+    assert mesh is not None
     layer_w1 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w1)
     xs.mark_sharding(layer_w1, mesh, ("expert", ("dcn", "fsdp"), None, None))
     layer_w3 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w3)
@@ -448,7 +451,7 @@ class Gmm(torch.autograd.Function):
       # For 2D sharding, we need to manually reduce-scatter the final results
       mesh = xs.get_global_mesh()
       if mesh.shape()["tensor"] > 1:
-        # Assume tensor axis is the last dim. Otherwise, we will need some complicated transoforms.
+        # Assume tensor axis is the last dim. Otherwise, we will need some complicated transforms.
         assert mesh.get_axis_name_idx("tensor") == len(mesh.mesh_shape) - 1
         device_ids = mesh.get_logical_mesh()
         device_ids = device_ids.reshape(-1, device_ids.shape[-1])
@@ -1013,7 +1016,7 @@ class MixtralForCausalLM(nn.Module):
   @xp.trace_me("MixtralForCausalLM")
   def forward(
     self,
-    input_ids: torch.LongTensor = None,
+    input_ids: torch.LongTensor,
     labels: torch.LongTensor | None = None,
     attention_mask: torch.Tensor | None = None,
   ) -> tuple:
@@ -1027,19 +1030,10 @@ class MixtralForCausalLM(nn.Module):
     logits = self.lm_head(hidden_states)
     logits = logits.float()
 
-    loss = None
-    if labels is not None:
-      # Shift so that tokens < n predict n
-      shift_logits = logits[..., :-1, :].contiguous()
-      shift_labels = labels[..., 1:].contiguous()
-      # Flatten the tokens
-      loss_fct = CrossEntropyLoss()
-      shift_logits = shift_logits.view(-1, self.config.vocab_size)
-      shift_labels = shift_labels.view(-1)
-      # Enable model parallelism
-      shift_labels = shift_labels.to(shift_logits.device)
-      loss = (
-        loss_fct(shift_logits, shift_labels) + self.router_aux_loss_coef * outputs[-1]
-      )
-
-    return (logits, loss)
+    if labels is None:
+      return logits, None
+    loss = (
+      cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
+      + self.router_aux_loss_coef * outputs[-1]
+    )
+    return logits, loss

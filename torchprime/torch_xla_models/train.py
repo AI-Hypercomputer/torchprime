@@ -36,7 +36,10 @@ from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
-from torchprime.sharding.shard_model import shard_torch_xla_model_from_config
+from torchprime.sharding.shard_model import (
+  shard_torch_xla_model_from_config,
+  wrap_module,
+)
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
@@ -61,9 +64,9 @@ class Trainer:
 
     # Set up SPMD mesh and shard the model
     num_devices = xr.global_runtime_device_count()
-    assert num_devices == math.prod(
-      [i for i in config.mesh.values()]
-    ), "Mesh is not using all the available devices."
+    assert num_devices == math.prod([i for i in config.mesh.values()]), (
+      "Mesh is not using all the available devices."
+    )
     dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
     ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
     mesh = xs.HybridMesh(
@@ -75,10 +78,16 @@ class Trainer:
     logger.info(f"Logical mesh shape: {mesh.shape()}")
     # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
     self.input_sharding_spec = xs.ShardingSpec(mesh, ("fsdp", None), minibatch=True)
-    model = shard_torch_xla_model_from_config(
-      model, config=self.config.model.scaling.sharding
+    sharding_config = OmegaConf.to_container(
+      self.config.model.scaling.sharding, resolve=True
     )
-    self.model = self._checkpoint_model(model)
+    assert isinstance(sharding_config, dict), (
+      f"Sharding config {sharding_config} must be a dict"
+    )
+    model = shard_torch_xla_model_from_config(model, config=sharding_config)
+    model = self._checkpoint_model(model)
+    model = self._add_optimization_barrier_model(model)
+    self.model = model
 
     # Set up optimizers
     self.optimizer = Adafactor(
@@ -97,6 +106,9 @@ class Trainer:
       num_warmup_steps=self.config.lr_scheduler.warmup_steps,
       num_training_steps=self.config.max_steps,
     )
+
+    # Execute all initialization work queued so far before starting training.
+    torch_xla.sync()
 
   def _prime_optimizer(self):
     for group in self.optimizer.param_groups:
@@ -132,44 +144,52 @@ class Trainer:
     )
     return loader
 
-  def _checkpoint_model(self, model):
-    activation_checkpoint_layers = self.config.model.scaling.get(
-      "activation_checkpoint_layers", []
+  def _checkpoint_model(self, model: nn.Module):
+    classes = self._get_classes_by_names(
+      model, self.config.model.scaling.get("activation_checkpoint_layers", [])
     )
+    if not classes:
+      return model
+
+    logger.info(f"Enabling activation checkpointing on {classes}")
+
+    def maybe_checkpoint(mod, _name):
+      if isinstance(mod, tuple(classes)):
+        return checkpoint_module(mod)
+      return mod
+
+    return wrap_module(model, maybe_checkpoint)
+
+  def _add_optimization_barrier_model(self, model: nn.Module):
+    classes = self._get_classes_by_names(
+      model, self.config.model.scaling.get("optimization_barrier_layers", [])
+    )
+    if not classes:
+      return model
+
+    logger.info(f"Adding backward optimization barriers to {classes}")
+
+    def maybe_add_barrier(mod, _name):
+      if isinstance(mod, tuple(classes)):
+        # Register a backward hook to place optimization barrier to prevent
+        # gigantic fusions on syncing the gradients.
+        xs.apply_backward_optimization_barrier(mod)
+        return mod
+      return mod
+
+    return wrap_module(model, maybe_add_barrier)
+
+  def _get_classes_by_names(self, model, activation_checkpoint_layers: list[str]):
     classes_to_checkpoint = set()
     for layer_class in activation_checkpoint_layers:
       cls = get_module_class_from_name(model, layer_class)
       if cls is None:
         raise Exception(
-          "Could not find the transformer layer class to checkpoint in the model."
+          f"Could not find the transformer layer class {layer_class} in the model."
         )
       else:
         classes_to_checkpoint.add(cls)
-
-    if classes_to_checkpoint:
-      logger.info("Enabling gradient checkpointing")
-      logger.info(f"Model classes to checkpoint: {classes_to_checkpoint}")
-
-      # Recursively walk the module tree and wrap modules of matching classes
-      # with checkpoint_module.
-      classes_to_checkpoint = tuple(classes_to_checkpoint)
-
-      def maybe_checkpoint(mod):
-        if isinstance(mod, tuple(classes_to_checkpoint)):
-          return checkpoint_module(mod)
-        return mod
-
-      model = self._wrap_module(model, maybe_checkpoint)
-
-    return model
-
-  def _wrap_module(self, mod: torch.nn.Module, wrapper) -> torch.nn.Module:
-    new_children = {}
-    for name, child in mod.named_children():
-      new_children[name] = self._wrap_module(child, wrapper)
-    for name, new_child in new_children.items():
-      mod.set_submodule(name, new_child)
-    return wrapper(mod)
+    return tuple(classes_to_checkpoint)
 
   def train_loop(self):
     self.model.train()
@@ -241,7 +261,7 @@ class Trainer:
 
 
 def initialize_model_class(model_config):
-  """Import and initalize model_class specified by the config."""
+  """Import and initialize model_class specified by the config."""
   full_model_class_string = model_config.model_class
   module_name, model_class_name = full_model_class_string.rsplit(".", 1)
   try:
