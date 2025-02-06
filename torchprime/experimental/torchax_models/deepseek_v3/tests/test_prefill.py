@@ -1,23 +1,35 @@
-import pytest
+import unittest
+
+import torch
+import torchax
+import torchax.interop
+from torchprime.experimental.torchax_models.deepseek import model as ds_model
 
 
-# TODO(https://github.com/AI-Hypercomputer/torchprime/issues/75): Fix the failure on torch 2.6,
-# then enable the test unconditionally.
-@pytest.mark.deepseek
-def test_single_device_compile():
-  from torchprime.experimental.torchax_models.deepseek_v3.prefill_benchmark import (
-    single_device_compile,
-  )
+class DeepseekModuleTest(unittest.TestCase):
 
-  single_device_compile()
+  def setUp(self):
+    torchax.enable_globally()
 
+  def tearDown(self):
+    torchax.disable_globally()
 
-# TODO(https://github.com/AI-Hypercomputer/torchprime/issues/75): Fix the failure on torch 2.6,
-# then enable the test unconditionally.
-@pytest.mark.deepseek
-def test_single_device_eager():
-  from torchprime.experimental.torchax_models.deepseek_v3.prefill_benchmark import (
-    single_device_eager,
-  )
+  def test_moe_can_jit(self):
+    torch.manual_seed(42)
+    max_seq_len = 512  # 8192
+    vocab_size = 128  # 32000
+    n_layer = 1
+    n_heads = 4
+    dim = 8
+    block_size = 16  # 2048
+    with torch.no_grad():
+      x = torch.ones((1, max_seq_len, 2048), dtype=torch.float32, device='jax')
+      model_args = ds_model.ModelArgs()
+      model = ds_model.MoE(model_args).to('jax')
 
-  single_device_eager()
+      jitted = torchax.interop.JittableModule(model)
+      print(jitted(x))
+
+      
+if __name__ == '__main__':
+  unittest.main()
