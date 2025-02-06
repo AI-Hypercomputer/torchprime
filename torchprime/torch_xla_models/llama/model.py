@@ -24,9 +24,10 @@ import torch
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from transformers.activations import ACT2FN
 from transformers.utils import logging
+
+from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 logger = logging.get_logger(__name__)
 
@@ -356,8 +357,8 @@ class LlamaModel(nn.Module):
   @xp.trace_me("LlamaModel")
   def forward(
     self,
-    input_ids: torch.LongTensor = None,
-    attention_mask: torch.FloatTensor = None,
+    input_ids: torch.LongTensor,
+    attention_mask: torch.FloatTensor | None = None,
   ) -> torch.FloatTensor:
     inputs_embeds = self.embed_tokens(input_ids)
 
@@ -414,26 +415,14 @@ class LlamaForCausalLM(nn.Module):
   @xp.trace_me("LlamaForCausalLM")
   def forward(
     self,
-    input_ids: torch.LongTensor = None,
-    labels: torch.LongTensor = None,
-    attention_mask: torch.FloatTensor = None,
-  ) -> torch.FloatTensor:
+    input_ids: torch.LongTensor,
+    labels: torch.LongTensor | None = None,
+    attention_mask: torch.FloatTensor | None = None,
+  ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
     hidden_states = self.model(input_ids=input_ids, attention_mask=attention_mask)
-
     logits = self.lm_head(hidden_states)
     logits = logits.float()
-
-    loss = None
-    if labels is not None:
-      # Shift so that tokens < n predict n
-      shift_logits = logits[..., :-1, :].contiguous()
-      shift_labels = labels[..., 1:].contiguous()
-      # Flatten the tokens
-      loss_fct = CrossEntropyLoss()
-      shift_logits = shift_logits.view(-1, self.config.vocab_size)
-      shift_labels = shift_labels.view(-1)
-      # Enable model parallelism
-      shift_labels = shift_labels.to(shift_logits.device)
-      loss = loss_fct(shift_logits, shift_labels)
-
-    return (logits, loss)
+    if labels is None:
+      return logits, None
+    loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
+    return logits, loss

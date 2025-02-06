@@ -1,3 +1,7 @@
+defaults:
+  - _self_  # refers to this config file
+  - scaling: llama-fsdp  # refers to scaling/llama-fsdp.yaml
+
 model_class: llama.LlamaForCausalLM # Used to import the model from this class
 vocab_size: 128256
 hidden_size: 4096
