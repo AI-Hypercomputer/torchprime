@@ -155,6 +155,7 @@ def main(config=None, seqlen=2048, batch_size=1):
   torchax.enable_performance_mode()
   torchax.enable_globally()
   args = ModelArgs(**config_dict)
+  args.max_batch_size = 1
 
   dev_array = create_device_mesh((len(jax.devices()),), allow_split_physical_axes=True)
   mesh = Mesh(dev_array, (name0,))
@@ -187,6 +188,20 @@ def main(config=None, seqlen=2048, batch_size=1):
       print(
         i,
         "step latency: ",
+        step_end - step_start,
+      )
+
+    x = torch.randint(0, args.vocab_size, (1, 1))
+    x = _replicate(x, env, mesh)
+    input_pos = torch.arange(2048, 2049, device="jax")
+    for i in range(5):
+      step_start = time.perf_counter()
+      logits = jitted(x, input_pos)
+      jax.block_until_ready(torchax.tensor.t2j(logits))
+      step_end = time.perf_counter()
+      print(
+        i,
+        "decode step latency: ",
         step_end - step_start,
       )
 
