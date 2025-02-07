@@ -164,6 +164,9 @@ def shard_torchax_model_from_config(
 
   def shard_param(tensor, spec: tuple[str, ...]):
     sharding = NamedSharding(mesh, PartitionSpec(*spec))
+    # Note that when sharding the parameters, we need to use eager calls to
+    # move tensors to the device. jax_mark_sharding only works under jit,
+    # and models are usually constructed eagerly in torchax.
     return torch_view(
       jax.make_array_from_callback(
         tensor.shape, sharding, lambda slice_index: tensor[slice_index]
