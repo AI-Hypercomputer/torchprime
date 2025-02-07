@@ -1,13 +1,13 @@
 import pytest
 
-import torch
-import torchax
-import torchax.interop
-from torchprime.experimental.torchax_models.deepseek_v3 import model as ds_model
 
 
 @pytest.mark.deepseek
 def test_moe_can_jit():
+  import torch
+  import torchax
+  import torchax.interop
+  from torchprime.experimental.torchax_models.deepseek_v3 import model as ds_model
   torchax.enable_globally()
   torch.manual_seed(42)
   max_seq_len = 512  # 8192
