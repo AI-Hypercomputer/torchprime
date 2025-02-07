@@ -16,6 +16,8 @@ def buildpush(
   torchprime_project_id,
   torchprime_docker_url=None,
   torchprime_docker_tag=None,
+  *,
+  build_arg=None,
 ) -> str:
   # Determine the path of this script and its directory
   script_path = os.path.realpath(__file__)
@@ -44,10 +46,17 @@ def buildpush(
   print(f"Will build a docker image and upload to: {docker_url}")
   print()
 
+  build_cmd = f"{sudo_cmd} docker build"
+  if build_arg:
+    build_cmd += f" --build-arg {build_arg}"
+  build_cmd += (
+    f" --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}"
+  )
+
   # Build, tag, and push Docker image
   try:
     _run(
-      f"{sudo_cmd} docker build --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}",
+      build_cmd,
     )
     _run(
       f"{sudo_cmd} docker tag {docker_tag} {docker_url}",

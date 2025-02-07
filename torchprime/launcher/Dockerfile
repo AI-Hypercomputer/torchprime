@@ -3,6 +3,7 @@
 # TODO(https://github.com/pytorch/xla/issues/8683): Go back to nightly once the linked segfault is fixed.
 FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.6.0_3.10_tpuvm_cxx11
 
+ARG USE_TRANSFORMERS=false
 # Install system dependencies
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get update && apt-get install -y curl gnupg
@@ -42,5 +43,19 @@ RUN pip install -e .
 COPY . /workspaces/torchprime
 # This should not install any packages. Only symlink the source code.
 RUN pip install --no-deps -e .
+
+RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "transformers" ]; then \
+        echo "Using local transformers repo"; \
+        cp -r transformers /workspaces/transformers; \
+    elif [ "$USE_TRANSFORMERS" = "true" ]; then \
+        echo "Cloning transformers from GitHub"; \
+        git clone --depth 1 https://github.com/huggingface/transformers.git /workspaces/transformers; \
+    fi
+
+# Only install transformers if USE_TRANSFORMERS is true
+RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
+        pip install --no-deps -e /workspaces/transformers; \
+        pip install --no-deps evaluate; \
+    fi
 
 ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"

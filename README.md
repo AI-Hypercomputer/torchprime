@@ -120,6 +120,17 @@ and attributes where this model code came from, if any. This also helps to
 show case what changes we have done to make it performant on TPU. The original
 version is not expected to be run.
 
+## Run huggingface transformer models
+Torchprime supports run with huggingface models by taking advantage of `tp run`. To use huggingface models, you can clone [huggingface/transformers](https://github.com/huggingface/transformers) under torchprime. This allows you to pick any branch or make code modifications for experiment:
+```
+git clone https://github.com/huggingface/transformers.git
+```
+If huggingface transformer doesn't exist, torchprime will automatically clone the repo and build the docker for experiment.
+To switch to huggingface models, add flag `--use-hf` to `tp run` command:
+```
+tp run --use-hf torchprime/hf_models/train.py
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request.

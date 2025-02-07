@@ -200,8 +200,9 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   )
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
 @interactive
-def run(args):
+def run(args, use_hf):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
   """
@@ -210,20 +211,27 @@ def run(args):
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
+  build_arg = "USE_TRANSFORMERS=true" if use_hf else None
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project
-  docker_url = buildpush(docker_project)
+  docker_url = buildpush(docker_project, build_arg=build_arg)
 
   # Submit xpk workload
   datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-  command = ["python", "torchprime/launcher/thunk.py"] + list(args)
+  if use_hf:
+    command = [
+      "python",
+    ] + list(args)
+  else:
+    command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
   # Forward a bunch of important env vars.
   env_forwarding = [
     *forward_env("HF_TOKEN"),  # HuggingFace token
     *forward_env("XLA_IR_DEBUG"),  # torch_xla debugging flag
     *forward_env("XLA_HLO_DEBUG"),  # torch_xla debugging flag
+    *forward_env("LIBTPU_INIT_ARGS"),  # XLA flag
   ]
 
   # Pass artifact dir as another env var.
