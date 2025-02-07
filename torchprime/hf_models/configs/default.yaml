@@ -5,7 +5,7 @@ defaults:
 env:
   - NUM_SLICE: 1
   - XLA_PERSISTENT_CACHE_PATH: "/tmp/xla_cache"
-  - PROFILE_LOGDIR: "gs://dummy-bucket"
+  - PROFILE_LOGDIR: "gs://torchprime/profile"
   - XLA_USE_SPMD: 1
   - ENABLE_PJRT_COMPATIBILITY: true
   - PROFILE_DURATION_MS: 100000
