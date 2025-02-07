@@ -609,7 +609,7 @@ class ConditionalFeedForward(torch.nn.Module):
 
   def forward_for_long_seq_len(self, x, expert_indices):
     seqlen = x.shape[0]
-    num_experts = self.w1.shape[0]
+    self.w1.shape[0]
 
     # e = total num of exp = 8
     # t = seqlen
@@ -655,7 +655,7 @@ class MoE(torch.nn.Module):
     x = x.view(-1, self.dim)
     # T = num_tokens, E = num_experts, D = hidden dim, A = activated experts
     # x: [T, D]
-    scores = self.gate(x)  # [T, E]
+    self.gate(x)  # [T, E]
     weights, indices = self.gate(x)
     expert_outs = self.cond_ffn(x, indices)
     expert_outs = torch.einsum("tai,ta -> ti", expert_outs, weights)
@@ -735,8 +735,6 @@ class Transformer(nn.Module):
     Args:
         args (ModelArgs): Model arguments containing transformer parameters.
     """
-    world_size = 1
-    rank = 0
     Linear.dtype = torch.float8_e4m3fn if args.dtype == "fp8" else torch.bfloat16
     super().__init__()
     self.max_seq_len = args.max_seq_len
@@ -762,7 +760,7 @@ class Transformer(nn.Module):
     Returns:
         torch.Tensor: Logits tensor of shape (batch_size, vocab_size).
     """
-    seqlen = tokens.size(1)
+    tokens.size(1)
     h = self.embed(tokens)
     freqs_cis = self.freqs_cis[input_pos]
     mask = None
