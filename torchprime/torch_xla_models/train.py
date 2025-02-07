@@ -79,7 +79,7 @@ class Trainer:
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
     # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
-    self.input_sharding_spec = xs.ShardingSpec(mesh, ("fsdp", None), minibatch=True)
+    self.input_sharding_spec = xs.ShardingSpec(mesh, (("dcn", "fsdp"), None), minibatch=True)
     self.model = self._shard_model(model)
 
     # Set up optimizers
