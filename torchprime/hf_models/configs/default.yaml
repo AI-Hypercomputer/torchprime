@@ -32,5 +32,4 @@ train_script:
     torch_dtype: "bfloat16"
     dataloader_drop_last: true
     flash_attention: true
-    log_loss: true
     max_steps: 50
