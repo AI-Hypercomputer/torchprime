@@ -54,6 +54,9 @@ htmlcov/
 # Ignore pytest cache
 .pytest_cache/
 
+# Ignore local transformers repo
+/transformers/
+
 # Ignore profiler outputs
 /profile/
 
