@@ -5,7 +5,6 @@ defaults:
 # extra env variables you want to pass to the training script
 env:
   - XLA_USE_SPMD: 1
-  - ENABLE_PJRT_COMPATIBILITY: true
   - PROFILE_DURATION_MS: 100000
 
 profile_dir: "profile"
