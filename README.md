@@ -96,7 +96,7 @@ to the distributed workload, if found:
 - `HF_TOKEN`: HuggingFace token
 - `XLA_IR_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
 - `XLA_HLO_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
-- `LIBTPU_INIT_ARGS`: [xla flag]
+- `LIBTPU_INIT_ARGS`: xla flag
 
 ## Structure
 
