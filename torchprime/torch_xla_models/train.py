@@ -18,6 +18,7 @@ import torch_xla.debug.profiler as xp
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
+import transformers
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
@@ -27,9 +28,6 @@ from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
   SpmdFullyShardedDataParallel as FSDPv2,
 )
-
-import transformers
-from torchprime.metrics.step_duration import step_duration_from_latest_profile
 
 # Transformers imports
 from transformers import (
@@ -42,6 +40,8 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
+
+from torchprime.metrics.step_duration import step_duration_from_latest_profile
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
