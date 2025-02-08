@@ -46,10 +46,9 @@ RUN pip install --no-deps -e .
 
 RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "transformers" ]; then \
         echo "Using local transformers repo"; \
-        cp -r transformers /workspaces/transformers; \
     elif [ "$USE_TRANSFORMERS" = "true" ]; then \
         echo "Cloning transformers from GitHub"; \
-        git clone --depth 1 https://github.com/huggingface/transformers.git /workspaces/transformers; \
+        git clone --depth 1 https://github.com/huggingface/transformers.git /workspaces/torchprime/transformers; \
     fi
 
 # Only install transformers if USE_TRANSFORMERS is true

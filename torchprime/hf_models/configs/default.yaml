@@ -1,14 +1,14 @@
+# note: the sharding annonation is currently hard coded in pytorch-tpu/transformers
 defaults:
   - _self_
 
 # extra env variables you want to pass to the training script
 env:
-  - NUM_SLICE: 1
-  - XLA_PERSISTENT_CACHE_PATH: "/tmp/xla_cache"
-  - PROFILE_LOGDIR: "gs://torchprime/profile"
   - XLA_USE_SPMD: 1
   - ENABLE_PJRT_COMPATIBILITY: true
   - PROFILE_DURATION_MS: 100000
+
+profile_dir: "profile"
 
 # args for the hugging face run_clm.py training script
 train_script:

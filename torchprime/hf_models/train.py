@@ -11,6 +11,9 @@ def set_env_variables(config: DictConfig) -> None:
     for env_var in config.env:
       for key, value in env_var.items():
         os.environ[str(key)] = str(value)
+  # set profile_dir as env
+  if config.profile_dir:
+    os.environ["PROFILE_LOGDIR"] = str(config.profile_dir)
 
 
 def build_command(config: DictConfig) -> list:
@@ -22,7 +25,6 @@ def build_command(config: DictConfig) -> list:
   for k, v in config.train_script.args.items():
     args[k] = v
 
-  # Build command arguments
   for k, v in args.items():
     if isinstance(v, bool):
       if v:
@@ -41,7 +43,6 @@ def main(config: DictConfig) -> None:
     if hf_token:
       subprocess.run(["huggingface-cli", "login", "--token", hf_token], check=True)
 
-    # Build and run command
     cmd = build_command(config)
     subprocess.run(cmd, check=True)
   except Exception as e:
