@@ -5,7 +5,6 @@ FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.6.0_3.10_tpuv
 
 ARG USE_TRANSFORMERS=false
 # Install system dependencies
-RUN apt-get update && apt-get upgrade -y
 RUN apt-get update && apt-get install -y curl gnupg
 
 # Add the Google Cloud SDK package repository
@@ -25,7 +24,7 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python
 WORKDIR /workspaces
 
 # Install torchax
-RUN git clone https://github.com/pytorch/xla.git
+RUN git clone --depth 1 https://github.com/pytorch/xla.git
 WORKDIR /workspaces/xla/torchax
 RUN pip install torch_xla[pallas] \
     -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \

@@ -1,0 +1,273 @@
+name: E2E tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:  # Schedule the job run at 12AM PST daily.
+  - cron: "0 8 * * *"
+
+# Note:
+# v6e cluster used: http://shortn/_oswg6PyPo6
+# If we migrate to another project, these configs should be updated accordingly.
+env:
+  XPK_CLUSTER_NAME: tpu-v6e-ci
+  GCP_PROJECT: tpu-pytorch
+  GCP_ZONE: us-central2
+  TPU_TYPE: v6e-4
+
+jobs:
+  tp-run:
+    name: Train models via 'tp run'
+    runs-on: [ubuntu-22.04]
+    env:
+      ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
+      mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
+      artifact-dir: ${{ steps.artifacts.outputs.artifact_dir }}
+    steps:
+    - name: Record artifact dir
+      id: artifacts
+      run: |
+        echo "Artifact dir: $ARTIFACT_DIR"
+        echo "artifact_dir=$ARTIFACT_DIR" >> "$GITHUB_OUTPUT"
+    - name: Maximize build space
+      uses: AdityaGarg8/remove-unwanted-software@v4.1
+      with:
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+    - name: Use Docker in rootless mode
+      uses: ScribeMD/rootless-docker@0.2.2
+    - name: Add user to docker group
+      run: |
+        sudo usermod -aG docker $USER
+        newgrp docker
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    - name: Install dev dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[dev]'
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        # Googlers: if this fails, follow http://shortn/_61iSj31q1b to debug.
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: '>= 363.0.0'
+        install_components: 'beta,gke-gcloud-auth-plugin'
+    - name: Verify gcp setup
+      run: gcloud info
+    - name: Authenticate Docker
+      run: gcloud auth configure-docker --quiet
+    - name: Activate SA credentials
+      run: gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+    - name: tp doctor
+      run: tp doctor
+    - name: tp use
+      run: >
+        tp use
+        --project $GCP_PROJECT
+        --zone $GCP_ZONE
+        --cluster $XPK_CLUSTER_NAME
+        --num-slices 1
+        --artifact-dir $ARTIFACT_DIR
+        --tpu-type $TPU_TYPE
+    - name: Run Llama 3.0 8B
+      id: run-llama-3-8b
+      env:
+        # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        XLA_IR_DEBUG: 1
+        XLA_HLO_DEBUG: 1
+      run: |
+        random_id=$(cat /dev/urandom | tr -dc a-z0-9 | head -c 8)
+        name="llama-3-8b-$random_id"
+
+        tp run \
+          --name $name \
+          torchprime/torch_xla_models/train.py \
+          model=llama-3-8b \
+          global_batch_size=8 \
+          mesh.fsdp=4 \
+          dataset_config_name=wikitext-2-raw-v1 \
+          profile_step=3 \
+          max_steps=15
+
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+    - name: Run Mixtral 8x7B
+      id: run-mixtral-8x7b
+      env:
+        # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        XLA_IR_DEBUG: 1
+        XLA_HLO_DEBUG: 1
+      run: |
+        random_id=$(cat /dev/urandom | tr -dc a-z0-9 | head -c 8)
+        name="mixtral-8x7b-$random_id"
+
+        # Run 16 instead of 32 decoder layers to fit on v6e-4.
+        tp run \
+          --name $name \
+          torchprime/torch_xla_models/train.py \
+          model=mixtral-8x7b \
+          model.num_hidden_layers=16 \
+          global_batch_size=8 \
+          mesh.fsdp=4 \
+          dataset_config_name=wikitext-2-raw-v1 \
+          profile_step=3 \
+          max_steps=15
+
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+  llama-3-8b:
+    name: Check Llama 3.0 8B
+    needs: tp-run
+    runs-on: [ubuntu-22.04]
+    env:
+      ARTIFACT_DIR: ${{needs.tp-run.outputs.artifact-dir}}
+      JOBSET_NAME: ${{needs.tp-run.outputs.llama-3-8b-name}}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    - name: Install dev dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[dev]'
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: '>= 363.0.0'
+        install_components: 'beta,gke-gcloud-auth-plugin'
+    - name: Verify gcp setup
+      run: gcloud info
+    - name: Authenticate Docker
+      run: gcloud auth configure-docker --quiet
+    - name: Activate SA credentials
+      run: gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+    - name: tp use
+      run: >
+        tp use
+        --project $GCP_PROJECT
+        --zone $GCP_ZONE
+        --cluster $XPK_CLUSTER_NAME
+        --num-slices 1
+        --artifact-dir $ARTIFACT_DIR
+        --tpu-type $TPU_TYPE
+    - name: Get GKE credentials
+      run: |
+        gcloud container clusters get-credentials $XPK_CLUSTER_NAME --region=$GCP_ZONE --project=$GCP_PROJECT
+        kubectl config view
+        kubectl config set-context --current --namespace=default
+    - name: Stream logs
+      run: |
+        pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=$JOBSET_NAME -o json | jq --raw-output '.items[0].metadata.name')
+        kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
+    - name: Check workload state
+      run: xpk workload list --cluster $XPK_CLUSTER_NAME --wait-for-job-completion=$JOBSET_NAME
+    - name: Check logs
+      run: |
+        pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=$JOBSET_NAME -o json | jq --raw-output '.items[0].metadata.name')
+        if ! grep -q "Step duration:.*s" /tmp/pod-$pod_name.log; then
+          echo "Error: 'Step duration' not found in logs"
+          exit 1
+        fi
+        if ! grep -q "Finished training run" /tmp/pod-$pod_name.log; then
+          echo "Error: 'Finished training run' not found in logs"
+          exit 1
+        fi
+    - name: Check that profile is taken
+      run: |
+        profile_dir="$ARTIFACT_DIR/$JOBSET_NAME/profile/0-0"
+        gcloud storage ls -r "$profile_dir/**/*.xplane.pb" | grep -c .xplane.pb | grep "^1$"
+        if [[ $? -ne 0 ]]; then
+          echo "Error: Expected exactly one .xplane.pb file in $profile_dir:"
+          gcloud storage ls -r "$profile_dir/**/*.xplane.pb"
+          exit 1
+        fi
+    # TODO: delete workload
+    # xpk workload delete --workload xpk-test-workload --cluster xpk-test
+  mixtral-8x7b:
+    name: Check Mixtral 8x7B
+    needs: tp-run
+    runs-on: [ubuntu-22.04]
+    env:
+      ARTIFACT_DIR: ${{needs.tp-run.outputs.artifact-dir}}
+      JOBSET_NAME: ${{needs.tp-run.outputs.mixtral-8x7b-name}}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    - name: Install dev dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e '.[dev]'
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+    - uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: '>= 363.0.0'
+        install_components: 'beta,gke-gcloud-auth-plugin'
+    - name: Verify gcp setup
+      run: gcloud info
+    - name: Authenticate Docker
+      run: gcloud auth configure-docker --quiet
+    - name: Activate SA credentials
+      run: gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+    - name: tp use
+      run: >
+        tp use
+        --project $GCP_PROJECT
+        --zone $GCP_ZONE
+        --cluster $XPK_CLUSTER_NAME
+        --num-slices 1
+        --artifact-dir $ARTIFACT_DIR
+        --tpu-type $TPU_TYPE
+    - name: Get GKE credentials
+      run: |
+        gcloud container clusters get-credentials $XPK_CLUSTER_NAME --region=$GCP_ZONE --project=$GCP_PROJECT
+        kubectl config view
+        kubectl config set-context --current --namespace=default
+    - name: Stream logs
+      run: |
+        pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=$JOBSET_NAME -o json | jq --raw-output '.items[0].metadata.name')
+        kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
+    - name: Check workload state
+      run: xpk workload list --cluster $XPK_CLUSTER_NAME --wait-for-job-completion=$JOBSET_NAME
+    - name: Check logs
+      run: |
+        pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=$JOBSET_NAME -o json | jq --raw-output '.items[0].metadata.name')
+        if ! grep -q "Step duration:.*s" /tmp/pod-$pod_name.log; then
+          echo "Error: 'Step duration' not found in logs"
+          exit 1
+        fi
+        if ! grep -q "Finished training run" /tmp/pod-$pod_name.log; then
+          echo "Error: 'Finished training run' not found in logs"
+          exit 1
+        fi
+    - name: Check that profile is taken
+      run: |
+        profile_dir="$ARTIFACT_DIR/$JOBSET_NAME/profile/0-0"
+        gcloud storage ls -r "$profile_dir/**/*.xplane.pb" | grep -c .xplane.pb | grep "^1$"
+        if [[ $? -ne 0 ]]; then
+          echo "Error: Expected exactly one .xplane.pb file in $profile_dir:"
+          gcloud storage ls -r "$profile_dir/**/*.xplane.pb"
+          exit 1
+        fi
+    # TODO: delete workload
+    # xpk workload delete --workload xpk-test-workload --cluster xpk-test

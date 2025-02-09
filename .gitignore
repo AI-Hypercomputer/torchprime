@@ -68,3 +68,6 @@ htmlcov/
 
 # torchprime config
 .config
+
+# Google cloud credentials generated during CI
+gha-creds-*.json

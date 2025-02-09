@@ -29,19 +29,19 @@ for s in gcs_artifact_subdir:
 # Configure XLA graph dump path before doing anything else.
 date_string = datetime.now().strftime("%Y%m%d-%H%M")
 host_name = f"{slice_id}-{worker_id}"
-jobset_name = os.getenv("JOBSET_NAME", date_string)
-xla_dump_path = f"{mounted_artifact_dir}/{host_name}/xla_dumps/{jobset_name}/"
+jobset_name = os.getenv("TORCHPRIME_JOBSET_NAME", date_string)
+xla_dump_path = mounted_artifact_dir / jobset_name / "xla_dumps" / host_name
 os.environ["XLA_FLAGS"] = " ".join(
   [
     os.getenv("XLA_FLAGS", ""),
-    f"--xla_dump_to={xla_dump_path}",
+    f"--xla_dump_to={xla_dump_path}/",
     "--xla_dump_hlo_as_proto",
   ]
 )
 print(f"Dumping XLA compiler outputs to {xla_dump_path}", flush=True)
 
 # Determine the profile dir
-profile_dir = mounted_artifact_dir / host_name
+profile_dir = mounted_artifact_dir / jobset_name / "profile" / host_name
 print(f"Profile output directory: {profile_dir}", flush=True)
 
 # Exec into the training script.

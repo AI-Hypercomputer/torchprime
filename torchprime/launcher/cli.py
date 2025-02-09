@@ -119,9 +119,9 @@ def use(
   )
   gcloud_config_name = f"torchprime-{project}-{zone}"
   create_and_activate_gcloud(gcloud_config_name, config)
-  assert artifact_dir.startswith(
-    "gs://"
-  ), f"{artifact_dir} must be in a GCS bucket (start with gs://)"
+  assert artifact_dir.startswith("gs://"), (
+    f"{artifact_dir} must be in a GCS bucket (start with gs://)"
+  )
 
   path = write_config(config)
   click.echo(f"Written config {path.relative_to(os.getcwd())}")
@@ -168,9 +168,9 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   runner.run(
     [
       "gcloud",
-      "auth",
-      "application-default",
-      "set-quota-project",
+      "config",
+      "set",
+      "billing/quota_project",
       config.project,
     ],
   )
@@ -200,9 +200,16 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   )
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.option(
+  "--name",
+  required=False,
+  help="Name of the workload (jobset). If not specified, "
+  "defaults to one based on the date and time.",
+  default=None,
+)
 @click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
 @interactive
-def run(args, use_hf):
+def run(args, name: str | None, use_hf: bool):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
   """
@@ -218,7 +225,12 @@ def run(args, use_hf):
   docker_url = buildpush(docker_project, build_arg=build_arg)
 
   # Submit xpk workload
-  datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+  workload_name = name
+  if workload_name is None:
+    datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+    workload_name = (
+      f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}"
+    )
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
   # Forward a bunch of important env vars.
@@ -226,11 +238,16 @@ def run(args, use_hf):
     *forward_env("HF_TOKEN"),  # HuggingFace token
     *forward_env("XLA_IR_DEBUG"),  # torch_xla debugging flag
     *forward_env("XLA_HLO_DEBUG"),  # torch_xla debugging flag
-    *forward_env("LIBTPU_INIT_ARGS"),  # XLA flag
+    *forward_env("LIBTPU_INIT_ARGS"),  # XLA flags
   ]
 
-  # Pass artifact dir as another env var.
-  artifact_arg = ["--env", f"TORCHPRIME_ARTIFACT_DIR={config.artifact_dir}"]
+  # Pass artifact dir and jobset name as env vars.
+  artifact_arg = [
+    "--env",
+    f"TORCHPRIME_ARTIFACT_DIR={config.artifact_dir}",
+    "--env",
+    f"TORCHPRIME_JOBSET_NAME={workload_name}",
+  ]
 
   ensure_command("xpk")
   xpk_command = (
@@ -243,7 +260,7 @@ def run(args, use_hf):
       "--docker-image",
       docker_url,
       "--workload",
-      f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}",
+      workload_name,
       "--tpu-type",
       config.tpu_type,
       "--num-slices",
@@ -253,6 +270,10 @@ def run(args, use_hf):
       "--project",
       config.project,
       "--enable-debug-logs",
+      # The following lets xpk propagate user program failures as jobset exit code.
+      "--restart-on-user-code-failure",
+      "--max-restarts",
+      "0",
     ]
     + env_forwarding
     + artifact_arg
