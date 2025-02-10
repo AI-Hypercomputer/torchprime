@@ -26,6 +26,7 @@ WORKDIR /workspaces
 # Install torchax
 RUN git clone https://github.com/pytorch/xla.git
 WORKDIR /workspaces/xla/torchax
+RUN git checkout hanq_torchax1
 RUN pip install torch_xla[pallas] \
     -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \
     -f https://storage.googleapis.com/jax-releases/jaxlib_nightly_releases.html
@@ -42,5 +43,7 @@ RUN pip install -e .
 COPY . /workspaces/torchprime
 # This should not install any packages. Only symlink the source code.
 RUN pip install --no-deps -e .
+RUN pip install --force-reinstall --upgrade torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu
+RUN pip uninstall  torchvision -y
 
 ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"

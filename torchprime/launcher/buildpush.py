@@ -47,7 +47,7 @@ def buildpush(
   # Build, tag, and push Docker image
   try:
     _run(
-      f"{sudo_cmd} docker build --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}",
+      f"{sudo_cmd} docker build --no-cache --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}",
     )
     _run(
       f"{sudo_cmd} docker tag {docker_tag} {docker_url}",

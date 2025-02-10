@@ -543,6 +543,7 @@ class Gate(nn.Module):
       else:
         group_scores = scores.topk(2, dim=-1)[0].sum(dim=-1)
       indices = group_scores.topk(self.topk_groups, dim=-1)[1]
+      print('i am here')
       mask = torch.zeros_like(scores[..., 0]).scatter_(1, indices, True)
       scores = (scores * mask.unsqueeze(-1)).flatten(1)
     indices = torch.topk(scores, self.topk, dim=-1)[1]

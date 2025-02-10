@@ -66,7 +66,7 @@ def create_sharded_weights(model, mesh, sharding_map, env):
   for name, weight_meta in model.state_dict().items():
     sharding_spec = _get_sharding_sepc(sharding_map, name)
     if sharding_spec is None:
-      print("Skipping weight:", name)
+      print("Skipping weight:", name, weight_meta.shape)
       continue
     sharding = NamedSharding(mesh, P(*sharding_spec))
     res[name] = env.j2t_iso(
@@ -97,18 +97,24 @@ sharding_map_1d_tp = {
   "embed.weight": (name0, None),
   "layers.*.attn.wq.weight": (None, name0),
   "layers.*.attn.wq.bias": (name0,),
-  "layers.*.attn.wkv_a.weight": (None, name0),
+  "layers.*.attn.wkv_a.weight": (None, None),
   "layers.*.attn.kv_norm.weight": (name0,),
   "layers.*.attn.wkv_b.weight": (name0, None),
   "layers.*.attn.wkv_b.bias": (name0,),
   "layers.*.attn.wo.weight": (name0, None),
   "layers.*.attn.wo.bias": (name0, None),
-  "layers.0.ffn.w1.weight": (name0, None),
-  "layers.0.ffn.w1.bias": (name0,),
-  "layers.0.ffn.w2.weight": (None, name0),
-  "layers.0.ffn.w2.bias": (name0,),
-  "layers.0.ffn.w3.weight": (name0, None),
-  "layers.0.ffn.w3.bias": (name0,),
+
+  "layers.*.attn.wq_a.weight": (None, None),
+  "layers.*.attn.q_norm.weight": (),
+  "layers.*.attn.wq_b.weight": (name0, None),
+  "layers.*.attn.wq_b.bias": (name0,),
+
+  "layers.*.ffn.w1.weight": (name0, None),
+  "layers.*.ffn.w1.bias": (name0,),
+  "layers.*.ffn.w2.weight": (None, name0),
+  "layers.*.ffn.w2.bias": (name0,),
+  "layers.*.ffn.w3.weight": (name0, None),
+  "layers.*.ffn.w3.bias": (name0,),
   "layers.*.ffn.cond_ffn.w1": (None, name0, None),
   "layers.*.ffn.cond_ffn.w2": (None, None, name0),
   "layers.*.ffn.cond_ffn.w3": (None, name0, None),
@@ -154,6 +160,7 @@ def main(config=None, seqlen=2048, batch_size=1):
   torch.manual_seed(42)
   torchax.enable_performance_mode()
   torchax.enable_globally()
+  torchax.default_env().config.debug_print_each_op = True
   args = ModelArgs(**config_dict)
   args.max_batch_size = 1
 
@@ -177,9 +184,9 @@ def main(config=None, seqlen=2048, batch_size=1):
   jitted.buffers.update(caches_dict)
 
   with mesh:
-    x = torch.randint(0, args.vocab_size, (1, seqlen))
+    x = torch.ones((1, 2048), dtype=torch.int32)
     x = _replicate(x, env, mesh)
-    input_pos = torch.arange(seqlen, device="jax")
+    input_pos = torch.arange(2048, device="jax")
     for i in range(5):
       step_start = time.perf_counter()
       logits = jitted(x, input_pos)
@@ -191,7 +198,7 @@ def main(config=None, seqlen=2048, batch_size=1):
         step_end - step_start,
       )
 
-    x = torch.randint(0, args.vocab_size, (1, 1))
+    x = torch.ones((1, 1), dtype=torch.int32)
     x = _replicate(x, env, mesh)
     input_pos = torch.arange(2048, 2049, device="jax")
     for i in range(5):
