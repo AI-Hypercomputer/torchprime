@@ -55,7 +55,7 @@ htmlcov/
 .pytest_cache/
 
 # Ignore local transformers repo
-/transformers/
+**/transformers/
 
 # Ignore profiler outputs
 /profile/

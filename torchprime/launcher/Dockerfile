@@ -53,7 +53,7 @@ RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "transformers" ]; then \
 
 # Only install transformers if USE_TRANSFORMERS is true
 RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
-        pip install --no-deps -e /workspaces/transformers; \
+        pip install --no-deps -e /workspaces/torchprime/transformers; \
         pip install --no-deps evaluate; \
     fi
 
