@@ -1,0 +1,54 @@
+name: Reusable E2E Check Workflow
+
+on:
+  workflow_call:
+    inputs:
+      jobset_name:
+        description: "The jobset name to check (e.g. llama-3-8b-XXXX)"
+        required: true
+        type: string
+      artifact_dir:
+        description: "GCS artifact directory to use for the run"
+        required: true
+        type: string
+    secrets:
+      GCP_SA_KEY:
+        required: true
+      # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
+      HF_TOKEN:
+        required: true
+
+jobs:
+  results:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/e2e-setup
+        with:
+          gcp_project: ${{ vars.GCP_PROJECT }}
+          gcp_zone: ${{ vars.GCP_ZONE }}
+          xpk_cluster_name: ${{ vars.XPK_CLUSTER_NAME }}
+          tpu_type: ${{ vars.TPU_TYPE }}
+          artifact_dir: ${{ inputs.artifact_dir }}
+          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ vars.XPK_CLUSTER_NAME }} --region=${{ vars.GCP_ZONE }} --project=${{ vars.GCP_PROJECT }}
+          kubectl config view
+          kubectl config set-context --current --namespace=default
+      - name: Stream logs
+        run: |
+          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
+          # Save logs to a file for later checks
+          kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
+      - name: Wait for workload to complete
+        run: |
+          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }}
+      - name: Validate logs
+        run: |
+          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
+          e2e_testing/check_logs.py /tmp/pod-$pod_name.log
+      - name: Validate profile
+        run: |
+          profile_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/profile/0-0"
+          e2e_testing/check_profile.py "$profile_dir"
