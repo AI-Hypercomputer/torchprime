@@ -219,12 +219,7 @@ def run(args, use_hf):
 
   # Submit xpk workload
   datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-  if use_hf:
-    command = [
-      "python",
-    ] + list(args)
-  else:
-    command = ["python", "torchprime/launcher/thunk.py"] + list(args)
+  command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
   # Forward a bunch of important env vars.
   env_forwarding = [
