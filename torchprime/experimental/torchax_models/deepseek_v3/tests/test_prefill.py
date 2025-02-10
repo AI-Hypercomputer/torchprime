@@ -1,7 +1,3 @@
-import pytest
-
-
-@pytest.mark.deepseek
 def test_moe_can_jit():
   import torch
   import torchax
@@ -13,7 +9,11 @@ def test_moe_can_jit():
   torch.manual_seed(42)
   max_seq_len = 512  # 8192
   with torch.no_grad():
-    x = torch.ones((1, max_seq_len, 2048), dtype=torch.float32, device="jax")
+    x = (
+      torch.arange(max_seq_len, dtype=torch.float32, device="jax")
+      .view(1, max_seq_len, 1)
+      .expand(1, max_seq_len, 2048)
+    )
     model_args = ds_model.ModelArgs()
     model = ds_model.MoE(model_args).to("jax")
 

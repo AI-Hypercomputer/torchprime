@@ -32,9 +32,4 @@ jobs:
       run: |
         export PJRT_DEVICE=CPU
         export JAX_PLATFORMS=cpu
-        pytest -v -m "not deepseek"
-
-        # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/75): Fix the failure on
-        # torch 2.6, then remove the requirements and extra install.
-        pip install --force -r torchprime/experimental/torchax_models/deepseek_v3/requirements.txt
-        pytest -v -m deepseek torchprime/experimental/torchax_models/deepseek_v3/tests
+        pytest -v
