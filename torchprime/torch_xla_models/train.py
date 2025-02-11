@@ -1,16 +1,12 @@
-# Standard library imports
 import importlib
 import logging
 import math
 import sys
 from timeit import default_timer as timer
 
-# Third-party library imports
 import datasets
 import hydra
 import torch
-
-# PyTorch XLA imports
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
@@ -29,8 +25,6 @@ from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
-
-# Transformers imports
 from transformers import (
   AutoTokenizer,
   default_data_collator,
