@@ -208,6 +208,7 @@ class Trainer:
         logger.warning(f"DataLoader exhausted at step {step}, reset iterator")
         epoch += 1
         train_iterator = iter(train_loader)
+        batch = next(train_iterator)
 
       trace_start_time = timer()
       loss = self.train_step(batch)
