@@ -4,27 +4,26 @@ import math
 import sys
 from timeit import default_timer as timer
 
+# Third-party library imports
 import datasets
 import hydra
 import torch
+
+# PyTorch XLA imports
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
+import transformers
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
 
-import transformers
-from torchprime.metrics.step_duration import step_duration_from_latest_profile
-from torchprime.sharding.shard_model import (
-  shard_torch_xla_model_from_config,
-  wrap_module,
-)
+# Transformers imports
 from transformers import (
   AutoTokenizer,
   default_data_collator,
@@ -34,6 +33,12 @@ from transformers import (
 from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
+
+from torchprime.metrics.step_duration import step_duration_from_latest_profile
+from torchprime.sharding.shard_model import (
+  shard_torch_xla_model_from_config,
+  wrap_module,
+)
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
