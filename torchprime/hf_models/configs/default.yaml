@@ -11,7 +11,7 @@ profile_dir: "profile"
 
 # args for the hugging face run_clm.py training script
 train_script:
-  path: "transformers/examples/pytorch/language-modeling/run_clm.py"
+  path: "local_transformers/examples/pytorch/language-modeling/run_clm.py"
   args:
     dataset_name: "wikitext"
     dataset_config_name: "wikitext-103-raw-v1"
@@ -22,7 +22,7 @@ train_script:
     config_name: "torchprime/hf_models/configs/model/llama-3/config_8b.json"
     cache_dir: "cache"
     tokenizer_name: "meta-llama/Meta-Llama-3-8B"
-    block_size: 4096
+    block_size: 8192
     optim: "adafactor"
     save_strategy: "no"
     logging_strategy: "no"
@@ -32,3 +32,4 @@ train_script:
     dataloader_drop_last: true
     flash_attention: true
     max_steps: 50
+    seed: 42

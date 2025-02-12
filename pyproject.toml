@@ -56,6 +56,7 @@ addopts = "--forked"  # ensure torchax and torch_xla tests don't conflict
 [tool.ruff]
 indent-width = 2
 target-version = "py310"
+exclude = ["local_transformers"]
 
 [tool.ruff.lint]
 select = [

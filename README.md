@@ -125,10 +125,10 @@ version is not expected to be run.
 Torchprime supports run with huggingface models by taking advantage of `tp run`.
 To use huggingface models, you can clone
 [huggingface/transformers](https://github.com/huggingface/transformers) under
-torchprime. This allows you to pick any branch or make code modifications for
-experiment:
+torchprime and name it as `local_transformers`. This allows you to pick any
+branch or make code modifications in transformers for experiment:
 ```
-git clone https://github.com/huggingface/transformers.git
+git clone https://github.com/huggingface/transformers.git local_transformers
 ```
 If huggingface transformer doesn't exist, torchprime will automatically clone
 the repo and build the docker for experiment. To switch to huggingface models,

@@ -43,16 +43,16 @@ COPY . /workspaces/torchprime
 # This should not install any packages. Only symlink the source code.
 RUN pip install --no-deps -e .
 
-RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "transformers" ]; then \
+RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "local_transformers" ]; then \
         echo "Using local transformers repo"; \
     elif [ "$USE_TRANSFORMERS" = "true" ]; then \
-        echo "Cloning transformers from GitHub"; \
-        git clone --depth 1 https://github.com/huggingface/transformers.git /workspaces/torchprime/transformers; \
+        echo "Cloning transformers from GitHub and named as local_transformers"; \
+        git clone --depth 1 https://github.com/huggingface/transformers.git /workspaces/torchprime/local_transformers; \
     fi
 
 # Only install transformers if USE_TRANSFORMERS is true
 RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
-        pip install --no-deps -e /workspaces/torchprime/transformers; \
+        pip install --no-deps -e /workspaces/torchprime/local_transformers; \
         pip install --no-deps evaluate; \
     fi
 
