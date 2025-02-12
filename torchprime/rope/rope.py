@@ -7,10 +7,11 @@ import math
 from dataclasses import dataclass
 
 import torch
+from dataclasses_json import DataClassJsonMixin
 
 
 @dataclass
-class RopeScaling:
+class RopeScaling(DataClassJsonMixin):
   """
   RoPE scaling parameters. The defaults are what was selected in Llama 3.1.
   """
