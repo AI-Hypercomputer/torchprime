@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import torch
 
 
-@dataclass
+@dataclass(kw_only=True)
 class RopeScaling:
   """
   RoPE scaling parameters. The defaults are what was selected in Llama 3.1.

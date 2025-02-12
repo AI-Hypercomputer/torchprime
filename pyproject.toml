@@ -51,7 +51,10 @@ exclude = ["torchprime.*.tests.*"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--forked"  # ensure torchax and torch_xla tests don't conflict
+
+# `--forked` ensures torchax and torch_xla tests don't conflict.
+# `--ignore local_transformers` ignores any local Hugging Face transformers checkout
+addopts = "--forked --ignore local_transformers"
 
 [tool.ruff]
 indent-width = 2

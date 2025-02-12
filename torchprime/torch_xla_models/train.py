@@ -3,6 +3,7 @@ import importlib
 import logging
 import math
 import sys
+from contextlib import contextmanager
 from timeit import default_timer as timer
 
 # Third-party library imports
@@ -40,6 +41,7 @@ from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
+from torchprime.torch_xla_models.topology import is_1d_sharding, is_multi_slice
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
@@ -50,6 +52,8 @@ assert xr.is_spmd() is True
 
 class Trainer:
   """The trainer."""
+
+  minibatch: bool
 
   def __init__(
     self,
@@ -64,21 +68,38 @@ class Trainer:
 
     # Set up SPMD mesh and shard the model
     num_devices = xr.global_runtime_device_count()
-    assert num_devices == math.prod(
-      [i for i in config.mesh.values()]
-    ), "Mesh is not using all the available devices."
-    dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
-    ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
-    mesh = xs.HybridMesh(
-      ici_mesh_shape=ici_mesh_shape,
-      dcn_mesh_shape=dcn_mesh_shape,
-      axis_names=("dcn", "fsdp", "tensor", "expert"),
-    )
+    assert (
+      num_devices == math.prod([i for i in config.mesh.values()])
+    ), f"Mesh is not using all the available devices. The environment has {num_devices} devices. "
+    f"Mesh requested: {config.mesh}"
+
+    # TODO(https://github.com/pytorch/xla/issues/8683): When nightly torch_xla no longer crashes
+    # during training, we will be able to remove this special case and always use `HybridMesh` in
+    # both single and multi slice.
+    if is_multi_slice():
+      dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
+      ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
+      mesh = xs.HybridMesh(
+        ici_mesh_shape=ici_mesh_shape,
+        dcn_mesh_shape=dcn_mesh_shape,
+        axis_names=("dcn", "fsdp", "tensor", "expert"),
+      )
+    else:
+      assert config.mesh.dcn == 1
+      mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor)
+      mesh = xs.Mesh(list(range(num_devices)), mesh_shape, ("dcn", "fsdp", "tensor"))
+
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
-    # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
+
+    # TODO(https://github.com/pytorch/xla/issues/8696): Minibatch only works in 1D sharding.
+    minibatch = is_1d_sharding(tuple(config.mesh.values()))
+    self.minibatch = minibatch
+    logger.info(f"Minibatch dataloading: {minibatch}")
+
+    # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
     self.input_sharding_spec = xs.ShardingSpec(
-      mesh, (("dcn", "fsdp"), None), minibatch=True
+      mesh, (("dcn", "fsdp"), None), minibatch=minibatch
     )
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True
@@ -126,18 +147,31 @@ class Trainer:
 
     num_replicas = xr.process_count()
     logger.info(f"Num replicas: {num_replicas}")
-    sampler = torch.utils.data.DistributedSampler(
-      self.train_dataset,
-      num_replicas=num_replicas,
-      rank=xr.process_index(),
-    )
+    if self.minibatch:
+      sampler = torch.utils.data.DistributedSampler(
+        self.train_dataset,
+        num_replicas=num_replicas,
+        rank=xr.process_index(),
+      )
+    else:
+      # Without minibatch, every process loads the global batch the same way.
+      sampler = torch.utils.data.DistributedSampler(
+        self.train_dataset,
+        num_replicas=1,
+        rank=0,
+      )
     assert self.global_batch_size is not None
+    if self.minibatch:
+      # Each process loads the per-host batch size.
+      batch_size = self.global_batch_size // num_replicas
+    else:
+      # Each process will load the global batch, then discard the unneeded parts.
+      batch_size = self.global_batch_size
     dataloader = DataLoader(
       self.train_dataset,
       # Data collator will default to DataCollatorWithPadding, so we change it.
       collate_fn=default_data_collator,
-      # This is the host batch size.
-      batch_size=self.global_batch_size // num_replicas,
+      batch_size=batch_size,
       sampler=sampler,
       drop_last=True,
     )
@@ -224,7 +258,7 @@ class Trainer:
 
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
           logger.info(
-            f"Epoch: {epoch}, Step: {step}, loss: {loss:0.4f}, "
+            f"Epoch: {epoch}, step: {step}, loss: {loss:0.4f}, "
             f"trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms"
           )
           if math.isnan(loss):
@@ -284,6 +318,19 @@ def initialize_model_class(model_config):
   return model
 
 
+@contextmanager
+def set_default_dtype(dtype):
+  # Get the current default dtype
+  previous_dtype = torch.get_default_dtype()
+  # Set the new default dtype
+  torch.set_default_dtype(dtype)
+  try:
+    yield
+  finally:
+    # Revert to the original default dtype
+    torch.set_default_dtype(previous_dtype)
+
+
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
   # Configure logging
@@ -305,13 +352,14 @@ def main(config: DictConfig):
   tokenizer_name = config.model.tokenizer_name
   tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-  model = initialize_model_class(config.model)
+  # Set the model dtype to bfloat16, and set the default device to the XLA device.
+  # This will capture the model constructor into a graph so that we can add
+  # sharding annotations to the weights later, and run the constructor on the XLA device.
+  with set_default_dtype(torch.bfloat16), torch_xla.device():
+    model = initialize_model_class(config.model)
+
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
-
-  # Set the model dtype to bfloat16
-  model = model.to(torch.bfloat16)
-  model = model.to("xla")
 
   # Downloading and loading a dataset from the hub.
   data = load_dataset(

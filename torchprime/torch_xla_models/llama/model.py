@@ -27,6 +27,7 @@ from torch import nn
 from transformers.activations import ACT2FN
 from transformers.utils import logging
 
+from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 logger = logging.get_logger(__name__)
@@ -50,18 +51,16 @@ class LlamaRMSNorm(nn.Module):
 
 
 class LlamaRotaryEmbedding(nn.Module):
+  inv_freq: nn.Buffer
+
   def __init__(
-    self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0
+    self,
+    head_dim,
+    rope_theta,
+    scaling: RopeScaling | None = None,
   ):
     super().__init__()
-    self.scaling_factor = scaling_factor
-    self.dim = dim
-    self.max_position_embeddings = max_position_embeddings
-    self.base = base
-    inv_freq = 1.0 / (
-      self.base
-      ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim)
-    )
+    inv_freq = llama3_rope_frequencies(head_dim, theta=rope_theta, scaling=scaling)
     self.register_buffer("inv_freq", inv_freq, persistent=False)
 
   @torch.no_grad()
@@ -203,10 +202,11 @@ class LlamaAttention(nn.Module):
     self._init_rope()
 
   def _init_rope(self):
+    scaling = self.config.get("rope_scaling", None)
+    if scaling is not None:
+      scaling = RopeScaling(**scaling)
     self.rotary_emb = LlamaRotaryEmbedding(
-      self.head_dim,
-      max_position_embeddings=self.max_position_embeddings,
-      base=self.rope_theta,
+      head_dim=self.head_dim, rope_theta=self.rope_theta, scaling=scaling
     )
 
   @xp.trace_me("LlamaAttention")
