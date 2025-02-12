@@ -13,9 +13,9 @@ authors = [
     { name = "PyTorch/XLA team", email = "pytorchxla-dev@google.com" },
 ]
 dependencies = [
-    "transformers==4.44.2",
-    "transformers[torch]==4.44.2",
-    "datasets==3.0.0",
+    "transformers==4.46.3",
+    "transformers[torch]==4.46.3",
+    "datasets==3.2.0",
     "hydra-core==1.3.0",
     "optax==0.2.4",
     "tensorflow-cpu==2.18.0",
@@ -23,6 +23,7 @@ dependencies = [
     "tensorboard-plugin-profile==2.18.0",
     "tf_keras==2.18.0",
     "protobuf==4.25.5",
+    "dataclasses-json==0.6.7",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +52,9 @@ exclude = ["torchprime.*.tests.*"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--forked"  # ensure torchax and torch_xla tests don't conflict
+# '--forked' ensures torchax and torch_xla tests don't conflict
+# Ignore tests from local Hugging Face checkout
+addopts = "--forked --ignore=local_transformers"
 
 [tool.ruff]
 indent-width = 2
