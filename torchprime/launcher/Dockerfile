@@ -2,6 +2,7 @@
 # Use torch_xla Python 3.10 as the base image
 # TODO(https://github.com/pytorch/xla/issues/8683): Go back to nightly once the linked segfault is fixed.
 FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.6.0_3.10_tpuvm_cxx11
+# FROM gcr.io/tpu-pytorch/xla-test@sha256:65d37449719e6a621fc04c2f66ee3b0b43251eba705356f125be7433898e9f55
 
 ARG USE_TRANSFORMERS=false
 # Install system dependencies
@@ -37,6 +38,9 @@ RUN pip install -e .
 WORKDIR /workspaces/torchprime
 COPY pyproject.toml /workspaces/torchprime/
 RUN pip install -e .
+
+# Override libtpu
+# RUN pip install libtpu==0.0.7.1 -f https://storage.googleapis.com/libtpu-wheels/index.html
 
 # Now copy the rest of the repo
 COPY . /workspaces/torchprime

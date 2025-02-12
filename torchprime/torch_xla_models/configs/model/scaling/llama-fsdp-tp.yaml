@@ -1,0 +1,21 @@
+activation_checkpoint_layers:
+ - LlamaDecoderLayer
+
+# Refer to https://github.com/pytorch/xla/issues/6379 for backward optimization barrier info.
+optimization_barrier_layers:
+ - LlamaDecoderLayer
+
+sharding:
+  # Weights
+  model.embed_tokens.weight: [tensor, fsdp]
+  model.layers.*.self_attn.q_proj.weight: [tensor, fsdp]
+  model.layers.*.self_attn.k_proj.weight: [tensor, fsdp]
+  model.layers.*.self_attn.v_proj.weight: [tensor, fsdp]
+  model.layers.*.self_attn.o_proj.weight: [fsdp, tensor]
+  model.layers.*.mlp.gate_proj.weight: [tensor, fsdp]
+  model.layers.*.mlp.up_proj.weight: [tensor, fsdp]
+  model.layers.*.mlp.down_proj.weight: [fsdp, tensor]
+  model.layers.*.input_layernorm.weight: [fsdp]
+  model.layers.*.post_attention_layernorm.weight: [fsdp]
+  model.norm.weight: [fsdp]
+  lm_head.weight: [tensor, fsdp]

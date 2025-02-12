@@ -3,6 +3,7 @@ import importlib
 import logging
 import math
 import sys
+from contextlib import contextmanager
 from timeit import default_timer as timer
 
 # Third-party library imports
@@ -64,28 +65,41 @@ class Trainer:
 
     # Set up SPMD mesh and shard the model
     num_devices = xr.global_runtime_device_count()
-    assert num_devices == math.prod(
-      [i for i in config.mesh.values()]
-    ), "Mesh is not using all the available devices."
+    assert num_devices == math.prod([i for i in config.mesh.values()]), (
+      "Mesh is not using all the available devices."
+    )
     dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
     ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
-    mesh = xs.HybridMesh(
-      ici_mesh_shape=ici_mesh_shape,
-      dcn_mesh_shape=dcn_mesh_shape,
-      axis_names=("dcn", "fsdp", "tensor", "expert"),
-    )
+    # mesh = xs.HybridMesh(
+    #   ici_mesh_shape=ici_mesh_shape,
+    #   dcn_mesh_shape=dcn_mesh_shape,
+    #   axis_names=("dcn", "fsdp", "tensor", "expert"),
+    # )
+
+    # Test this, does it give NaN? Yes, it does.
+    mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor)
+    mesh = xs.Mesh(range(num_devices), mesh_shape, ("dcn", "fsdp", "tensor"))
+
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
-    # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
+    # TODO(): Minibatch only works in 1D sharding
+    minibatch = True
+    if (
+      len([v for v in dcn_mesh_shape if v > 1]) > 1
+      or len([v for v in ici_mesh_shape if v > 1]) > 1
+    ):
+      logger.info("Turning off minibatch dataloading")
+      minibatch = False
+    # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
     self.input_sharding_spec = xs.ShardingSpec(
-      mesh, (("dcn", "fsdp"), None), minibatch=True
+      mesh, (("dcn", "fsdp"), None), minibatch=minibatch
     )
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True
     )
-    assert isinstance(
-      sharding_config, dict
-    ), f"Sharding config {sharding_config} must be a dict"
+    assert isinstance(sharding_config, dict), (
+      f"Sharding config {sharding_config} must be a dict"
+    )
     model = shard_torch_xla_model_from_config(model, config=sharding_config)
     model = self._checkpoint_model(model)
     model = self._add_optimization_barrier_model(model)
@@ -280,6 +294,19 @@ def initialize_model_class(model_config):
   return model
 
 
+@contextmanager
+def set_default_dtype(dtype):
+  # Get the current default dtype
+  previous_dtype = torch.get_default_dtype()
+  # Set the new default dtype
+  torch.set_default_dtype(dtype)
+  try:
+    yield
+  finally:
+    # Revert to the original default dtype
+    torch.set_default_dtype(previous_dtype)
+
+
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
   # Configure logging
@@ -301,13 +328,12 @@ def main(config: DictConfig):
   tokenizer_name = config.model.tokenizer_name
   tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-  model = initialize_model_class(config.model)
+  # Set the model dtype to bfloat16
+  with set_default_dtype(torch.bfloat16), torch_xla.device():
+    model = initialize_model_class(config.model)
+
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
-
-  # Set the model dtype to bfloat16
-  model = model.to(torch.bfloat16)
-  model = model.to("xla")
 
   # Downloading and loading a dataset from the hub.
   data = load_dataset(
