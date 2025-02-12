@@ -26,6 +26,9 @@ def build_command(config: DictConfig) -> list:
     args[k] = v
 
   for k, v in args.items():
+    if v is None:
+      # We may delete an argument by setting it to `null` on the CLI.
+      continue
     if isinstance(v, bool):
       if v:
         cmd.append(f"--{k}")
