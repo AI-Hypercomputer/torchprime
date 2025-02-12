@@ -26,6 +26,8 @@ def build_command(config: DictConfig) -> list:
     args[k] = v
 
   for k, v in args.items():
+    if v is None:
+      continue
     if isinstance(v, bool):
       if v:
         cmd.append(f"--{k}")
