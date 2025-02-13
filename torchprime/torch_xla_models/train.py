@@ -227,15 +227,28 @@ class Trainer:
       except StopIteration:
         break
 
+      torch_xla.sync(wait=True)
+
       trace_start_time = timer()
       loss = self.train_step(batch)
       trace_end_time = timer()
+      self.optimizer.step()
+      torch_xla.sync(wait=True)
+
+      logger.info("Checking gradient")
+      check_gradients(self.model)
+
+      torch_xla.sync(wait=True)
+
+      self.lr_scheduler.step()
+      self.model.zero_grad()
+      torch_xla.sync(wait=True)
 
       # DEBUG: check optimizer state
       if step > 1:
         logger.info("Checking optimizer state")
         torch_xla.sync(wait=True)
-        check_adafactor_state(self.optimizer)
+        check_optimizer_state(self.optimizer)
         torch_xla.sync(wait=True)
 
       if step % self.config.logging_steps == 0:
@@ -274,13 +287,10 @@ class Trainer:
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       logger.info(f"Step duration: {step_duration:.3f} s")
 
-  @torch_xla.compile(full_graph=True)
+  # @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
     _logits, loss = self.model(**batch)
     loss.backward()
-    self.optimizer.step()
-    self.lr_scheduler.step()
-    self.model.zero_grad()
     return loss
 
 
@@ -387,54 +397,152 @@ def main(config: DictConfig):
   trainer.train_loop()
 
 
-def check_adafactor_state(optimizer, threshold=1e10):
+def find_first_nonfinite_in_optimizer_state(optimizer):
   """
-  Iterates over all state variables in the optimizer (per parameter)
-  and raises a ValueError if any tensor contains NaNs or Infs,
-  or if any absolute value exceeds the specified threshold.
-
-  Args:
-      optimizer (torch.optim.Optimizer): The optimizer (e.g. Adafactor instance).
-      threshold (float): Maximum allowed absolute value. Defaults to 1e10.
+  Iterates over the optimizer state and finds the first non-finite tensor element.
+  Prints its location (parameter, key, and index if applicable) and whether the value
+  is NaN or Inf (+Inf or -Inf). Returns a tuple:
+      (param, key, index, value, kind)
+  where 'index' is a list of indices into the tensor, 'value' is the non-finite value (as float),
+  and 'kind' is a string ("NaN", "+Inf", or "-Inf"). Returns None if all state values are finite.
   """
   for param, state in optimizer.state.items():
-    # Each state is a dictionary containing various optimizer buffers.
     for key, val in state.items():
-      # Check if the state value is a tensor.
       if isinstance(val, torch.Tensor):
         if not torch.isfinite(val).all():
-          raise ValueError(
-            f"Non-finite value detected in state for parameter {param} at key '{key}': {val}"
+          nonfinite_mask = ~torch.isfinite(val)
+          first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
+          value = val[first_index]
+          if torch.isnan(value):
+            kind = "NaN"
+          elif torch.isinf(value):
+            kind = "+Inf" if value.item() > 0 else "-Inf"
+          else:
+            kind = "non-finite"
+          print(
+            f"Non-finite value detected in state for parameter {param} at key '{key}', index {first_index}: {value.item()} ({kind})",
+            file=sys.stderr,
+            flush=True,
           )
-        if val.abs().max() > threshold:
+          return (param, key, first_index, value.item(), kind)
+      elif isinstance(val, (list, tuple)):
+        for idx, item in enumerate(val):
+          if isinstance(item, torch.Tensor) and not torch.isfinite(item).all():
+            nonfinite_mask = ~torch.isfinite(item)
+            first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
+            value = item[first_index]
+            if torch.isnan(value):
+              kind = "NaN"
+            elif torch.isinf(value):
+              kind = "+Inf" if value.item() > 0 else "-Inf"
+            else:
+              kind = "non-finite"
+            print(
+              f"Non-finite value detected in state for parameter {param} at key '{key}[{idx}]', index {first_index}: {value.item()} ({kind})",
+              file=sys.stderr,
+              flush=True,
+            )
+            return (param, f"{key}[{idx}]", first_index, value.item(), kind)
+      elif isinstance(val, dict):
+        for sub_key, sub_val in val.items():
+          if isinstance(sub_val, torch.Tensor) and not torch.isfinite(sub_val).all():
+            nonfinite_mask = ~torch.isfinite(sub_val)
+            first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
+            value = sub_val[first_index]
+            if torch.isnan(value):
+              kind = "NaN"
+            elif torch.isinf(value):
+              kind = "+Inf" if value.item() > 0 else "-Inf"
+            else:
+              kind = "non-finite"
+            print(
+              f"Non-finite value detected in state for parameter {param} at key '{key}->{sub_key}', index {first_index}: {value.item()} ({kind})",
+              file=sys.stderr,
+              flush=True,
+            )
+            return (param, f"{key}->{sub_key}", first_index, value.item(), kind)
+  return None
+
+
+def check_optimizer_state(optimizer, threshold=1e10):
+  """
+  Checks the optimizer state for non-finite values and excessively large values.
+  This function first uses `find_first_nonfinite_in_optimizer_state` to find and report
+  the first non-finite element (NaN or Inf). It then scans all state tensors to ensure that
+  no absolute value exceeds `threshold`. If any issues are found, a ValueError is raised.
+
+  Args:
+      optimizer (torch.optim.Optimizer): The optimizer instance.
+      threshold (float): Maximum allowed absolute value for any state tensor element.
+  """
+  nonfinite_info = find_first_nonfinite_in_optimizer_state(optimizer)
+  if nonfinite_info is not None:
+    param, key, index, value, kind = nonfinite_info
+    raise ValueError(
+      f"Non-finite value detected in optimizer state for parameter {param} at key '{key}' at index {index}: {value} ({kind})"
+    )
+
+  # Now, check that no tensor exceeds the threshold.
+  for param, state in optimizer.state.items():
+    for key, val in state.items():
+      if isinstance(val, torch.Tensor):
+        max_abs = val.abs().max()
+        if max_abs > threshold:
           raise ValueError(
-            f"Value in state for parameter {param} at key '{key}' exceeds threshold {threshold}: max(abs)={val.abs().max().item()}"
+            f"Value in state for parameter {param} at key '{key}' exceeds threshold {threshold}: max(abs)={max_abs.item()}"
           )
-      # If the state is a list or tuple, iterate over items.
       elif isinstance(val, (list, tuple)):
         for idx, item in enumerate(val):
           if isinstance(item, torch.Tensor):
-            if not torch.isfinite(item).all():
+            max_abs = item.abs().max()
+            if max_abs > threshold:
               raise ValueError(
-                f"Non-finite value detected in state list for parameter {param} at key '{key}[{idx}]': {item}"
+                f"Value in state list for parameter {param} at key '{key}[{idx}]' exceeds threshold {threshold}: max(abs)={max_abs.item()}"
               )
-            if item.abs().max() > threshold:
-              raise ValueError(
-                f"Value in state list for parameter {param} at key '{key}[{idx}]' exceeds threshold {threshold}: max(abs)={item.abs().max().item()}"
-              )
-      # If the state is a dict, check recursively.
       elif isinstance(val, dict):
         for sub_key, sub_val in val.items():
           if isinstance(sub_val, torch.Tensor):
-            if not torch.isfinite(sub_val).all():
+            max_abs = sub_val.abs().max()
+            if max_abs > threshold:
               raise ValueError(
-                f"Non-finite value detected in nested state for parameter {param} at key '{key}->{sub_key}': {sub_val}"
+                f"Value in nested state for parameter {param} at key '{key}->{sub_key}' exceeds threshold {threshold}: max(abs)={max_abs.item()}"
               )
-            if sub_val.abs().max() > threshold:
-              raise ValueError(
-                f"Value in nested state for parameter {param} at key '{key}->{sub_key}' exceeds threshold {threshold}: max(abs)={sub_val.abs().max().item()}"
-              )
-      # Otherwise, assume non-tensor scalars (e.g., step count) are fine.
+
+
+def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
+  """Checks for gradients with large magnitude, NaN, or Inf.
+
+  Args:
+      model (torch.nn.Module): The model to check.
+      max_ (float): The threshold for detecting large gradients.
+
+  Raises:
+      RuntimeError: If a gradient exceeds `max_` or contains NaN/Inf.
+  """
+  for name, param in model.named_parameters():
+    if param.grad is not None:
+      max_grad = param.grad.abs().max().item()
+
+      if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+        raise RuntimeError(
+          f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
+          f"  🔹 Weight Shape: {param.shape}\n"
+          f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
+          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
+        )
+
+      # Check for large gradients
+      if max_grad > max_:
+        raise RuntimeError(
+          f"Large Gradient Detected in: {name}\n"
+          f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
+          f"  🔹 Weight Shape: {param.shape}\n"
+          f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
+          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
+        )
+
+  else:  # no break
+    print(f"No gradients have a magnitude greater than {max_}, and no NaNs/Infs found.")
 
 
 if __name__ == "__main__":
