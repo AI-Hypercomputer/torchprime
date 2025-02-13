@@ -409,58 +409,58 @@ def find_first_nonfinite_in_optimizer_state(optimizer):
   for param, state in optimizer.state.items():
     for key, val in state.items():
       if isinstance(val, torch.Tensor):
-        if not torch.isfinite(val).all():
+        if not torch.isfinite(val).all().item():
           nonfinite_mask = ~torch.isfinite(val)
-          first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
-          value = val[first_index]
-          if torch.isnan(value):
+          indices = nonfinite_mask.nonzero(as_tuple=False)
+          first_index = indices[0].tolist()[0]  # This is a list of indices
+          value = val[first_index].item()
+          if math.isnan(value):
             kind = "NaN"
-          elif torch.isinf(value):
-            kind = "+Inf" if value.item() > 0 else "-Inf"
+          elif math.isinf(value):
+            kind = "+Inf" if value > 0 else "-Inf"
           else:
             kind = "non-finite"
           print(
-            f"Non-finite value detected in state for parameter {param} at key '{key}', index {first_index}: {value.item()} ({kind})",
-            file=sys.stderr,
-            flush=True,
+            f"Non-finite value detected in state for parameter {param} at key '{key}', index {first_index}: {value} ({kind})"
           )
-          return (param, key, first_index, value.item(), kind)
+          return (param, key, first_index, value, kind)
       elif isinstance(val, (list, tuple)):
         for idx, item in enumerate(val):
-          if isinstance(item, torch.Tensor) and not torch.isfinite(item).all():
+          if isinstance(item, torch.Tensor) and not torch.isfinite(item).all().item():
             nonfinite_mask = ~torch.isfinite(item)
-            first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
-            value = item[first_index]
-            if torch.isnan(value):
+            indices = nonfinite_mask.nonzero(as_tuple=False)
+            first_index = indices[0].tolist()[0]
+            value = item[first_index].item()
+            if math.isnan(value):
               kind = "NaN"
-            elif torch.isinf(value):
-              kind = "+Inf" if value.item() > 0 else "-Inf"
+            elif math.isinf(value):
+              kind = "+Inf" if value > 0 else "-Inf"
             else:
               kind = "non-finite"
             print(
-              f"Non-finite value detected in state for parameter {param} at key '{key}[{idx}]', index {first_index}: {value.item()} ({kind})",
-              file=sys.stderr,
-              flush=True,
+              f"Non-finite value detected in state for parameter {param} at key '{key}[{idx}]', index {first_index}: {value} ({kind})"
             )
-            return (param, f"{key}[{idx}]", first_index, value.item(), kind)
+            return (param, f"{key}[{idx}]", first_index, value, kind)
       elif isinstance(val, dict):
         for sub_key, sub_val in val.items():
-          if isinstance(sub_val, torch.Tensor) and not torch.isfinite(sub_val).all():
+          if (
+            isinstance(sub_val, torch.Tensor)
+            and not torch.isfinite(sub_val).all().item()
+          ):
             nonfinite_mask = ~torch.isfinite(sub_val)
-            first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
-            value = sub_val[first_index]
-            if torch.isnan(value):
+            indices = nonfinite_mask.nonzero(as_tuple=False)
+            first_index = indices[0].tolist()[0]
+            value = sub_val[first_index].item()
+            if math.isnan(value):
               kind = "NaN"
-            elif torch.isinf(value):
-              kind = "+Inf" if value.item() > 0 else "-Inf"
+            elif math.isinf(value):
+              kind = "+Inf" if value > 0 else "-Inf"
             else:
               kind = "non-finite"
             print(
-              f"Non-finite value detected in state for parameter {param} at key '{key}->{sub_key}', index {first_index}: {value.item()} ({kind})",
-              file=sys.stderr,
-              flush=True,
+              f"Non-finite value detected in state for parameter {param} at key '{key}->{sub_key}', index {first_index}: {value} ({kind})"
             )
-            return (param, f"{key}->{sub_key}", first_index, value.item(), kind)
+            return (param, f"{key}->{sub_key}", first_index, value, kind)
   return None
 
 
@@ -525,12 +525,13 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
 
       if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         nonfinite_mask = ~torch.isfinite(param.grad)
-        first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
-        value = param.grad[first_index]
-        if torch.isnan(value):
+        indices = nonfinite_mask.nonzero(as_tuple=False)
+        first_index = indices[0].tolist()[0]
+        value = param.grad[first_index].item()
+        if math.isnan(value):
           kind = "NaN"
-        elif torch.isinf(value):
-          kind = "+Inf" if value.item() > 0 else "-Inf"
+        elif math.isinf(value):
+          kind = "+Inf" if value > 0 else "-Inf"
         else:
           kind = "non-finite"
 
