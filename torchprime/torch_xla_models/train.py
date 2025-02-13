@@ -539,6 +539,10 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
           f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
         )
 
+      # Zero this grad
+      param.grad.zero_()
+      torch_xla.sync(wait=True)
+
   else:  # no break
     print(f"No gradients have a magnitude greater than {max_}, and no NaNs/Infs found.")
 
