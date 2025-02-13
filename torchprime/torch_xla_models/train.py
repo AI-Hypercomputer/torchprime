@@ -522,11 +522,22 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
       max_grad = param.grad.abs().max().item()
 
       if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+        nonfinite_mask = ~torch.isfinite(param.grad)
+        first_index = nonfinite_mask.nonzero(as_tuple=False)[0].tolist()
+        value = param.grad[first_index]
+        if torch.isnan(value):
+          kind = "NaN"
+        elif torch.isinf(value):
+          kind = "+Inf" if value.item() > 0 else "-Inf"
+        else:
+          kind = "non-finite"
+
         raise RuntimeError(
           f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
           f"  🔹 Weight Shape: {param.shape}\n"
           f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
           f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
+          f"  🔹 Kind: {kind}, location of first anomaly: {first_index}"
         )
 
       # Check for large gradients
