@@ -412,7 +412,7 @@ def find_first_nonfinite_in_optimizer_state(optimizer):
         if not torch.isfinite(val).all().item():
           nonfinite_mask = ~torch.isfinite(val)
           indices = nonfinite_mask.nonzero(as_tuple=False)
-          first_index = indices[0].tolist()[0]  # This is a list of indices
+          first_index = tuple(indices[0].reshape(len(val.shape)).tolist())
           value = val[first_index].item()
           if math.isnan(value):
             kind = "NaN"
@@ -429,7 +429,7 @@ def find_first_nonfinite_in_optimizer_state(optimizer):
           if isinstance(item, torch.Tensor) and not torch.isfinite(item).all().item():
             nonfinite_mask = ~torch.isfinite(item)
             indices = nonfinite_mask.nonzero(as_tuple=False)
-            first_index = indices[0].tolist()[0]
+            first_index = tuple(indices[0].reshape(len(item.shape)).tolist())
             value = item[first_index].item()
             if math.isnan(value):
               kind = "NaN"
@@ -449,7 +449,7 @@ def find_first_nonfinite_in_optimizer_state(optimizer):
           ):
             nonfinite_mask = ~torch.isfinite(sub_val)
             indices = nonfinite_mask.nonzero(as_tuple=False)
-            first_index = indices[0].tolist()[0]
+            first_index = tuple(indices[0].reshape(len(sub_val.shape)).tolist())
             value = sub_val[first_index].item()
             if math.isnan(value):
               kind = "NaN"
@@ -521,13 +521,14 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
   """
   for name, param in model.named_parameters():
     if param.grad is not None:
-      max_grad = param.grad.abs().max().item()
+      param_grad = param.grad.cpu()
+      max_grad = param_grad.abs().max().item()
 
-      if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        nonfinite_mask = ~torch.isfinite(param.grad)
+      if torch.isnan(param_grad).any() or torch.isinf(param_grad).any():
+        nonfinite_mask = ~torch.isfinite(param_grad)
         indices = nonfinite_mask.nonzero(as_tuple=False)
-        first_index = indices[0].tolist()[0]
-        value = param.grad[first_index].item()
+        first_index = tuple(indices[0].reshape(len(param_grad.shape)).tolist())
+        value = param_grad[first_index].item()
         if math.isnan(value):
           kind = "NaN"
         elif math.isinf(value):
@@ -539,7 +540,7 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
           f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
           f"  🔹 Weight Shape: {param.shape}\n"
           f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
+          f"  🔹 Gradient Values (min/max): ({param_grad.min().item():.6e}, {param_grad.max().item():.6e})\n"
           f"  🔹 Kind: {kind}, location of first anomaly: {first_index}"
         )
 
@@ -550,7 +551,7 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
           f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
           f"  🔹 Weight Shape: {param.shape}\n"
           f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
+          f"  🔹 Gradient Values (min/max): ({param_grad.min().item():.6e}, {param_grad.max().item():.6e})"
         )
 
       # Zero this grad
