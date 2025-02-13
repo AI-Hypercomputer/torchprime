@@ -32,7 +32,6 @@ from transformers import (
   get_scheduler,
   set_seed,
 )
-from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
@@ -106,12 +105,11 @@ class Trainer:
     self.model = model
 
     # Set up optimizers
-    self.optimizer = Adafactor(
+    self.optimizer = torch.optim.AdamW(
       params=model.parameters(),
-      eps=(1e-8, 1e-3),
+      betas=(0.9, 0.999),
+      eps=1e-8,
       lr=self.config.optimizer.learning_rate,
-      relative_step=False,
-      scale_parameter=False,
     )
 
     # TODO: this OOMs the TPU.
