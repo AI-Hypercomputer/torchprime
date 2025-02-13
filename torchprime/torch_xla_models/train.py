@@ -65,9 +65,9 @@ class Trainer:
 
     # Set up SPMD mesh and shard the model
     num_devices = xr.global_runtime_device_count()
-    assert num_devices == math.prod(
-      [i for i in config.mesh.values()]
-    ), "Mesh is not using all the available devices."
+    assert num_devices == math.prod([i for i in config.mesh.values()]), (
+      "Mesh is not using all the available devices."
+    )
     dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
     ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
     # mesh = xs.HybridMesh(
@@ -97,9 +97,9 @@ class Trainer:
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True
     )
-    assert isinstance(
-      sharding_config, dict
-    ), f"Sharding config {sharding_config} must be a dict"
+    assert isinstance(sharding_config, dict), (
+      f"Sharding config {sharding_config} must be a dict"
+    )
     model = shard_torch_xla_model_from_config(model, config=sharding_config)
     model = self._checkpoint_model(model)
     model = self._add_optimization_barrier_model(model)
@@ -108,6 +108,7 @@ class Trainer:
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
+      eps=(1e-8, 1e-3),
       lr=self.config.optimizer.learning_rate,
       relative_step=False,
       scale_parameter=False,
@@ -229,6 +230,13 @@ class Trainer:
       trace_start_time = timer()
       loss = self.train_step(batch)
       trace_end_time = timer()
+
+      # DEBUG: check optimizer state
+      if step > 1:
+        logger.info("Checking optimizer state")
+        torch_xla.sync(wait=True)
+        check_adafactor_state(self.optimizer)
+        torch_xla.sync(wait=True)
 
       if step % self.config.logging_steps == 0:
 
@@ -377,6 +385,56 @@ def main(config: DictConfig):
   )
 
   trainer.train_loop()
+
+
+def check_adafactor_state(optimizer, threshold=1e10):
+  """
+  Iterates over all state variables in the optimizer (per parameter)
+  and raises a ValueError if any tensor contains NaNs or Infs,
+  or if any absolute value exceeds the specified threshold.
+
+  Args:
+      optimizer (torch.optim.Optimizer): The optimizer (e.g. Adafactor instance).
+      threshold (float): Maximum allowed absolute value. Defaults to 1e10.
+  """
+  for param, state in optimizer.state.items():
+    # Each state is a dictionary containing various optimizer buffers.
+    for key, val in state.items():
+      # Check if the state value is a tensor.
+      if isinstance(val, torch.Tensor):
+        if not torch.isfinite(val).all():
+          raise ValueError(
+            f"Non-finite value detected in state for parameter {param} at key '{key}': {val}"
+          )
+        if val.abs().max() > threshold:
+          raise ValueError(
+            f"Value in state for parameter {param} at key '{key}' exceeds threshold {threshold}: max(abs)={val.abs().max().item()}"
+          )
+      # If the state is a list or tuple, iterate over items.
+      elif isinstance(val, (list, tuple)):
+        for idx, item in enumerate(val):
+          if isinstance(item, torch.Tensor):
+            if not torch.isfinite(item).all():
+              raise ValueError(
+                f"Non-finite value detected in state list for parameter {param} at key '{key}[{idx}]': {item}"
+              )
+            if item.abs().max() > threshold:
+              raise ValueError(
+                f"Value in state list for parameter {param} at key '{key}[{idx}]' exceeds threshold {threshold}: max(abs)={item.abs().max().item()}"
+              )
+      # If the state is a dict, check recursively.
+      elif isinstance(val, dict):
+        for sub_key, sub_val in val.items():
+          if isinstance(sub_val, torch.Tensor):
+            if not torch.isfinite(sub_val).all():
+              raise ValueError(
+                f"Non-finite value detected in nested state for parameter {param} at key '{key}->{sub_key}': {sub_val}"
+              )
+            if sub_val.abs().max() > threshold:
+              raise ValueError(
+                f"Value in nested state for parameter {param} at key '{key}->{sub_key}' exceeds threshold {threshold}: max(abs)={sub_val.abs().max().item()}"
+              )
+      # Otherwise, assume non-tensor scalars (e.g., step count) are fine.
 
 
 if __name__ == "__main__":
