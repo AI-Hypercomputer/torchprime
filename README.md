@@ -169,39 +169,26 @@ and attributes where this model code came from, if any. This also helps to
 show case what changes we have done to make it performant on TPU. The original
 version is not expected to be run.
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a pull request.
-
-When developing, use `pip install -e '.[dev]'` to install dev dependencies such
-as linter and formatter.
-
-- How to run tests:
-
-```sh
-pytest
+### How to run inside the docker container locally
+You can also run locally without XPK with docker. When running inside the docker
+container, it will use the same dependencies and build process as used in the
+XPK approach, improving the hermeticity and reliability.
 ```
-
-- How to run some of the tests, and re-run them whenever you change a file:
-
-```sh
-tp -i test ... # replace with path to tests/directories
-```
-
-- How to run locally without XPK:
-```
-tp dbrun torchprime/torch_xla_models/train.py
+tp docker-run torchprime/torch_xla_models/train.py
 ```
 This will run the TorchPrime docker image locally. You can also add `--use-hf`
 to run HuggingFace model locally.
+```
+tp docker-run --use-hf torchprime/hf_models/train.py
+```
 
-- How to format:
+### How to format:
 
 ```sh
 ruff format
 ```
 
-- How to lint:
+### How to lint:
 
 ```sh
 ruff check [--fix]
