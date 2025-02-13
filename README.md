@@ -177,25 +177,32 @@ Contributions are welcome! Please feel free to submit a pull request.
 When developing, use `pip install -e '.[dev]'` to install dev dependencies such
 as linter and formatter.
 
-How to run tests:
+- How to run tests:
 
 ```sh
 pytest
 ```
 
-How to run some of the tests, and re-run them whenever you change a file:
+- How to run some of the tests, and re-run them whenever you change a file:
 
 ```sh
 tp -i test ... # replace with path to tests/directories
 ```
 
-How to format:
+- How to run locally without XPK:
+```
+tp dbrun torchprime/torch_xla_models/train.py
+```
+This will run the TorchPrime docker image locally. You can also add `--use-hf`
+to run HuggingFace model locally.
+
+- How to format:
 
 ```sh
 ruff format
 ```
 
-How to lint:
+- How to lint:
 
 ```sh
 ruff check [--fix]

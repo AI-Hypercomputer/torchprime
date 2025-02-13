@@ -201,6 +201,45 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   )
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
+def dbrun(args, use_hf: bool):
+  """
+  Runs the provided training command locally for quick testing.
+  """
+  config = read_config()
+
+  click.echo(get_project_dir().absolute())
+
+  # Build docker image.
+  build_arg = "USE_TRANSFORMERS=true" if use_hf else None
+  docker_project = config.docker_project
+  if docker_project is None:
+    docker_project = config.project
+  docker_url = buildpush(docker_project, torchprime_docker_tag="local_run", build_arg=build_arg)
+  # Forward a bunch of important env vars.
+  env_forwarding = [
+    *forward_env("HF_TOKEN"),  # HuggingFace token
+    *forward_env("XLA_IR_DEBUG"),  # torch_xla debugging flag
+    *forward_env("XLA_HLO_DEBUG"),  # torch_xla debugging flag
+    *forward_env("LIBTPU_INIT_ARGS"),  # XLA flags
+  ]
+  command = ["python", ]+ list(args)
+  docker_command = [
+      "docker", "run", *env_forwarding, "--privileged", "--net", "host", "--rm",
+      "-v", f"{os.getcwd()}:/workspace",
+      "-w", "/workspace",
+      docker_url,
+  ] + command
+  print(docker_command)
+  subprocess.run(docker_command, check=True)
+
+
+@cli.command(
+  context_settings=dict(
+    ignore_unknown_options=True,
+  )
+)
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.option(
   "--name",
   required=False,
