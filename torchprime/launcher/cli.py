@@ -214,7 +214,9 @@ def dbrun(args, use_hf: bool):
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project
-  docker_url = buildpush(docker_project, torchprime_docker_tag="local_run", build_arg=build_arg)
+  docker_url = buildpush(
+    docker_project, torchprime_docker_tag="local_run", build_arg=build_arg
+  )
   # Forward a bunch of important env vars.
   env_forwarding = [
     *forward_env("HF_TOKEN"),  # HuggingFace token
@@ -222,12 +224,22 @@ def dbrun(args, use_hf: bool):
     *forward_env("XLA_HLO_DEBUG"),  # torch_xla debugging flag
     *forward_env("LIBTPU_INIT_ARGS"),  # XLA flags
   ]
-  command = ["python", ]+ list(args)
+  command = [
+    "python",
+  ] + list(args)
   docker_command = [
-      "docker", "run", *env_forwarding, "--privileged", "--net", "host", "--rm",
-      "-v", f"{os.getcwd()}:/workspace",
-      "-w", "/workspace",
-      docker_url,
+    "docker",
+    "run",
+    *env_forwarding,
+    "--privileged",
+    "--net",
+    "host",
+    "--rm",
+    "-v",
+    f"{os.getcwd()}:/workspace",
+    "-w",
+    "/workspace",
+    docker_url,
   ] + command
   print(docker_command)
   subprocess.run(docker_command, check=True)
