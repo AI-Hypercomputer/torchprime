@@ -232,22 +232,32 @@ class Trainer:
       trace_end_time = timer()
 
       # Check gradients
+      grad_bad = False
       for name, param_shape, max_grad, is_nan, is_inf in info:
         if is_nan or is_inf:
-          raise RuntimeError(
+          grad_bad = True
+          print(
             f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
             f"  🔹 Weight Shape: {param_shape}\n"
             f"  🔹 Is nan: {is_nan}\n"
-            f"  🔹 Is inf: {is_inf}\n"
+            f"  🔹 Is inf: {is_inf}\n",
+            file=sys.stderr,
+            flush=True,
           )
 
         # Check for large gradients
         if max_grad > 100:
-          raise RuntimeError(
+          grad_bad = True
+          print(
             f"Large Gradient Detected in: {name}\n"
             f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
-            f"  🔹 Weight Shape: {param_shape}\n"
+            f"  🔹 Weight Shape: {param_shape}\n",
+            file=sys.stderr,
+            flush=True,
           )
+
+      if grad_bad:
+        raise RuntimeError("Gradient check failed. See error earlier.")
 
       # DEBUG: check optimizer state
       if step > 1:
