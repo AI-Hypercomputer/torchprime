@@ -307,6 +307,11 @@ class Trainer:
     self.optimizer.step()
     self.lr_scheduler.step()
     info = check_gradients(self.model)
+
+    for name, param in self.model.named_parameters():
+      if param.grad is not None:
+        print(f"Gradient for {name} has dtype: {param.grad.dtype}")
+
     self.model.zero_grad()
     return loss, info
 
