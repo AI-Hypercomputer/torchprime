@@ -227,22 +227,9 @@ class Trainer:
       except StopIteration:
         break
 
-      torch_xla.sync(wait=True)
-
       trace_start_time = timer()
       loss = self.train_step(batch)
       trace_end_time = timer()
-      self.optimizer.step()
-      torch_xla.sync(wait=True)
-
-      logger.info("Checking gradient")
-      check_gradients(self.model)
-
-      torch_xla.sync(wait=True)
-
-      self.lr_scheduler.step()
-      self.model.zero_grad()
-      torch_xla.sync(wait=True)
 
       # DEBUG: check optimizer state
       if step > 1:
@@ -287,10 +274,14 @@ class Trainer:
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       logger.info(f"Step duration: {step_duration:.3f} s")
 
-  # @torch_xla.compile(full_graph=True)
+  @torch_xla.compile(full_graph=False)
   def train_step(self, batch):
     _logits, loss = self.model(**batch)
     loss.backward()
+    self.optimizer.step()
+    self.lr_scheduler.step()
+    check_gradients(self.model)
+    self.model.zero_grad()
     return loss
 
 
@@ -521,14 +512,13 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
   """
   for name, param in model.named_parameters():
     if param.grad is not None:
-      param_grad = param.grad.cpu()
-      max_grad = param_grad.abs().max().item()
+      max_grad = param.grad.abs().max().item()
 
-      if torch.isnan(param_grad).any() or torch.isinf(param_grad).any():
-        nonfinite_mask = ~torch.isfinite(param_grad)
+      if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+        nonfinite_mask = ~torch.isfinite(param.grad)
         indices = nonfinite_mask.nonzero(as_tuple=False)
-        first_index = tuple(indices[0].reshape(len(param_grad.shape)).tolist())
-        value = param_grad[first_index].item()
+        first_index = tuple(indices[0].reshape(len(param.grad.shape)).tolist())
+        value = param.grad[first_index].item()
         if math.isnan(value):
           kind = "NaN"
         elif math.isinf(value):
@@ -540,7 +530,7 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
           f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
           f"  🔹 Weight Shape: {param.shape}\n"
           f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param_grad.min().item():.6e}, {param_grad.max().item():.6e})\n"
+          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})\n"
           f"  🔹 Kind: {kind}, location of first anomaly: {first_index}"
         )
 
@@ -551,7 +541,7 @@ def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
           f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
           f"  🔹 Weight Shape: {param.shape}\n"
           f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param_grad.min().item():.6e}, {param_grad.max().item():.6e})"
+          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
         )
 
       # Zero this grad
