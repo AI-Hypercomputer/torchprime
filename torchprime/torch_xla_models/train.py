@@ -228,8 +228,26 @@ class Trainer:
         break
 
       trace_start_time = timer()
-      loss = self.train_step(batch)
+      loss, info = self.train_step(batch)
       trace_end_time = timer()
+
+      # Check gradients
+      for name, param_shape, max_grad, is_nan, is_inf in info:
+        if is_nan or is_inf:
+          raise RuntimeError(
+            f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
+            f"  🔹 Weight Shape: {param_shape}\n"
+            f"  🔹 Is nan: {is_nan}\n"
+            f"  🔹 Is inf: {is_inf}\n"
+          )
+
+        # Check for large gradients
+        if max_grad > 100:
+          raise RuntimeError(
+            f"Large Gradient Detected in: {name}\n"
+            f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
+            f"  🔹 Weight Shape: {param_shape}\n"
+          )
 
       # DEBUG: check optimizer state
       if step > 1:
@@ -280,9 +298,9 @@ class Trainer:
     loss.backward()
     self.optimizer.step()
     self.lr_scheduler.step()
-    check_gradients(self.model)
+    info = check_gradients(self.model)
     self.model.zero_grad()
-    return loss
+    return loss, info
 
 
 def initialize_model_class(model_config):
@@ -500,56 +518,24 @@ def check_optimizer_state(optimizer, threshold=1e10):
               )
 
 
-def check_gradients(model: nn.Module, max_: float = 100.0) -> None:
+def check_gradients(model: nn.Module):
   """Checks for gradients with large magnitude, NaN, or Inf.
 
   Args:
       model (torch.nn.Module): The model to check.
-      max_ (float): The threshold for detecting large gradients.
 
   Raises:
       RuntimeError: If a gradient exceeds `max_` or contains NaN/Inf.
   """
+  info = []
   for name, param in model.named_parameters():
     if param.grad is not None:
-      max_grad = param.grad.abs().max().item()
+      max_grad = param.grad.abs().max()
+      is_nan = torch.isnan(param.grad).any()
+      is_inf = torch.isinf(param.grad).any()
+      info.append((name, param.shape, max_grad, is_nan, is_inf))
 
-      if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        nonfinite_mask = ~torch.isfinite(param.grad)
-        indices = nonfinite_mask.nonzero(as_tuple=False)
-        first_index = tuple(indices[0].reshape(len(param.grad.shape)).tolist())
-        value = param.grad[first_index].item()
-        if math.isnan(value):
-          kind = "NaN"
-        elif math.isinf(value):
-          kind = "+Inf" if value > 0 else "-Inf"
-        else:
-          kind = "non-finite"
-
-        raise RuntimeError(
-          f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
-          f"  🔹 Weight Shape: {param.shape}\n"
-          f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})\n"
-          f"  🔹 Kind: {kind}, location of first anomaly: {first_index}"
-        )
-
-      # Check for large gradients
-      if max_grad > max_:
-        raise RuntimeError(
-          f"Large Gradient Detected in: {name}\n"
-          f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
-          f"  🔹 Weight Shape: {param.shape}\n"
-          f"  🔹 Weight Values (min/max): ({param.min().item():.6e}, {param.max().item():.6e})\n"
-          f"  🔹 Gradient Values (min/max): ({param.grad.min().item():.6e}, {param.grad.max().item():.6e})"
-        )
-
-      # Zero this grad
-      param.grad.zero_()
-      torch_xla.sync(wait=True)
-
-  else:  # no break
-    print(f"No gradients have a magnitude greater than {max_}, and no NaNs/Infs found.")
+  return info
 
 
 if __name__ == "__main__":
