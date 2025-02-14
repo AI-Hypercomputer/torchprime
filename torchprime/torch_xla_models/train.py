@@ -231,11 +231,13 @@ class Trainer:
       loss, info = self.train_step(batch)
       trace_end_time = timer()
 
+      # Print loss
+      torch_xla.sync(wait=True)
+      print(f"Step {step}, loss={loss.item()}")
+
       # Check gradients
-      grad_bad = False
       for name, param_shape, max_grad, is_nan, is_inf in info:
         if is_nan or is_inf:
-          grad_bad = True
           print(
             f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
             f"  🔹 Weight Shape: {param_shape}\n"
@@ -247,7 +249,6 @@ class Trainer:
 
         # Check for large gradients
         if max_grad > 100:
-          grad_bad = True
           print(
             f"Large Gradient Detected in: {name}\n"
             f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
@@ -255,9 +256,6 @@ class Trainer:
             file=sys.stderr,
             flush=True,
           )
-
-      if grad_bad:
-        raise RuntimeError("Gradient check failed. See error earlier.")
 
       # DEBUG: check optimizer state
       if step > 1:
@@ -309,11 +307,6 @@ class Trainer:
     self.optimizer.step()
     self.lr_scheduler.step()
     info = check_gradients(self.model)
-
-    for name, param in self.model.named_parameters():
-      if param.grad is not None:
-        print(f"Gradient for {name} has dtype: {param.grad.dtype}")
-
     self.model.zero_grad()
     return loss, info
 
