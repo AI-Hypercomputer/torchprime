@@ -227,9 +227,15 @@ class Trainer:
         batch = next(train_iterator)
       except StopIteration:
         break
-      if step % self.config.max_steps_in_dataloader == self.config.max_steps_in_dataloader - 1:
+      if (
+        step % self.config.max_steps_in_dataloader
+        == self.config.max_steps_in_dataloader - 1
+      ):
         # DEBUG: reset the dataloader
         train_iterator = iter(train_loader)
+      if step == self.config.skip_batch_steps:
+        print(f"Skipping step {step}", file=sys.stderr, flush=True)
+        continue
 
       trace_start_time = timer()
       loss, info = self.train_step(batch)
@@ -237,7 +243,7 @@ class Trainer:
 
       # Print loss
       torch_xla.sync(wait=True)
-      print(f"Step {step}, loss={loss.item()}")
+      print(f"Step {step}, loss={loss.item()}", file=sys.stderr, flush=True)
 
       # Check gradients
       for name, param_shape, max_grad, is_nan, is_inf in info:
