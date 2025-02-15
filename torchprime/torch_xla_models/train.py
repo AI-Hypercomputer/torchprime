@@ -145,7 +145,7 @@ class Trainer:
       self.train_dataset,
       num_replicas=num_replicas,
       rank=xr.process_index(),
-      shuffle=False,
+      shuffle=True,
     )
     assert self.global_batch_size is not None
     dataloader = DataLoader(
@@ -227,7 +227,9 @@ class Trainer:
         batch = next(train_iterator)
       except StopIteration:
         break
-      train_iterator = iter(train_loader)
+      if step % self.config.max_steps_in_dataloader == self.config.max_steps_in_dataloader - 1:
+        # DEBUG: reset the dataloader
+        train_iterator = iter(train_loader)
 
       trace_start_time = timer()
       loss, info = self.train_step(batch)

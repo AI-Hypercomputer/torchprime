@@ -30,3 +30,5 @@ mesh:
   fsdp: 4
   tensor: 1
   expert: 1
+
+max_steps_in_dataloader: 300000
