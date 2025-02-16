@@ -17,4 +17,4 @@ sharding:
   model.layers.*.mlp.gate_proj.weight: [tensor, fsdp]
   model.layers.*.mlp.up_proj.weight: [tensor, fsdp]
   model.layers.*.mlp.down_proj.weight: [fsdp, tensor]
-  lm_head.weight: [[tensor, fsdp], null]
+  lm_head.weight: [tensor, fsdp]
