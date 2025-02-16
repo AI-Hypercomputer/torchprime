@@ -1,7 +1,7 @@
 import re
 from collections.abc import Callable
 from copy import copy
-from typing import Optional
+from typing import Any, Optional
 
 import torch.nn
 
@@ -12,7 +12,7 @@ ShardWeightFn optionally transforms a weight tensor based on its name.
 Args:
 
   weight (torch.Tensor): The weight tensor to be transformed.
-  
+
   name (str): The name of the weight tensor as it appears in the state dict.
 
 Returns:
@@ -90,8 +90,11 @@ TAIL_INDEX_REGEX = re.compile(r"\[\d+\]$")
 def shard_model_from_config(
   model: torch.nn.Module,
   config: dict,
-  shard_output: Callable[[torch.Tensor, tuple[str, ...]], torch.Tensor],
-  shard_param: Callable[[torch.Tensor, tuple[str, ...]], torch.Tensor] | None = None,
+  shard_output: Callable[
+    [torch.Tensor, tuple[str | tuple[str, ...], ...]], torch.Tensor
+  ],
+  shard_param: Callable[[torch.Tensor, tuple[str | tuple[str, ...], ...]], torch.Tensor]
+  | None = None,
 ) -> torch.nn.Module:
   """
   Given a config of pattern to partition spec, shard the model accordingly.
@@ -135,17 +138,19 @@ def shard_model_from_config(
   def shard_weight(param, name):
     name = _process_sharding_name(name)
     spec = config.get(name)
+    spec = _list_to_tuple(spec)
     if spec is not None:
       seen_params.add(name)
-      return shard_param(param, tuple(spec))
+      return shard_param(param, spec)
     return param
 
   def shard_activation(mod, name):
     name = _process_sharding_name(name)
     spec = config.get(name)
+    spec = _list_to_tuple(spec)
     if spec is not None:
       seen_modules.add(name)
-      return ShardedModule(mod, shard_output_fns.get(name, shard_output), tuple(spec))
+      return ShardedModule(mod, shard_output_fns.get(name, shard_output), spec)
     return mod
 
   model = shard_model(model, shard_weight, shard_activation)
@@ -156,12 +161,18 @@ def shard_model_from_config(
   assert (
     seen_names == want_names
   ), f"""Requested to shard these names: {want_names}, but only sharded these: {seen_names}.
-  
+
 These names were not found in the model:
 {diff}
 """
 
   return model
+
+
+def _list_to_tuple(spec: Any):
+  if isinstance(spec, list | tuple):
+    return tuple(_list_to_tuple(x) for x in spec)
+  return spec
 
 
 def shard_torchax_model_from_config(
@@ -250,9 +261,9 @@ def _process_tail_index_syntax(
         if isinstance(outputs, list):
           return out_list
         else:
-          assert isinstance(
-            outputs, tuple
-          ), f"outputs must be a list or tuple, got {type(outputs)}"
+          assert isinstance(outputs, tuple), (
+            f"outputs must be a list or tuple, got {type(outputs)}"
+          )
           return tuple(out_list)
 
       return shard_output_fn

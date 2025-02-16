@@ -77,12 +77,12 @@ class Trainer:
     # )
 
     # Test this, does it give NaN? Yes, it does.
-    mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor)
-    mesh = xs.Mesh(range(num_devices), mesh_shape, ("dcn", "fsdp", "tensor"))
+    mesh_shape = (config.mesh.fsdp, config.mesh.tensor)
+    mesh = xs.Mesh(range(num_devices), mesh_shape, ("fsdp", "tensor"))
 
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
-    # TODO(): Minibatch only works in 1D sharding
+    # TODO(bug): Minibatch only works in 1D sharding
     minibatch = True
     if (
       len([v for v in dcn_mesh_shape if v > 1]) > 1
@@ -91,8 +91,11 @@ class Trainer:
       logger.info("Turning off minibatch dataloading")
       minibatch = False
     # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
+    # self.input_sharding_spec = xs.ShardingSpec(
+    #   mesh, (("dcn", "fsdp"), None), minibatch=minibatch
+    # )
     self.input_sharding_spec = xs.ShardingSpec(
-      mesh, (("dcn", "fsdp"), None), minibatch=minibatch
+      mesh, ("fsdp", None), minibatch=minibatch
     )
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True
@@ -108,7 +111,6 @@ class Trainer:
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
-      eps=(1e-8, 1e-3),
       lr=self.config.optimizer.learning_rate,
       relative_step=False,
       scale_parameter=False,
