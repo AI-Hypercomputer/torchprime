@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-# TODO(https://github.com/pytorch/xla/issues/8683): Go back to nightly once the linked segfault is fixed.
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.6.0_3.10_tpuvm_cxx11
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250217
 
 ARG USE_TRANSFORMERS=false
 # Install system dependencies
