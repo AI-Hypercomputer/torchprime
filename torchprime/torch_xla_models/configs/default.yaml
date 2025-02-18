@@ -33,3 +33,5 @@ mesh:
 
 max_steps_in_dataloader: 300000
 skip_batch_steps: 300000
+check_gradients: false
+check_optimizer: false

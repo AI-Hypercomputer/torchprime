@@ -240,35 +240,33 @@ class Trainer:
       loss, info = self.train_step(batch)
       trace_end_time = timer()
 
-      # Print loss
-      torch_xla.sync(wait=True)
-      print(f"Step {step}, loss={loss.item()}", file=sys.stderr, flush=True)
-
       # Check gradients
-      for name, param_shape, max_grad, is_nan, is_inf in info:
-        if is_nan or is_inf:
-          print(
-            f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
-            f"  🔹 Weight Shape: {param_shape}\n"
-            f"  🔹 Is nan: {is_nan}\n"
-            f"  🔹 Is inf: {is_inf}\n",
-            file=sys.stderr,
-            flush=True,
-          )
+      if self.config.check_gradients:
+        print(f"Check gradients for step {step}", file=sys.stderr, flush=True)
+        for name, param_shape, max_grad, is_nan, is_inf in info:
+          if is_nan or is_inf:
+            print(
+              f"CRITICAL: NaN or Inf detected in gradient of {name}\n"
+              f"  🔹 Weight Shape: {param_shape}\n"
+              f"  🔹 Is nan: {is_nan}\n"
+              f"  🔹 Is inf: {is_inf}\n",
+              file=sys.stderr,
+              flush=True,
+            )
 
-        # Check for large gradients
-        if max_grad > 100:
-          print(
-            f"Large Gradient Detected in: {name}\n"
-            f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
-            f"  🔹 Weight Shape: {param_shape}\n",
-            file=sys.stderr,
-            flush=True,
-          )
+          # Check for large gradients
+          if max_grad > 100:
+            print(
+              f"Large Gradient Detected in: {name}\n"
+              f"  🔹 Max Gradient Magnitude: {max_grad:.6e}\n"
+              f"  🔹 Weight Shape: {param_shape}\n",
+              file=sys.stderr,
+              flush=True,
+            )
 
       # DEBUG: check optimizer state
-      if step > 1:
-        logger.info("Checking optimizer state")
+      if self.config.check_optimizer and step > 1:
+        logger.info(f"Checking optimizer state for step {step}")
         torch_xla.sync(wait=True)
         check_optimizer_state(self.optimizer)
         torch_xla.sync(wait=True)
@@ -309,7 +307,7 @@ class Trainer:
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       logger.info(f"Step duration: {step_duration:.3f} s")
 
-  @torch_xla.compile(full_graph=False)
+  @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
     _logits, loss = self.model(**batch)
     loss.backward()
