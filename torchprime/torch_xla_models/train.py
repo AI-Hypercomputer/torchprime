@@ -281,7 +281,7 @@ class Trainer:
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       logger.info(f"Step duration: {step_duration:.3f} s")
 
-  @torch_xla.compile(full_graph=True)
+  @torch_xla.compile(full_graph=False)
   def train_step(self, batch):
     _logits, loss = self.model(**batch)
     loss.backward()

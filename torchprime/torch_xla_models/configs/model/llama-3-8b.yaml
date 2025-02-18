@@ -20,3 +20,4 @@ attention_dropout: false
 attention_bias: false
 flash_attention: true
 rope_theta: 500000.0
+scan_decoder_layers: true
