@@ -1,7 +1,6 @@
 import functools
 import math
 
-import custom_mesh
 import hydra
 import jax
 import numpy as np
@@ -18,6 +17,8 @@ from jax.sharding import PartitionSpec as P
 from llama import model, model_with_collectives, model_with_scan
 from omegaconf import DictConfig, OmegaConf
 from torchax import interop
+
+from torchprime.mesh import custom_mesh
 
 sharding_map_original = {
   "freqs_cis": (),  #  torch.complex64 (2048, 64)
@@ -208,7 +209,7 @@ def main(config: DictConfig):
     tp = 4
     if len(jax.devices()) == 512:
       dev_array = custom_mesh.create_custom_64x4_device_mesh(
-        (64, 4), (2, 1), jax.devices()
+        (64, tp), (2, 1), jax.devices()
       )
     else:
       assert len(jax.devices()) == 256

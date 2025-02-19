@@ -25,8 +25,25 @@ optimizer:
 lr_scheduler:
   type: linear
   warmup_steps: 0
+
+# The virtual device mesh shape to use within a TPU slice. This is also called
+# the "ICI mesh", since devices within a slice enjoy a faster network called
+# "Inter-Chip Interconnect".
 mesh:
-  dcn: 1
+  data: 1
   fsdp: 4
+  tensor: 1
+  expert: 1
+
+# Shape of the logical mesh where each element is a TPU slice. This is call
+# "Data Center Network (DCN) mesh" because TPU slices are usually connected
+# together with slower data center networking, with the faster ICI network
+# used within a slice.
+#
+# As an example, to enable 2-way data parallelism across 2 TPU slices, you may
+# specify `dcn_mesh.data=2`.
+dcn_mesh:
+  data: 1
+  fsdp: 1
   tensor: 1
   expert: 1

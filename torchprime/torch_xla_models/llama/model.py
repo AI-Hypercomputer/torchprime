@@ -266,7 +266,7 @@ class LlamaAttention(nn.Module):
         key_states,
         value_states,
         causal=True,
-        partition_spec=(("dcn", "fsdp"), "tensor", None, None),
+        partition_spec=(("data", "fsdp"), "tensor", None, None),
       )
 
     if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):

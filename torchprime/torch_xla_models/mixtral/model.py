@@ -32,6 +32,7 @@ from torch import nn
 from torch.nn import init
 
 from torchprime.torch_xla_models.loss import cross_entropy_loss
+from torchprime.torch_xla_models.topology import get_num_slices
 
 
 # TODO (https://github.com/AI-Hypercomputer/torchprime/pull/60): Refactor and
@@ -266,7 +267,7 @@ class MixtralAttention(nn.Module):
       query_states /= math.sqrt(self.head_dim)
       partition_spec = None
       if xs.get_global_mesh() is not None:
-        partition_spec = (("dcn", "fsdp"), "tensor", None, None)
+        partition_spec = (("data", "fsdp"), "tensor", None, None)
       attn_output = flash_attention(
         query_states,
         key_states,
@@ -330,12 +331,12 @@ class MixtralExpertCapacityTop2MLP(nn.Module):
     mesh = xs.get_global_mesh()
     assert mesh is not None
     layer_w1 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w1)
-    xs.mark_sharding(layer_w1, mesh, ("expert", ("dcn", "fsdp"), None, None))
+    xs.mark_sharding(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_w3 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w3)
-    xs.mark_sharding(layer_w3, mesh, ("expert", ("dcn", "fsdp"), None, None))
+    xs.mark_sharding(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_multiply = self.act_fn(layer_w1) * layer_w3
     intermediate_layer = torch.einsum("ebch,ehm->ebcm", layer_multiply, self.w2)
-    xs.mark_sharding(intermediate_layer, mesh, ("expert", ("dcn", "fsdp"), None, None))
+    xs.mark_sharding(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
     # TODO(bbahl): checkpoint intermediate_layer
     return intermediate_layer
 
@@ -416,9 +417,9 @@ class Gmm(torch.autograd.Function):
     # Enter manual sharding zone
     if xs.get_global_mesh() is not None:
       hidden_states = xs.enable_manual_sharding(
-        hidden_states, (("dcn", "fsdp"), None)
+        hidden_states, (("data", "fsdp"), None)
       ).global_tensor
-      top_ks = xs.enable_manual_sharding(top_ks, (("dcn", "fsdp"), None)).global_tensor
+      top_ks = xs.enable_manual_sharding(top_ks, (("data", "fsdp"), None)).global_tensor
       w1 = xs.enable_manual_sharding(full_w1, (None, None, "tensor")).global_tensor
       w2 = xs.enable_manual_sharding(full_w2, (None, "tensor", None)).global_tensor
       w3 = xs.enable_manual_sharding(full_w3, (None, None, "tensor")).global_tensor
@@ -468,23 +469,23 @@ class Gmm(torch.autograd.Function):
         )
 
       current_hidden_states = xs.disable_manual_sharding(
-        current_hidden_states, (("dcn", "fsdp"), None, "tensor"), (m, k, n)
+        current_hidden_states, (("data", "fsdp"), None, "tensor"), (m, k, n)
       ).global_tensor
       # Checkpoints for backward
       hidden_states_sorted = xs.disable_manual_sharding(
-        hidden_states_sorted, (("dcn", "fsdp"), None), (m * k, n)
+        hidden_states_sorted, (("data", "fsdp"), None), (m * k, n)
       ).global_tensor
       gmm1 = xs.disable_manual_sharding(
-        gmm1, (("dcn", "fsdp"), "tensor"), (m * k, ffn_dim)
+        gmm1, (("data", "fsdp"), "tensor"), (m * k, ffn_dim)
       ).global_tensor
       gmm3 = xs.disable_manual_sharding(
-        gmm3, (("dcn", "fsdp"), "tensor"), (m * k, ffn_dim)
+        gmm3, (("data", "fsdp"), "tensor"), (m * k, ffn_dim)
       ).global_tensor
       silu = xs.disable_manual_sharding(
-        silu, (("dcn", "fsdp"), "tensor"), (m * k, ffn_dim)
+        silu, (("data", "fsdp"), "tensor"), (m * k, ffn_dim)
       ).global_tensor
       sgmm = xs.disable_manual_sharding(
-        sgmm, (("dcn", "fsdp"), "tensor"), (m * k, ffn_dim)
+        sgmm, (("data", "fsdp"), "tensor"), (m * k, ffn_dim)
       ).global_tensor
 
     # Save for backward
@@ -540,18 +541,18 @@ class Gmm(torch.autograd.Function):
     # Enter manual sharding zone
     if xs.get_global_mesh() is not None:
       hidden_states_sorted = xs.enable_manual_sharding(
-        hidden_states_sorted, (("dcn", "fsdp"), None)
+        hidden_states_sorted, (("data", "fsdp"), None)
       ).global_tensor
       w1 = xs.enable_manual_sharding(full_w1, (None, None, "tensor")).global_tensor
       w2 = xs.enable_manual_sharding(full_w2, (None, "tensor", None)).global_tensor
       w3 = xs.enable_manual_sharding(full_w3, (None, None, "tensor")).global_tensor
-      temp_sharding_spec = (("dcn", "fsdp"), "tensor")
+      temp_sharding_spec = (("data", "fsdp"), "tensor")
       gmm1 = xs.enable_manual_sharding(gmm1, temp_sharding_spec).global_tensor
       gmm3 = xs.enable_manual_sharding(gmm3, temp_sharding_spec).global_tensor
       silu = xs.enable_manual_sharding(silu, temp_sharding_spec).global_tensor
       sgmm = xs.enable_manual_sharding(sgmm, temp_sharding_spec).global_tensor
       grad_output = xs.enable_manual_sharding(
-        grad_output, (("dcn", "fsdp"), None, None)
+        grad_output, (("data", "fsdp"), None, None)
       ).global_tensor
 
     grad_output_sorted = grad_output.reshape(-1, n)[hidden_states_order]
@@ -580,11 +581,12 @@ class Gmm(torch.autograd.Function):
       if not hasattr(ctx, "device_ids"):
         # Here we do a manual reduce scatter as SPMD will not be able to infer this after the manual sharding zone.
         mesh = xs.get_global_mesh()
-        dcn_axis = mesh.shape().get("dcn", 1)
-        slice_num_devices = len(mesh.device_ids) // dcn_axis
+        assert mesh is not None
+        num_slices = get_num_slices()
+        num_devices_per_slice = len(mesh.device_ids) // num_slices
         groups = [
-          list(range(i * slice_num_devices, (i + 1) * slice_num_devices))
-          for i in range(dcn_axis)
+          list(range(i * num_devices_per_slice, (i + 1) * num_devices_per_slice))
+          for i in range(num_slices)
         ]
         world_size = len(groups[0])
         grad_w1 = torch_xla.torch_xla._XLAC._xla_spmd_reduce_scatter(
@@ -598,7 +600,7 @@ class Gmm(torch.autograd.Function):
         )
 
         grad_output = xs.disable_manual_sharding(
-          grad_output, (("dcn", "fsdp"), None), (m, n)
+          grad_output, (("data", "fsdp"), None), (m, n)
         ).global_tensor
         # TODO: make the 0s more programmatic.
         # grad_w* sharding isn't affected by multipod.
@@ -726,7 +728,7 @@ class MixtralMoeBlock(nn.Module):
     expert_mask_fused = expert_mask.view(
       batch_size, seq_len * self.top_k, self.num_experts
     )  # (batch, s * top_k, e)
-    xs.mark_sharding(expert_mask_fused, mesh, (("dcn", "fsdp", "expert"), None, None))
+    xs.mark_sharding(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
 
     expert_token_count_fused = torch.cumsum(
       expert_mask_fused, dim=1
@@ -735,7 +737,7 @@ class MixtralMoeBlock(nn.Module):
       batch_size, seq_len, self.top_k, self.num_experts
     )  # (b, s, k, e)
     xs.mark_sharding(
-      expert_token_count, mesh, (("dcn", "fsdp", "expert"), None, None, None)
+      expert_token_count, mesh, (("data", "fsdp", "expert"), None, None, None)
     )
 
     trunc_expert_mask = expert_mask * (
@@ -832,21 +834,21 @@ class MixtralMoeBlock(nn.Module):
         dispatch_mask, combine_mask = self.generate_masks(
           selected_experts, expert_weights, mesh
         )
-        mask_axes = (("dcn", "fsdp", "expert"), None, None, None)
+        mask_axes = (("data", "fsdp", "expert"), None, None, None)
         xs.mark_sharding(dispatch_mask, mesh, mask_axes)
         xs.mark_sharding(combine_mask, mesh, mask_axes)
         loss = self.load_balance_loss(selected_experts, expert_weights)
-        xs.mark_sharding(hidden_states, mesh, (("dcn", "fsdp", "expert"), None, None))
+        xs.mark_sharding(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
         with xp.Trace("bsm,bsec->ebcm"):
           dispatch = torch.einsum("bsm,bsec->ebcm", hidden_states, dispatch_mask)
-        xs.mark_sharding(dispatch, mesh, ("expert", ("dcn", "fsdp"), None, None))
+        xs.mark_sharding(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
         expert_layer = self.experts(dispatch)
         with xp.Trace("ebcm,bsec -> bsm"):
           final_hidden_states = torch.einsum(
             "ebcm,bsec -> bsm", expert_layer, combine_mask
           )
         xs.mark_sharding(
-          final_hidden_states, mesh, (("dcn", "fsdp", "expert"), None, None)
+          final_hidden_states, mesh, (("data", "fsdp", "expert"), None, None)
         )
       case "gmm_stack":
         w1 = torch.stack([expert.w1.weight.t() for expert in self.experts])
