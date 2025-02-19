@@ -9,6 +9,7 @@ from timeit import default_timer as timer
 # Third-party library imports
 import datasets
 import hydra
+import numpy as np
 import torch
 
 # PyTorch XLA imports
@@ -36,18 +37,72 @@ from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
+from torchprime.mesh.custom_mesh import maybe_get_custom_mesh
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
-from torchprime.torch_xla_models.topology import is_1d_sharding, is_multi_slice
+from torchprime.torch_xla_models.topology import (
+  get_num_slices,
+  is_1d_sharding,
+  is_multi_slice,
+)
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
 
 xr.use_spmd()
 assert xr.is_spmd() is True
+
+
+def _get_mesh(num_devices: int, config: DictConfig) -> xs.Mesh:
+  ici_mesh_shape = (
+    config.mesh.data,
+    config.mesh.fsdp,
+    config.mesh.tensor,
+    config.mesh.expert,
+  )
+  dcn_mesh_shape = (
+    config.dcn_mesh.data,
+    config.dcn_mesh.fsdp,
+    config.dcn_mesh.tensor,
+    config.dcn_mesh.expert,
+  )
+  devices = maybe_get_custom_mesh(
+    ici_mesh_shape=ici_mesh_shape,
+    dcn_mesh_shape=dcn_mesh_shape,
+    num_devices=num_devices,
+    num_slices=get_num_slices(),
+  )
+  if devices is not None:
+    mesh_shape = tuple(np.multiply(ici_mesh_shape, dcn_mesh_shape).tolist())
+    return xs.Mesh(devices, mesh_shape, ("data", "fsdp", "tensor", "expert"))
+
+  # TODO(https://github.com/pytorch/xla/issues/8683): When nightly torch_xla no longer crashes
+  # during training, we will be able to remove this special case and always use `HybridMesh` in
+  # both single and multi slice.
+  if is_multi_slice():
+    mesh = xs.HybridMesh(
+      ici_mesh_shape=ici_mesh_shape,
+      dcn_mesh_shape=dcn_mesh_shape,
+      axis_names=("data", "fsdp", "tensor", "expert"),
+    )
+  else:
+    for k, v in config.dcn_mesh.items():
+      assert (
+        v == 1
+      ), f"DCN mesh dim `{k}` must be 1 in single slice environments, got {v}"
+    mesh_shape = (
+      config.mesh.data,
+      config.mesh.fsdp,
+      config.mesh.tensor,
+      config.mesh.expert,
+    )
+    mesh = xs.Mesh(
+      list(range(num_devices)), mesh_shape, ("data", "fsdp", "tensor", "expert")
+    )
+  return mesh
 
 
 class Trainer:
@@ -69,26 +124,13 @@ class Trainer:
     # Set up SPMD mesh and shard the model
     num_devices = xr.global_runtime_device_count()
     assert (
-      num_devices == math.prod([i for i in config.mesh.values()])
-    ), f"Mesh is not using all the available devices. The environment has {num_devices} devices. "
-    f"Mesh requested: {config.mesh}"
+      num_devices
+      == math.prod(list(config.mesh.values()))
+      * math.prod(list(config.dcn_mesh.values()))
+    ), f"Mesh is not using all the available devices. The environment has {num_devices} devices. \
+      Mesh requested: {config.mesh}"
 
-    # TODO(https://github.com/pytorch/xla/issues/8683): When nightly torch_xla no longer crashes
-    # during training, we will be able to remove this special case and always use `HybridMesh` in
-    # both single and multi slice.
-    if is_multi_slice():
-      dcn_mesh_shape = (config.mesh.dcn, 1, 1, 1)
-      ici_mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor, config.mesh.expert)
-      mesh = xs.HybridMesh(
-        ici_mesh_shape=ici_mesh_shape,
-        dcn_mesh_shape=dcn_mesh_shape,
-        axis_names=("dcn", "fsdp", "tensor", "expert"),
-      )
-    else:
-      assert config.mesh.dcn == 1
-      mesh_shape = (1, config.mesh.fsdp, config.mesh.tensor)
-      mesh = xs.Mesh(list(range(num_devices)), mesh_shape, ("dcn", "fsdp", "tensor"))
-
+    mesh = _get_mesh(num_devices, self.config)
     xs.set_global_mesh(mesh)
     logger.info(f"Logical mesh shape: {mesh.shape()}")
 
@@ -99,7 +141,7 @@ class Trainer:
 
     # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
     self.input_sharding_spec = xs.ShardingSpec(
-      mesh, (("dcn", "fsdp"), None), minibatch=minibatch
+      mesh, (("data", "fsdp"), None), minibatch=minibatch
     )
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True

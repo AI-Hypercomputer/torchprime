@@ -25,3 +25,10 @@ sharding:
   model.layers.*.post_attention_layernorm.weight: [fsdp]
   model.norm.weight: [fsdp]
   lm_head.weight: [tensor, fsdp]
+
+  # Activations
+  model.layers.*.self_attn: [fsdp, null, tensor]
+  model.layers.*.input_layernorm: [fsdp, null, tensor]
+  model.layers.*.post_attention_layernorm: [fsdp, null, tensor]
+  model.layers.*.mlp: [fsdp, null, tensor]
+  model.layers.*: [fsdp, null, tensor]

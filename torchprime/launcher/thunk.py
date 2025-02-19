@@ -36,6 +36,7 @@ os.environ["XLA_FLAGS"] = " ".join(
     os.getenv("XLA_FLAGS", ""),
     f"--xla_dump_to={xla_dump_path}/",
     "--xla_dump_hlo_as_proto",
+    "--xla_dump_hlo_as_text",
   ]
 )
 print(f"Dumping XLA compiler outputs to {xla_dump_path}", flush=True)

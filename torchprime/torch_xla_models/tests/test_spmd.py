@@ -77,7 +77,7 @@ class TestConfigSpmd(unittest.TestCase):
     mesh_shape = (1, num_devices, 1, 1)
     assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
     device_ids = np.array(range(num_devices))
-    mesh = Mesh(device_ids, mesh_shape, ("dcn", "fsdp", "tensor", "expert"))
+    mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp", "tensor", "expert"))
     xs.set_global_mesh(mesh)
 
     # Create random input and label of batch size 8, sequence length 256.
@@ -177,7 +177,7 @@ class TestConfigSpmd(unittest.TestCase):
     mesh_shape = (1, num_devices, 1, 1)
     assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
     device_ids = np.array(range(num_devices))
-    mesh = Mesh(device_ids, mesh_shape, ("dcn", "fsdp", "tensor", "expert"))
+    mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp", "tensor", "expert"))
     xs.set_global_mesh(mesh)
 
     # Create random input and label of batch size 8, sequence length 256.
