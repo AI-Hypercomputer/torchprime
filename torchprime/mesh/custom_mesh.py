@@ -39,8 +39,9 @@ def maybe_get_custom_mesh(
     len(non_trivial_ici_mesh_shape) >= 2
     and non_trivial_ici_mesh_shape[-1] == 4
     and non_trivial_ici_mesh_shape[-2] == 64
+    and len([v for v in dcn_mesh_shape if v != 1]) <= 1
   ):
-    return get_64x4_hybrid_ring_mesh(
+    return _get_64x4_hybrid_ring_mesh(
       ici_mesh_shape=non_trivial_ici_mesh_shape,
       dcn_mesh_shape=dcn_mesh_shape,
       num_devices=num_devices,
@@ -49,7 +50,7 @@ def maybe_get_custom_mesh(
   return None
 
 
-def create_custom_64x4_device_mesh(
+def _create_custom_64x4_device_mesh(
   mesh_shape: Sequence[int],
   dcn_mesh_shape: Sequence[int],
   devices: Sequence[Any],
@@ -67,9 +68,9 @@ def create_custom_64x4_device_mesh(
 
   from jax.experimental import mesh_utils
 
-  assert (
-    len(devices) % 256 == 0
-  ), f"This custom mesh is not valid for {len(devices)} devices"
+  assert len(devices) % 256 == 0, (
+    f"This custom mesh is not valid for {len(devices)} devices"
+  )
   attr = "slice_index"
   if not hasattr(devices[0], attr):
     raise ValueError(
@@ -132,7 +133,7 @@ class Device:
   platform: str = "cpu"
 
 
-def get_64x4_hybrid_ring_mesh(
+def _get_64x4_hybrid_ring_mesh(
   ici_mesh_shape: Sequence[int],
   dcn_mesh_shape: Sequence[int],
   num_devices: int,
@@ -143,10 +144,29 @@ def get_64x4_hybrid_ring_mesh(
     Device(i // num_devices_per_granule, i // num_devices_per_granule, i)
     for i in range(num_devices)
   ]
-  devices = (
-    create_custom_64x4_device_mesh(ici_mesh_shape, dcn_mesh_shape, devices)
-    .reshape(-1)
-    .tolist()
-  )
+  devices = _create_custom_64x4_device_mesh(ici_mesh_shape, dcn_mesh_shape, devices)
+
+  # If both ICI and DCN contributes to a mesh dim, iterate over DCN groups in the
+  # inner most splitting, and ICI devices in the outer splitting. This device assignment
+  # is friendly to all-gather and reduce-scatter over the hybrid DCN-ICI dim, because
+  # e.g. in case of hierarchical all-gather, we first all-gather across the DCN link,
+  # then across the ICI devices, for efficiency.
+  non_trivial_dcn_idx = None
+  for i in range(len(dcn_mesh_shape)):
+    if dcn_mesh_shape[i] > 1:
+      if non_trivial_dcn_idx is not None:
+        raise ValueError("Only up to one non-trivial DCN mesh dim is supported")
+      non_trivial_dcn_idx = i
+  if non_trivial_dcn_idx is not None and ici_mesh_shape[non_trivial_dcn_idx] > 1:
+    # E.g. if we have ici_mesh_shape=(64, 4) and dcn_mesh_shape=(2, 1), we want to
+    # first reshape the devices to (2, 64, 4), then transpose the first two dims.
+    devices = devices.reshape(
+      *ici_mesh_shape[:non_trivial_dcn_idx],
+      dcn_mesh_shape[non_trivial_dcn_idx],
+      *ici_mesh_shape[non_trivial_dcn_idx:],
+    )
+    devices = np.swapaxes(devices, non_trivial_dcn_idx + 1, non_trivial_dcn_idx)
+
+  devices = devices.reshape(-1).tolist()
   devices = np.array(tree_map(lambda d: d.uid, devices))
   return devices
