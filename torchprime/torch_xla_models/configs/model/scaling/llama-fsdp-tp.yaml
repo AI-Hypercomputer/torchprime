@@ -32,21 +32,3 @@ sharding:
   model.layers.*.post_attention_layernorm: [fsdp, null, tensor]
   model.layers.*.mlp: [fsdp, null, tensor]
   model.layers.*: [fsdp, null, tensor]
-
-
-blakes_suggested_sharding:
-  model.embed_tokens.weight: [(fsdp, dcn), tensor]
-
-  # What is the effect of sharding the output dim of `q_proj` along both `tensor` and `dcn`?
-  model.layers.*.self_attn.q_proj.weight: [(tensor,dcn), fsdp]
-
-  model.layers.*.self_attn.k_proj.weight: [(tensor,dcn), fsdp]
-  model.layers.*.self_attn.v_proj.weight: [(tensor,dcn), fsdp]
-  model.layers.*.self_attn.o_proj.weight: [(fsdp, dcn), tensor]
-  model.layers.*.mlp.gate_proj.weight: [(tensor,dcn), fsdp]
-  model.layers.*.mlp.up_proj.weight: [(tensor,dcn), fsdp]
-  model.layers.*.mlp.down_proj.weight: [(fsdp,dcn), tensor]
-  model.layers.*.input_layernorm.weight: [(fsdp, dcn)]
-  model.layers.*.post_attention_layernorm.weight: [(fsdp, dcn)]
-  model.norm.weight: [(fsdp, dcn)]
-  lm_head.weight: [(tensor, dcn), fsdp]
