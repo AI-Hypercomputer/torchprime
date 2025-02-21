@@ -4,6 +4,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Workaround for MegaScale crash
+#
+# TODO(https://github.com/pytorch/xla/issues/8683): Remove the
+# `--megascale_grpc_enable_xor_tracer=false` flag when libtpu is updated
+xla_flags = os.environ.get("LIBTPU_INIT_ARGS", "")
+xla_flags = f"{xla_flags} --megascale_grpc_enable_xor_tracer=false"
+os.environ["LIBTPU_INIT_ARGS"] = xla_flags
+
 # Get the artifact dir from env var.
 gcs_artifact_dir = os.environ["TORCHPRIME_ARTIFACT_DIR"]
 assert gcs_artifact_dir.startswith(

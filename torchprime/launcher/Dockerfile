@@ -54,6 +54,4 @@ RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
         pip install -e /workspaces/torchprime/local_transformers evaluate; \
     fi
 
-# TODO(https://github.com/pytorch/xla/issues/8683): Remove the
-# `--megascale_grpc_enable_xor_tracer=false` flag when libtpu is updated
-ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --megascale_grpc_enable_xor_tracer=false"
+ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
