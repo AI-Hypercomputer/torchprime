@@ -48,6 +48,12 @@ os.environ["XLA_FLAGS"] = " ".join(
 )
 print(f"Dumping XLA compiler outputs to {xla_dump_path}", flush=True)
 
+# Verbose logging flags to help debug TPU hardware issue
+os.environ["TPU_VMODULE"] = "slice_configuration=1,real_program_continuator=1"
+os.environ["TPU_STDERR_LOG_LEVEL"] = "0"
+os.environ["TPU_MIN_LOG_LEVEL"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+
 # Determine the profile dir
 profile_dir = mounted_artifact_dir / jobset_name / "profile" / host_name
 print(f"Profile output directory: {profile_dir}", flush=True)
