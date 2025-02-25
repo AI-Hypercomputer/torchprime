@@ -5,6 +5,33 @@ from typing import Optional
 
 import torch.nn
 
+
+@torch.library.custom_op("xla::aot_mark_sharding", mutates_args=())
+def aot_mark_sharding(t: torch.Tensor, partition_spec: str) -> torch.Tensor:
+  import torch_xla
+  if t is None:
+    return None
+  import ast
+  mesh = torch_xla.distributed.spmd.get_global_mesh()
+  partition_spec_eval = ast.literal_eval(partition_spec)
+  torch_xla.distributed.spmd.mark_sharding(
+      t, mesh, partition_spec_eval)
+  return t.clone()
+
+@aot_mark_sharding.register_fake
+def aot_mark_sharding_fake(t: torch.Tensor, partition_spec: str) -> torch.Tensor:
+  if t is None:
+    return None
+  return torch.empty_like(t)
+
+
+def aot_mark_sharding_backward(ctx, grad):
+  return grad, None
+
+
+aot_mark_sharding.register_autograd(aot_mark_sharding_backward)
+
+
 ShardWeightFn = Callable[[torch.Tensor, str], torch.Tensor]
 """
 ShardWeightFn optionally transforms a weight tensor based on its name.
@@ -228,7 +255,10 @@ def shard_torch_xla_model_from_config(
   def shard_param(tensor, spec: tuple[str, ...]):
     the_mesh = mesh if mesh is not None else xs.get_global_mesh()
     assert the_mesh is not None, "No mesh found"
-    return xs.mark_sharding(tensor, the_mesh, spec).global_tensor
+    # TODO(https://github.com/pytorch/xla/issues/8678): Shard the gradient too.
+    # Previously we use xs.mark_sharding(tensor, the_mesh, spec).global_tensor.
+    # However, this is not supported for AOT compilation.
+    return aot_mark_sharding(tensor, str(spec))
 
   return shard_model_from_config(
     model,

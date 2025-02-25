@@ -19,6 +19,7 @@
 """PyTorch LLaMA model."""
 
 import math
+import functools
 
 import torch
 import torch_xla.debug.profiler as xp
@@ -30,6 +31,7 @@ from transformers.utils import logging
 
 from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
 from torchprime.torch_xla_models.loss import cross_entropy_loss
+from torchprime.torch_xla_models.experimental import offloading
 
 import torch_xla.distributed.spmd as xs
 
@@ -278,7 +280,7 @@ class LlamaAttention(nn.Module):
         f" {attn_output.size()}"
       )
 
-    aot_mark_sharding(hidden_states, partition_spec='("fsdp", None, None)')
+    # aot_mark_sharding(hidden_states, partition_spec='("fsdp", None, None)')
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
@@ -339,30 +341,6 @@ class LlamaDecoderLayer(nn.Module):
     # return hidden_states, attention_mask, position_ids
 
 
-@torch.library.custom_op("xla::aot_mark_sharding", mutates_args=())
-def aot_mark_sharding(t: torch.Tensor, partition_spec: str) -> torch.Tensor:
-  import torch_xla
-  if t is None:
-    return None
-  import ast
-  mesh = torch_xla.distributed.spmd.get_global_mesh()
-  partition_spec_eval = ast.literal_eval(partition_spec)
-  torch_xla.distributed.spmd.mark_sharding(
-      t, mesh, partition_spec_eval)
-  return t.clone()
-
-@aot_mark_sharding.register_fake
-def aot_mark_sharding_fake(t: torch.Tensor, partition_spec: str) -> torch.Tensor:
-  if t is None:
-    return None
-  return torch.empty_like(t)
-
-
-def aot_mark_sharding_backward(ctx, grad):
-  return grad, None
-
-aot_mark_sharding.register_autograd(aot_mark_sharding_backward)
-
 class CurriedLayer(torch.nn.Module):
     def __init__(self, decoder_layer):
         super().__init__()
@@ -370,6 +348,7 @@ class CurriedLayer(torch.nn.Module):
         
 
     def forward(self, hidden_states):
+        hidden_states = offloading.offload_name(hidden_states, "decoder_input")
         sequence_length = hidden_states.shape[1]
         position_ids = torch.arange(
           sequence_length, device=hidden_states.device
@@ -381,6 +360,8 @@ class CurriedLayer(torch.nn.Module):
         hidden_states = self.decoder_layer(hidden_states, causal_mask, position_ids)
         return hidden_states
 
+remat_all_offload_decoder_input = functools.partial(
+    offloading.remat_all_and_offload_these_inputs, names_to_offload=["decoder_input"])
 
 class LlamaModel(nn.Module):
   """
@@ -403,9 +384,7 @@ class LlamaModel(nn.Module):
       ]
     )
     self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    if self.config.scan_decoder_layers:
-    # if True:
-      self.layers = nn.ModuleList([CurriedLayer(layer) for layer in self.layers])
+    
 
   @xp.trace_me("LlamaModel")
   def forward(
@@ -421,14 +400,7 @@ class LlamaModel(nn.Module):
 
     # Create a causal mask without calling the current method
     seq_length = inputs_embeds.size(1)
-    causal_mask = torch.triu(
-      torch.full((seq_length, seq_length), float("-inf"), device=inputs_embeds.device),
-      diagonal=1,
-    )
-    causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # Add batch and head dimension
 
-    if attention_mask is not None:
-      causal_mask = causal_mask * attention_mask[:, None, None, :]
 
     # embed positions
     hidden_states = inputs_embeds
@@ -437,15 +409,24 @@ class LlamaModel(nn.Module):
     if not self.config.scan_decoder_layers:
     # if True:
       logger.info("Using standard decoder layers")
+      causal_mask = torch.triu(
+        torch.full((seq_length, seq_length), float("-inf"), device=inputs_embeds.device),
+        diagonal=1,
+      )
+      causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # Add batch and head dimension
+
+      if attention_mask is not None:
+        causal_mask = causal_mask * attention_mask[:, None, None, :]
       for decoder_layer in self.layers:
+      #   hidden_states = decoder_layer(
+      #     hidden_states
+      #   )
         hidden_states = decoder_layer(
-          hidden_states
+          hidden_states, attention_mask=causal_mask, position_ids=position_ids
         )
-        # hidden_states = decoder_layer(
-        #   hidden_states, attention_mask=causal_mask, position_ids=position_ids
-        # )
     else:
-      hidden_states = scan_layers(self.layers, input_data = hidden_states)
+      layers = nn.ModuleList([CurriedLayer(layer) for layer in self.layers])
+      hidden_states = scan_layers(layers, input_data = hidden_states, partition_fn=remat_all_offload_decoder_input)
     hidden_states = self.norm(hidden_states)
     return hidden_states
 
