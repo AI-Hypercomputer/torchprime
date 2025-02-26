@@ -29,13 +29,13 @@ lr_scheduler:
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called
 # "Inter-Chip Interconnect".
-mesh:
+ici_mesh:
   data: 1
   fsdp: 4
   tensor: 1
   expert: 1
 
-# Shape of the logical mesh where each element is a TPU slice. This is call
+# Shape of the logical mesh where each element is a TPU slice. This is called
 # "Data Center Network (DCN) mesh" because TPU slices are usually connected
 # together with slower data center networking, with the faster ICI network
 # used within a slice.

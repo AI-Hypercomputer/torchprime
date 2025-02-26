@@ -61,15 +61,16 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
     num_devices = xr.global_runtime_device_count()
   assert (
     num_devices
-    == math.prod(list(config.mesh.values())) * math.prod(list(config.dcn_mesh.values()))
+    == math.prod(list(config.ici_mesh.values()))
+    * math.prod(list(config.dcn_mesh.values()))
   ), f"Mesh is not using all the available devices. The environment has {num_devices} devices. \
-    Mesh requested: ICI={config.mesh}, DCN={config.dcn_mesh}"
+    Mesh requested: ICI={config.ici_mesh}, DCN={config.dcn_mesh}"
 
   ici_mesh_shape = (
-    config.mesh.data,
-    config.mesh.fsdp,
-    config.mesh.tensor,
-    config.mesh.expert,
+    config.ici_mesh.data,
+    config.ici_mesh.fsdp,
+    config.ici_mesh.tensor,
+    config.ici_mesh.expert,
   )
   dcn_mesh_shape = (
     config.dcn_mesh.data,
@@ -104,10 +105,10 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
         v == 1
       ), f"DCN mesh dim `{k}` must be 1 in single slice environments, got {v}"
     mesh_shape = (
-      config.mesh.data,
-      config.mesh.fsdp,
-      config.mesh.tensor,
-      config.mesh.expert,
+      config.ici_mesh.data,
+      config.ici_mesh.fsdp,
+      config.ici_mesh.tensor,
+      config.ici_mesh.expert,
     )
     mesh = xs.Mesh(
       list(range(num_devices)), mesh_shape, ("data", "fsdp", "tensor", "expert")

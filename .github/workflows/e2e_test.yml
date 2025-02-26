@@ -56,7 +56,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             global_batch_size=8 \
-            mesh.fsdp=4 \
+            ici_mesh.fsdp=4 \
             dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
@@ -76,8 +76,8 @@ jobs:
             model=llama-3-8b \
             model/scaling=llama-fsdp-tp \
             global_batch_size=8 \
-            mesh.fsdp=2 \
-            mesh.tensor=2 \
+            ici_mesh.fsdp=2 \
+            ici_mesh.tensor=2 \
             dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
@@ -97,7 +97,7 @@ jobs:
             model=mixtral-8x7b \
             model.num_hidden_layers=16 \
             global_batch_size=8 \
-            mesh.fsdp=4 \
+            ici_mesh.fsdp=4 \
             dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15

@@ -51,7 +51,7 @@ def test_get_mesh():
   # Test a custom mesh
   config = OmegaConf.create(
     {
-      "mesh": {
+      "ici_mesh": {
         "data": 1,
         "fsdp": 64,
         "tensor": 4,
@@ -75,7 +75,7 @@ def test_get_mesh():
   # Test a simple FSDP mesh
   config = OmegaConf.create(
     {
-      "mesh": {
+      "ici_mesh": {
         "data": 1,
         "fsdp": xr.global_runtime_device_count(),
         "tensor": 1,

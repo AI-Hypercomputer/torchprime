@@ -48,13 +48,13 @@ In both `torch_xla_models` and `torchax_models` directories, you'll find
 a `configs/default.yaml`. That specifies the default configuration for the
 trainer. You may override configs on the command line with a `key=value`
 syntax. For example, the following command will train Mixtral 8x7B with a
-global batch size of 256, and set the FSDP SPMD mesh axis length to 64:
+global batch size of 256, and set the FSDP SPMD ICI mesh axis length to 64:
 
 ```sh
 python3 torchprime/torch_xla_models/train.py \
     model=mixtral-8x7b \
     global_batch_size=256 \
-    mesh.fsdp=64
+    ici_mesh.fsdp=64
 ```
 
 You may refer to the hydra docs for other ways to specify configs.
@@ -81,11 +81,23 @@ tp use \
 Then prepend `tp run` to a particular Python file you would like to
 run remotely, including arguments, e.g.
 
+`torch_xla` example:
+
+```sh
+# Train Llama 3.0 8B on 256 chips
+tp run torchprime/torch_xla_models/train.py \
+    model=llama-3-8b \
+    global_batch_size=256 \
+    ici_mesh.fsdp=256
+```
+
+`torchax` example:
+
 ```sh
 tp run torchprime/experimental/torchax_models/run.py global_batch_size=256
 ```
 
-`tp run` will broadcast this command to all VMs in the XPK cluster,
+`tp run` will broadcast the specified command to all VMs in the XPK cluster,
 which is the convention for running SPMD distributed workloads.
 
 #### Env var passed to the workload

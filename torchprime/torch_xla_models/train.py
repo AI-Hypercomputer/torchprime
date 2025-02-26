@@ -73,7 +73,7 @@ class Trainer:
     logger.info(f"Logical mesh device assignments: {mesh.device_ids}")
 
     # TODO(https://github.com/pytorch/xla/issues/8696): Minibatch only works in 1D sharding.
-    minibatch = is_1d_sharding(tuple(config.mesh.values()))
+    minibatch = is_1d_sharding(tuple(config.ici_mesh.values()))
     self.minibatch = minibatch
     logger.info(f"Minibatch dataloading: {minibatch}")
 
