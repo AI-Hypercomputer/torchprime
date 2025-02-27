@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-# FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250217
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.6.0_3.10_tpuvm_cxx11
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250217
 
 ARG USE_TRANSFORMERS=false
 # Install system dependencies

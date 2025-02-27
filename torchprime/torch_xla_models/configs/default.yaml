@@ -8,15 +8,14 @@ defaults:
   - model: llama-3-8b # refers to model/llama-3-8b.yaml
 
 dataset_name: wikitext
-# dataset_config_name: wikitext-2-raw-v1
-dataset_config_name: wikitext-103-raw-v1
-global_batch_size: 1024
+dataset_config_name: wikitext-2-raw-v1
+global_batch_size: 8
 logging_steps: 10
 max_steps: 15
 block_size: 8192
 cache_dir: /tmp/
 seed: 42
-profile_step: 3
+profile_step: -1
 
 # This might be overwritten when using tp run to launch the run using XPK
 profile_dir: profile
