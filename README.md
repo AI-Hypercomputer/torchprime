@@ -100,7 +100,7 @@ tp run torchprime/experimental/torchax_models/run.py global_batch_size=256
 `tp run` will broadcast the specified command to all VMs in the XPK cluster,
 which is the convention for running SPMD distributed workloads.
 
-#### Env var passed to the workload
+#### Env vars passed to the workload
 
 `tp run` will pick up these environment variables locally and proxy them
 to the distributed workload, if found:
@@ -108,7 +108,37 @@ to the distributed workload, if found:
 - `HF_TOKEN`: HuggingFace token
 - `XLA_IR_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
 - `XLA_HLO_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
-- `LIBTPU_INIT_ARGS`: xla flag
+- `LIBTPU_INIT_ARGS`: XLA flags that affect compilation and execution behavior
+
+## Model status
+
+Here are the status of various models. In general, there are five stages for
+each model:
+
+- **TODO**: We need to implement the model.
+- **Implemented**: The model runs either a training or an inference step.
+- **Optimized**: We found the best scaling configuration for the model on one or
+  more hardware. One-off performance data is available.
+- **Convergence**: We tested that the training loss converges to a reasonable
+  value.
+- **Production**: Not only is the model optimized and converges, its performance
+  is also continuously monitored. This is a good state for using the model in
+  production.
+
+If a model is at least implemented, you'll also find a training recipe linked
+from the table.
+
+| **Model**            | **torch_xla**                                                                                                                                                | **torchax**                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Llama 3.0 8B         | [Optimized](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256). Next: [convergence](https://github.com/AI-Hypercomputer/torchprime/issues/90)     | TODO                                                                                                |
+| Llama 3.1 8B         | [Implemented](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/issues/133)     | [Implemented](torchprime/experimental/torchax_models/README.md#llama-31-8b-on-v6e-8)                |
+| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)                                                                                             | Implemented                                                                                         |
+| Llama 3.1 405B       | [Implemented](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/milestone/2)  | [Optimized](torchprime/experimental/torchax_models/README.md#llama-31-405b-on-2-pods-of-v6e-256)    |
+| Mixtral 8x7B         | [Implemented](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/issues/44)     | TODO                                                                                                |
+| Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)                                                                                             | TODO                                                                                                |
+| DeepSeek V3/R1       | TODO                                                                                                                                                         | [Implemented (prefill only)](torchprime/experimental/torchax_models/deepseek_v3/)                   |
+| Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)                                                                                             | TODO                                                                                                |
+| Stable Diffusion 2.1 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/88)                                                                                             | TODO                                                                                                |
 
 ## Structure
 
@@ -132,31 +162,6 @@ Finally, each model may also provide a GPU "original" version that illustrates
 and attributes where this model code came from, if any. This also helps to
 show case what changes we have done to make it performant on TPU. The original
 version is not expected to be run.
-
-## Run huggingface transformer models
-Torchprime supports run with huggingface models by taking advantage of `tp run`.
-To use huggingface models, you can clone
-[huggingface/transformers](https://github.com/huggingface/transformers) under
-torchprime and name it as `local_transformers`. This allows you to pick any
-branch or make code modifications in transformers for experiment:
-```
-git clone https://github.com/huggingface/transformers.git local_transformers
-```
-If huggingface transformer doesn't exist, torchprime will automatically clone
-the repo and build the docker for experiment. To switch to huggingface models,
-add flag `--use-hf` to `tp run` command:
-```
-tp run --use-hf torchprime/hf_models/train.py
-```
-
-## Run with local torch/torch_xla wheel
-Torchprime supports run with user specified torch and torch_xla wheels placed
-under `local_dist/` directory. The wheel will be automatically installed in the
-docker image when use `tp run` command. To use the wheel, add flag
-`--use-local-wheel` to `tp run` command:
-```
-tp run --use-local-wheel torchprime/hf_models/train.py
-```
 
 ## Contributing
 
@@ -192,6 +197,39 @@ ruff check [--fix]
 You can install a Ruff VSCode plugin to check errors and format files from
 the editor.
 
+## Run huggingface transformer models
+
+For contributors to torchprime, `tp run` also supports running the huggingface
+trainer, for debugging and comparison.
+
+To run the huggingface trainer, you can clone
+[huggingface/transformers][hf-transformers] under
+torchprime and name it as `local_transformers`. This allows you to pick any
+branch or make code modifications in transformers for experiment:
+
+```sh
+git clone https://github.com/huggingface/transformers.git local_transformers
+```
+
+If huggingface transformer doesn't exist, torchprime will automatically clone
+the repo and build the docker for experiment. To switch to huggingface models,
+add flag `--use-hf` to `tp run` command:
+
+```sh
+tp run --use-hf torchprime/hf_models/train.py
+```
+
+## Run with local torch/torch_xla wheel
+
+Torchprime supports run with user specified torch and torch_xla wheels placed
+under `local_dist/` directory. The wheel will be automatically installed in the
+docker image when use `tp run` command. To use the wheel, add flag
+`--use-local-wheel` to `tp run` command:
+
+```sh
+tp run --use-local-wheel torchprime/hf_models/train.py
+```
+
 ## License
 
 This project is licensed under the New BSD License - see the [LICENSE](LICENSE)
@@ -205,3 +243,4 @@ For more information on PyTorch/XLA, visit the
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
 [hydra]: https://hydra.cc/docs/intro/
+[hf-transformers]: https://github.com/huggingface/transformers

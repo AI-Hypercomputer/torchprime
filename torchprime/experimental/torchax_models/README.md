@@ -40,30 +40,40 @@ pip install optax tensorflow tensorboard-plugin-profile
 pip install -e .[tpu] -f https://storage.googleapis.com/libtpu-releases/index.html
 ```
 
-## Running locally
+## Running locally on a TPU VM
 
-```bash
-python run.py --model_impl=<orig|scan|scan_manual>
-```
-
-## Run on XPK
-
-Follow the guide in `tp use` to setup the cluster information.
-
-Run `tp run <loal command>` to run the training command on the XPK cluster.
-
-## Benchmarks (WIP)
-
-|device| Model size | Batch size | seq length | step time | MFU | NOTEs|
-|-------| ----- | ----- | ----- | ----- | ----- | ---|
-|TPU v6e-8| 8B |        8 |      8192 | 1.7s | 30% | Scan, fsdp, host-offload|
-|TPU v6e-256 x 2| 405B | 256 | 8192 | 46.12s | 28.7% | Scan, fsdp + tp, host-offload|
-
-<!-- TODO: support specifying different XLA flags -->
-
-Llama 3.1 405B on v6e-256 x 2 command:
+Setup environment as per [README][README-examples].
 
 ```sh
+python run.py model_impl=<orig|scan|scan_manual>
+```
+
+### Llama 3.1 8B on v6e-8
+
+Recipe for global batch size 8, sequence length 8192.
+Expected step duration: 1.7s. MFU: 30%.
+
+```sh
+export LIBTPU_INIT_ARGS="--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
+
+python run.py model_impl=scan tp=1 global_batch_size=8 seqlen=8192
+```
+
+## Running on a XPK cluster
+
+First follow the [distributed training][distributed-training] guide to setup the
+cluster information.
+
+Run `tp run <local command>` to run the training command on the XPK cluster.
+
+### Llama 3.1 405B on 2 pods of v6e-256
+
+Recipe for global batch size 256, sequence length 8192.
+Expected step duration: 46.12s. MFU: 28.7%.
+
+```sh
+export LIBTPU_INIT_ARGS="--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
+
 tp run torchprime/experimental/torchax_models/run.py \
     global_batch_size=256 \
     model_type=405B \
@@ -74,3 +84,6 @@ tp run torchprime/experimental/torchax_models/run.py \
     tp=4 \
     unroll_layers=1
 ```
+
+[README-examples]: ../../README.md#examples
+[distributed-training]: ../../README.md#distributed-training
