@@ -120,25 +120,31 @@ each model:
 - **Optimized**: We found the best scaling configuration for the model on one or
   more hardware. One-off performance data is available.
 - **Convergence**: We tested that the training loss converges to a reasonable
-  value.
+  value, or that the loss curve tracks an existing reference if exists.
 - **Production**: Not only is the model optimized and converges, its performance
   is also continuously monitored. This is a good state for using the model in
   production.
 
-If a model is at least implemented, you'll also find a training recipe linked
-from the table.
+All implemented models will at least have unit tests to verify basic numerical
+correctness, and the convergence verification stage serves as an additional
+correctness guarantee.
 
-| **Model**            | **torch_xla**                                                                                                                                                | **torchax**                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Llama 3.0 8B         | [Optimized](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256). Next: [convergence](https://github.com/AI-Hypercomputer/torchprime/issues/90)     | TODO                                                                                                |
-| Llama 3.1 8B         | [Implemented](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/issues/133)     | [Implemented](torchprime/experimental/torchax_models/README.md#llama-31-8b-on-v6e-8)                |
-| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)                                                                                             | Implemented                                                                                         |
-| Llama 3.1 405B       | [Implemented](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/milestone/2)  | [Optimized](torchprime/experimental/torchax_models/README.md#llama-31-405b-on-2-pods-of-v6e-256)    |
-| Mixtral 8x7B         | [Implemented](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256). Next: [optimize](https://github.com/AI-Hypercomputer/torchprime/issues/44)     | TODO                                                                                                |
-| Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)                                                                                             | TODO                                                                                                |
-| DeepSeek V3/R1       | TODO                                                                                                                                                         | [Implemented (prefill only)](torchprime/experimental/torchax_models/deepseek_v3/)                   |
-| Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)                                                                                             | TODO                                                                                                |
-| Stable Diffusion 2.1 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/88)                                                                                             | TODO                                                                                                |
+If a model is at least implemented, you'll also find a training recipe linked
+from the checkmark emoji in the table. If a model is optimized, you'll also find
+MFU numbers linked from the table. Note that a model may continue to receive
+ongoing optimization thereafter.
+
+| **Model**            | **Implemented**                                                        | **Optimized**                                                      | **Converges** |
+| -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- |
+| Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256) | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
+| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/133)  | TODO |
+| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)       | TODO                                                               | TODO |
+| Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/milestone/2) | TODO |
+| Mixtral 8x7B         | [✅](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)    | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/44)   | TODO |
+| Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)       | TODO | TODO |
+| DeepSeek V3/R1       | TODO                                                                   | TODO | TODO |
+| Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)       | TODO | TODO |
+| Stable Diffusion 2.1 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/88)       | TODO | TODO |
 
 ## Structure
 
