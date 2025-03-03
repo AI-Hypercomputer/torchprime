@@ -5,17 +5,17 @@
 # override the earlier ones.
 defaults:
   - _self_ # refers to this config file
-  - model: llama-3-8b # refers to model/llama-3-8b.yaml
+  - model: llama-3.1-8b # refers to model/llama-3-8b.yaml
 
 dataset_name: wikitext
 dataset_config_name: wikitext-103-raw-v1
 global_batch_size: 1024
-logging_steps: 1
-max_steps: 500
+logging_steps: 10
+max_steps: 15
 block_size: 8192
 cache_dir: /tmp/
 seed: 42
-profile_step: -1
+profile_step: 3
 
 # This might be overwritten when using tp run to launch the run using XPK
 profile_dir: profile
@@ -25,8 +25,26 @@ optimizer:
 lr_scheduler:
   type: linear
   warmup_steps: 0
-mesh:
-  dcn: 1
+
+# The virtual device mesh shape to use within a TPU slice. This is also called
+# the "ICI mesh", since devices within a slice enjoy a faster network called
+# "Inter-Chip Interconnect".
+ici_mesh:
+  data: 1
   fsdp: 256
   tensor: 1
   expert: 1
+
+# Shape of the logical mesh where each element is a TPU slice. This is called
+# "Data Center Network (DCN) mesh" because TPU slices are usually connected
+# together with slower data center networking, with the faster ICI network
+# used within a slice.
+#
+# As an example, to enable 2-way data parallelism across 2 TPU slices, you may
+# specify `dcn_mesh.data=2`.
+dcn_mesh:
+  data: 1
+  fsdp: 1
+  tensor: 1
+  expert: 1
+
