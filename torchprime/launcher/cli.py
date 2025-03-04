@@ -208,7 +208,11 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   default=None,
 )
 @click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
-@click.option("--use-local-wheel", is_flag=True, help="Use local torch and torch_xla wheels under folder local_dist/")
+@click.option(
+  "--use-local-wheel",
+  is_flag=True,
+  help="Use local torch and torch_xla wheels under folder local_dist/",
+)
 @interactive
 def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
   """

@@ -59,7 +59,6 @@ htmlcov/
 **/transformers/
 **/local_transformers/
 
-
 # Ignore profiler outputs
 /profile/
 
