@@ -4,6 +4,7 @@ FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpu
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y curl gnupg
 
@@ -42,7 +43,8 @@ RUN pip install -e .
 COPY . /workspaces/torchprime
 
 # Install torch and torch_xla from local wheels if USE_LOCAL_WHEEL and exists
-# under local_dist directory. Note that you need to build the torch and torch_xla using the 
+# under local_dist directory. Note that you need to build the torch and
+# torch_xla using the 
 RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
         if [ -d "local_dist" ] && [ "$(find local_dist -name 'torch-*.whl' | wc -l)" -gt 0 ]; then \
             pip install local_dist/torch-*.whl; \
