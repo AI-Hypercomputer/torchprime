@@ -208,8 +208,9 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   default=None,
 )
 @click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
+@click.option("--use-local-wheel", is_flag=True, help="Use local torch and torch_xla wheels under folder local_dist/")
 @interactive
-def run(args, name: str | None, use_hf: bool):
+def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
   """
@@ -218,7 +219,11 @@ def run(args, name: str | None, use_hf: bool):
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
-  build_arg = "USE_TRANSFORMERS=true" if use_hf else None
+  build_arg = []
+  if use_hf:
+    build_arg.append("USE_TRANSFORMERS=true")
+  if use_local_wheel:
+    build_arg.append("USE_LOCAL_WHEEL=true")
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project

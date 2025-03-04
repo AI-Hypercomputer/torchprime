@@ -149,6 +149,15 @@ add flag `--use-hf` to `tp run` command:
 tp run --use-hf torchprime/hf_models/train.py
 ```
 
+## Run with local torch/torch_xla wheel
+Torchprime supports run with user specified torch and torch_xla wheels placed
+under `local_dist/` directory. The wheel will be automatically installed in the
+docker image when use `tp run` command. To use the wheel, add flag
+`--use-local-wheel` to `tp run` command:
+```
+tp run --use-local-wheel torchprime/hf_models/train.py
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request.

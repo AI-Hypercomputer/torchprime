@@ -48,7 +48,8 @@ def buildpush(
 
   build_cmd = f"{sudo_cmd} docker build"
   if build_arg:
-    build_cmd += f" --build-arg {build_arg}"
+    for _arg in build_arg:
+      build_cmd += f" --build-arg {_arg}"
   build_cmd += (
     f" --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}"
   )
