@@ -203,31 +203,9 @@ ruff check [--fix]
 You can install a Ruff VSCode plugin to check errors and format files from
 the editor.
 
-## Run huggingface transformer models
+## Run distributed training with local torch/torch_xla wheel
 
-For contributors to torchprime, `tp run` also supports running the huggingface
-trainer, for debugging and comparison.
-
-To run the huggingface trainer, you can clone
-[huggingface/transformers][hf-transformers] under
-torchprime and name it as `local_transformers`. This allows you to pick any
-branch or make code modifications in transformers for experiment:
-
-```sh
-git clone https://github.com/huggingface/transformers.git local_transformers
-```
-
-If huggingface transformer doesn't exist, torchprime will automatically clone
-the repo and build the docker for experiment. To switch to huggingface models,
-add flag `--use-hf` to `tp run` command:
-
-```sh
-tp run --use-hf torchprime/hf_models/train.py
-```
-
-## Run with local torch/torch_xla wheel
-
-Torchprime supports run with user specified torch and torch_xla wheels placed
+Torchprime supports running with user specified torch and torch_xla wheels placed
 under `local_dist/` directory. The wheel will be automatically installed in the
 docker image when use `tp run` command. To use the wheel, add flag
 `--use-local-wheel` to `tp run` command:
@@ -235,6 +213,10 @@ docker image when use `tp run` command. To use the wheel, add flag
 ```sh
 tp run --use-local-wheel torchprime/hf_models/train.py
 ```
+
+The wheels should be built inside a
+[PyTorch/XLA development docker image][torch_xla_dev_docker] or the PyTorch/XLA
+VSCode Dev Container to minimize compatibility issues.
 
 ## License
 
@@ -249,4 +231,4 @@ For more information on PyTorch/XLA, visit the
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
 [hydra]: https://hydra.cc/docs/intro/
-[hf-transformers]: https://github.com/huggingface/transformers
+[torch_xla_dev_docker]: https://github.com/pytorch/xla/blob/master/CONTRIBUTING.md#manually-build-in-docker-container
