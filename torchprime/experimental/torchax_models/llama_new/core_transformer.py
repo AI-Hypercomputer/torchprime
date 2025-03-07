@@ -7,7 +7,7 @@
 
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
-
+import jax
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .args import ModelArgs
+from .args import ModelArgs, MoEArgs
 from .datatypes import CoreTransformerInput, CoreTransformerOutput
 from .moe import MoE, ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
 
@@ -141,50 +141,7 @@ class Attention(nn.Module):
             init_method=lambda x: x,
         )
 
-        self.cache_k = torch.zeros(
-            (
-                args.max_batch_size,
-                args.max_seq_len,
-                self.n_local_kv_heads,
-                self.head_dim,
-            )
-        )
-        self.cache_v = torch.zeros(
-            (
-                args.max_batch_size,
-                args.max_seq_len,
-                self.n_local_kv_heads,
-                self.head_dim,
-            )
-        )
-
-        self.qk_norm = None
-        if args.use_qk_norm:
-            self.qk_norm = L2Norm(args.norm_eps)
-        self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "wqkv.weight" in state_dict:
-            wqkv = state_dict.pop(prefix + "wqkv.weight")
-            d, r = divmod(wqkv.shape[0], self.n_heads + 2 * self.n_kv_heads)
-            if r != 0:
-                raise ValueError(
-                    f"shape={tuple(wqkv.shape)} is not divisible by "
-                    f"n_heads ({self.n_heads}) + 2 * n_kv_heads ({self.n_kv_heads})"
-                )
-            wq, wk, wv = wqkv.split([d * self.n_heads, d * self.n_kv_heads, d * self.n_kv_heads], dim=0)
-            state_dict[prefix + "wq.weight"] = wq
-            state_dict[prefix + "wk.weight"] = wk
-            state_dict[prefix + "wv.weight"] = wv
+        self.qk_norm = L2Norm(args.norm_eps)
 
     def forward(
         self,
@@ -206,14 +163,6 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        self.cache_k = self.cache_k.to(xq)
-        self.cache_v = self.cache_v.to(xq)
-
-        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
-
-        xk = self.cache_k[:bsz, : start_pos + seqlen]
-        xv = self.cache_v[:bsz, : start_pos + seqlen]
 
         xq, xk, xv = [t.transpose(1, 2) for t in (xq, xk, xv)]
 
@@ -231,22 +180,108 @@ class FeedForward(nn.Module):
         self,
         dim: int,
         hidden_dim: int,
-        multiple_of: int,
-        ffn_dim_multiplier: Optional[float],
     ):
         super().__init__()
-        hidden_dim = int(2 * hidden_dim / 3)
-        # custom dim factor multiplier
-        if ffn_dim_multiplier is not None:
-            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-
         self.w1 = ColumnParallelLinear(dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x)
         self.w2 = RowParallelLinear(hidden_dim, dim, bias=False, input_is_parallel=True, init_method=lambda x: x)
         self.w3 = ColumnParallelLinear(dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+        
+
+class ConditionalFeedForward(torch.nn.Module):
+
+  def __init__(self, num_experts, hidden_dim, dim):
+    super().__init__()
+    self.w1 = nn.Parameter(
+        torch.empty(num_experts, dim, hidden_dim)
+    )
+    self.w2 = nn.Parameter(
+        torch.empty(num_experts, hidden_dim, dim)
+    )
+    self.w3 = nn.Parameter(
+        torch.empty(num_experts, dim, hidden_dim)
+    )
+
+  def forward(self, x: torch.Tensor, expert_indices: torch.Tensor) -> torch.Tensor:
+    seqlen = x.shape[0]
+
+    # e = total num of exp = 16
+    # t = seqlen
+    # o = config.imtermediate size
+    # i = config.dim
+    with jax.named_scope("conditional_ff"):
+      x1 = F.silu(torch.einsum("ti,eoi -> teo", x, self.w1))
+      x3 = torch.einsum("ti, eoi-> teo", x, self.w3)
+      expert_outs = torch.einsum("teo, eio -> tei", (x1 * x3), self.w2)
+      # e = 16; need to reduce to 1
+      seq_indexes = torch.arange(seqlen, device=x.device).unsqueeze(1)
+      return expert_outs[seq_indexes, expert_indices]
+
+
+class MOEFeedForward(torch.nn.Module):
+
+  def __init__(self,
+        dim: int,
+        hidden_dim: int,
+        ffn_dim_multiplier: float,
+        multiple_of: int,
+        moe_args: MoEArgs,
+    ) -> None:
+    super().__init__()
+    self.moe_args = moe_args
+
+    hidden_dim_denom: float = 1
+    if moe_args.auto_scale_F:
+        hidden_dim_denom = moe_args.capacity_factor + int(moe_args.use_shared_expert)
+
+    hidden_dim = int(2 * hidden_dim / 3)
+
+    # custom dim factor multiplier
+    hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+
+    if moe_args.auto_scale_F:
+        hidden_dim = int(hidden_dim / hidden_dim_denom)
+
+    # round hidden dimension to `multiple_of`
+    hidden_dim += -hidden_dim % multiple_of
+
+    # Sharding method is tp2ep: each TP rank has n_experts/tp experts. Experts are not sharded.
+    num_local_experts: int = moe_args.num_experts
+
+    self.shared_expert = FeedForward(
+        dim=dim,
+        hidden_dim=hidden_dim,
+    )
+
+    self.gate = torch.nn.Linear(dim, moe_args.num_experts)
+    self.cond_ffn = ConditionalFeedForward(num_local_experts, dim, hidden_dim)
+    self.dim = dim
+    self.num_activated_experts = moe_args.top_k
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    bsz, seq, hidden = x.shape
+    # [B, T, D], combine BT, for prefill B = 1, for decode, T = 1
+    x = x.view(-1, self.dim)
+    # T = num_tokens, E = num_experts, D = hidden dim, A = activated experts
+    # x: [T, D]
+    scores = self.gate(x)  # [T, E]
+    expert_weights = torch.sigmoid(scores)
+    # expert_weights = F.softmax(scores, dim=-1)
+    expert_weights, expert_indices = torch.topk(
+        expert_weights, self.num_activated_experts, dim=-1
+    )  # [T, A], [T, A]
+    #expert_weights /= expert_weights.sum(dim=-1, keepdim=True)  # [T, A]
+    expert_outs = self.cond_ffn(x, expert_indices)
+    expert_outs = torch.einsum("tai,ta -> ti", expert_outs, expert_weights)
+    # Changes back to [B, T, D]
+    expert_outs = expert_outs.reshape(bsz, seq, hidden)
+
+    shared_exp_out = self.shared_expert(x)
+    return expert_outs + shared_exp_out
+
 
 
 class TransformerBlock(nn.Module):
@@ -257,50 +292,16 @@ class TransformerBlock(nn.Module):
         self.head_dim = args.dim // args.n_heads
         self.attention = Attention(args)
 
-        if args.moe_args:
-            self.feed_forward = MoE(
-                dim=args.dim,
-                hidden_dim=int(args.ffn_exp * args.dim),
-                ffn_dim_multiplier=args.ffn_dim_multiplier,
-                multiple_of=args.multiple_of,
-                moe_args=args.moe_args,
-            )
-        else:
-            self.feed_forward = FeedForward(
-                dim=args.dim,
-                hidden_dim=4 * args.dim,
-                multiple_of=args.multiple_of,
-                ffn_dim_multiplier=args.ffn_dim_multiplier,
-            )
+        self.feed_forward = MOEFeedForward(
+            dim=args.dim,
+            hidden_dim=int(args.ffn_exp * args.dim),
+            ffn_dim_multiplier=args.ffn_dim_multiplier,
+            multiple_of=args.multiple_of,
+            moe_args=args.moe_args,
+        )
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
-
-        self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        local_metadata: Dict[str, Any],
-        strict: bool,
-        missing_keys: List[str],
-        unexpected_keys: List[str],
-        error_msgs: List[str],
-    ) -> None:
-        if prefix + "attention.wqkv.layer_norm_weight" in state_dict:
-            state_dict[prefix + "attention_norm.weight"] = state_dict.pop(prefix + "attention.wqkv.layer_norm_weight")
-        if prefix + "feed_forward.norm.weight" in state_dict:
-            state_dict[prefix + "ffn_norm.weight"] = state_dict.pop(prefix + "feed_forward.norm.weight")
-
-        for k in (
-            "feed_forward.experts.mlp",
-            "feed_forward.mlp_shared",
-            "attention.wo",
-            "attention.wqkv",
-        ):
-            if prefix + k + "._extra_state" in state_dict:
-                state_dict.pop(prefix + k + "._extra_state")
 
     def forward(
         self,
@@ -349,7 +350,6 @@ class CoreTransformer(nn.Module):
                 bias=False,
                 init_method=lambda x: x,
             )
-        self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
         self,

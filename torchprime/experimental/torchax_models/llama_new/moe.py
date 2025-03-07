@@ -254,8 +254,7 @@ class MoEFunction:
         x_aD: Tensor = x
         a, D = x_aD.shape
         
-        breakpoint()
-
+        # this is gate matmul
         router_scores_Ea: Tensor = torch.matmul(x_aD, router_DE).transpose(0, 1)
         tokens_per_expert: int = a
 

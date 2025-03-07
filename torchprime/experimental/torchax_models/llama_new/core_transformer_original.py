@@ -225,6 +225,7 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
+
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
         self.n_heads = args.n_heads
@@ -232,21 +233,13 @@ class TransformerBlock(nn.Module):
         self.head_dim = args.dim // args.n_heads
         self.attention = Attention(args)
 
-        if args.moe_args:
-            self.feed_forward = MoE(
-                dim=args.dim,
-                hidden_dim=int(args.ffn_exp * args.dim),
-                ffn_dim_multiplier=args.ffn_dim_multiplier,
-                multiple_of=args.multiple_of,
-                moe_args=args.moe_args,
-            )
-        else:
-            self.feed_forward = FeedForward(
-                dim=args.dim,
-                hidden_dim=4 * args.dim,
-                multiple_of=args.multiple_of,
-                ffn_dim_multiplier=args.ffn_dim_multiplier,
-            )
+        self.feed_forward = MoE(
+            dim=args.dim,
+            hidden_dim=int(args.ffn_exp * args.dim),
+            ffn_dim_multiplier=args.ffn_dim_multiplier,
+            multiple_of=args.multiple_of,
+            moe_args=args.moe_args,
+        )
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
@@ -312,18 +305,7 @@ class CoreTransformer(nn.Module):
             args.rope_theta,
             args.use_scaled_rope,
         )
-        vision_args = self.args.vision_args
-        if False: #vision_args:
-            # circular import otherwise until we refactor out Attention
-            from .vision.embedding import VisionEmbeddings
 
-            self.vision_embeddings = VisionEmbeddings(vision_args)
-            self.vision_projection = ColumnParallelLinear(
-                vision_args.output_dim,
-                args.dim,
-                bias=False,
-                init_method=lambda x: x,
-            )
         self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(
@@ -349,22 +331,17 @@ class CoreTransformer(nn.Module):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
 
-        if image_embedding := model_input.image_embedding:
-            h_image = self.vision_projection(image_embedding.embedding)
-            h = h * ~image_embedding.mask + h_image * image_embedding.mask
-
-        self.freqs_cis = self.freqs_cis.to(h.device)
         freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
 
         mask = None
         if seqlen > 1:
             mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
-
             mask = torch.triu(mask, diagonal=1)
 
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
-        output = self.output(h).float()
+
+        output = self.output(h)
 
         return CoreTransformerOutput(logits=output)

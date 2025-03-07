@@ -32,6 +32,5 @@ print(eval_model(weights, tokens))
 
 print(model)
 
-print(model(inputs))
 
 
