@@ -22,6 +22,7 @@ import math
 
 import torch
 import torch_xla.debug.profiler as xp
+import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 from torch import nn
 from transformers.activations import ACT2FN
@@ -238,7 +239,43 @@ class LlamaAttention(nn.Module):
     key_states = repeat_kv(key_states, self.num_key_value_groups)
     value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-    if not self.config.flash_attention:
+    if self.config.splash_attention:
+      # Integrated with PyTorch/XLA Pallas Splash Attention:
+      from torchprime.torch_xla_models.experimental.custom_kernel import (
+        SplashAttentionConfig,
+        splash_attention,
+      )
+      sa_config = SplashAttentionConfig(
+        sa_block_q=512,
+        sa_block_kv=512,
+        sa_block_kv_compute=512,
+        sa_block_q_dkv=512,
+        sa_block_kv_dkv=512,
+        sa_block_kv_dkv_compute=512,
+        sa_block_q_dq=512,
+        sa_block_kv_dq=512,
+        sa_use_fused_bwd_kernel=False,
+        sa_q_layout="HEAD_DIM_MINOR",
+        sa_k_layout="HEAD_DIM_MINOR",
+        sa_v_layout="HEAD_DIM_MINOR",
+        mesh = str(xs.get_global_mesh())
+      )
+      attn_output = splash_attention(
+        query_states, key_states, value_states, sa_config.to_json()
+      )
+    elif self.config.flash_attention:
+      # Integrated with PyTorch/XLA Pallas Flash Attention:
+      from torch_xla.experimental.custom_kernel import flash_attention
+      query_states /= math.sqrt(self.head_dim)
+
+      attn_output = flash_attention(
+        query_states,
+        key_states,
+        value_states,
+        causal=True,
+        partition_spec=(("data", "fsdp"), "tensor", None, None),
+      )
+    else:
       attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
         self.head_dim
       )
@@ -255,19 +292,6 @@ class LlamaAttention(nn.Module):
         attn_weights, p=self.attention_dropout, training=self.training
       )
       attn_output = torch.matmul(attn_weights, value_states)
-    else:
-      # Integrated with PyTorch/XLA Pallas Flash Attention:
-      from torch_xla.experimental.custom_kernel import flash_attention
-
-      query_states /= math.sqrt(self.head_dim)
-
-      attn_output = flash_attention(
-        query_states,
-        key_states,
-        value_states,
-        causal=True,
-        partition_spec=(("data", "fsdp"), "tensor", None, None),
-      )
 
     if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
       raise ValueError(

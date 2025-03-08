@@ -19,6 +19,7 @@ rms_norm_eps: 1.0e-05
 attention_dropout: false
 attention_bias: false
 flash_attention: true
+splash_attention: false
 rope_theta: 500000.0
 rope_scaling:
   factor: 8.0
