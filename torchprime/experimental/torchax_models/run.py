@@ -15,6 +15,8 @@ from jax.experimental.mesh_utils import (
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
 from llama import model, model_with_collectives, model_with_scan
+from llama_new import core_transformer as llama_new
+from llama_new import args as llama_new_args
 from omegaconf import DictConfig, OmegaConf
 from torchax import interop
 
@@ -102,6 +104,26 @@ sharding_map_scan = {
   "output.weight": ("tp", "fsdp"),  #  torch.float32 (vocab_size, 4096)
 }
 
+sharding_map_llama_new = {
+'tok_embeddings.weight': ("tp", "fsdp"), # torch.Size([202048, 1024])
+'layers.*.attention.wq.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+'layers.*.attention.wk.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+'layers.*.attention.wv.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+'layers.*.attention.wo.weight': ("fsdp", "tp"), # torch.Size([1024, 1024])
+'layers.*.feed_forward.shared_expert.w1.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
+'layers.*.feed_forward.shared_expert.w2.weight': ("fsdp", "tp"), # torch.Size([1024, 2048])
+'layers.*.feed_forward.shared_expert.w3.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
+'layers.*.feed_forward.gate.weight': (None, "fsdp"), # torch.Size([16, 1024])
+'layers.*.feed_forward.gate.bias': ("fsdp",), # torch.Size([16])
+'layers.*.feed_forward.cond_ffn.w1': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
+'layers.*.feed_forward.cond_ffn.w2': (None, "fsdp", "tp"), # torch.Size([16, 1024, 2048])
+'layers.*.feed_forward.cond_ffn.w3': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
+'layers.*.attention_norm.weight': ("fsdp",), # torch.Size([1024])
+'layers.*.ffn_norm.weight': ("fsdp",), # torch.Size([1024])
+'norm.weight': ("fsdp",), # torch.Size([1024])
+'output.weight': ("tp", "fsdp"), # torch.Size([202048, 1024])
+}
+
 
 def _bytes(x: jax.Array | jax.ShapeDtypeStruct) -> int:
   return math.prod(x.shape) * x.dtype.itemsize
@@ -136,6 +158,11 @@ def register_attention(fn):
   env._ops[k] = ops_registry.Operator(
     k, fn, is_jax_function=False, is_user_defined=True, needs_env=False
   )
+
+def print_sharding_map_template(state_dict):
+  for k, v in state_dict.items():
+    print(f"'{k}': {(None, )*len(v.shape)}, # {v.shape}")
+    
 
 
 def make_weight_shard(weight_meta, slice_index):
@@ -269,13 +296,24 @@ def main(config: DictConfig):
       args.vocab_size = 128256
       args.max_seq_len = config.seqlen
       llama = TitanModel(args)
+    elif config.model_impl == "llama_new":
+      args = llama_new_args.make_17b(1, config.seqlen, tiny=True)
+      llama = llama_new.CoreTransformer(args)
+      sharding_map = sharding_map_llama_new
     else:
       raise AssertionError("unknown impl: " + config.model_impl)
-
+  #print_sharding_map_template(llama.state_dict())
   sharded_weights = create_sharded_weights(llama, mesh, sharding_map)
   with torch.device("cpu"):
     if config.model_impl == "titan":
       freqs_cis = llama.model._precompute_freqs_cis().numpy()
+    elif config.model_impl == "llama_new":
+      freqs_cis = llama_new.precompute_freqs_cis(
+        args.dim // args.n_heads,
+        args.max_seq_len * 2,
+        args.rope_theta,
+        args.use_scaled_rope,
+      ).numpy()
     else:
       freqs_cis = model.precompute_freqs_cis(
         args.dim // args.n_heads,

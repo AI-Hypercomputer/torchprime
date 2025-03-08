@@ -24,6 +24,13 @@ def eval_model(weights, tokens):
   res = torch.func.functional_call(model, weights, (inputs, ))
   return res.logits
 
+  
+import jax
+def f():
+  return torch.arange(0, 1000, device='jax').jax()
+
+print(jax.jit(f).lower().as_text('hlo'))
+
 weights = model.state_dict()
 
 print(eval_model(weights, tokens))

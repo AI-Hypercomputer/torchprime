@@ -278,8 +278,7 @@ class MOEFeedForward(torch.nn.Module):
     expert_outs = torch.einsum("tai,ta -> ti", expert_outs, expert_weights)
     # Changes back to [B, T, D]
     expert_outs = expert_outs.reshape(bsz, seq, hidden)
-
-    shared_exp_out = self.shared_expert(x)
+    shared_exp_out = self.shared_expert(x).reshape(bsz, seq, hidden)
     return expert_outs + shared_exp_out
 
 
@@ -332,13 +331,13 @@ class CoreTransformer(nn.Module):
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.output = ColumnParallelLinear(args.dim, args.vocab_size, bias=False, init_method=lambda x: x)
 
-        self.freqs_cis = precompute_freqs_cis(
-            args.dim // args.n_heads,
-            args.max_seq_len * 2,
-            args.rope_theta,
-            args.use_scaled_rope,
-        )
-        vision_args = self.args.vision_args
+        # self.freqs_cis = precompute_freqs_cis(
+        #     args.dim // args.n_heads,
+        #     args.max_seq_len * 2,
+        #     args.rope_theta,
+        #     args.use_scaled_rope,
+        # )
+        # vision_args = self.args.vision_args
         if False: #vision_args:
             # circular import otherwise until we refactor out Attention
             from .vision.embedding import VisionEmbeddings
@@ -364,44 +363,12 @@ class CoreTransformer(nn.Module):
         if prefix + "rope.freqs" in state_dict:
             state_dict.pop(prefix + "rope.freqs")
 
-    def forward(self, model_input: CoreTransformerInput) -> CoreTransformerOutput:
-        tokens = model_input.tokens
-        start_pos = model_input.tokens_position
-        assert isinstance(start_pos, int), (
-            "This implementation does not support different start positions per batch item"
-        )
-
+    def forward(self, tokens, start_pos, freqs_cis, mask):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
-
-        if image_embedding := model_input.image_embedding:
-            h_image = self.vision_projection(image_embedding.embedding)
-            h = h * ~image_embedding.mask + h_image * image_embedding.mask
-
-        self.freqs_cis = self.freqs_cis.to(h.device)
-        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
-
-        mask = None
-        if seqlen > 1:
-            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
-
-            mask = torch.triu(mask, diagonal=1)
-
-            # https://github.com/pytorch/pytorch/issues/100005
-            # torch.triu is buggy when the device is mps: filled values are
-            # nan instead of 0.
-            if mask.device.type == torch.device("mps").type:
-                mask = torch.nan_to_num(mask, nan=0.0)
-
-            # When performing key-value caching, we compute the attention scores
-            # only for the new sequence. Thus, the matrix of scores is of size
-            # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
-            # j > cache_len + i, since row i corresponds to token cache_len + i.
-            #mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
-
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
         output = self.output(h).float()
+        return output
 
-        return CoreTransformerOutput(logits=output)

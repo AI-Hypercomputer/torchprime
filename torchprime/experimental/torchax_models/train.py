@@ -131,7 +131,7 @@ def _prelower_step(step, weights, opt_state, args, label, mesh):
     # in_shardings=shardings,
     out_shardings=(NamedSharding(mesh, P()), wshardings, oshardings),
   ).lower(weights, opt_state, args, label)
-  # print(lowered.as_text())
+  print(lowered.as_text())
   # import pdb; pdb.set_trace()
   print("program size:", len(lowered.as_text()) / 1e6, "m chars")
   step_compiled = lowered.compile()
@@ -139,9 +139,9 @@ def _prelower_step(step, weights, opt_state, args, label, mesh):
   print("End compiling", end - start)
   compile_time = end - start
   print("Compile time:", compile_time)
-  for co in step_compiled.cost_analysis():
-    print("Flops", co["flops"])
-    print("GB accessed", co["bytes accessed"] / 1e9)
+  # for co in step_compiled.cost_analysis():
+  #   print("Flops", co["flops"])
+  #   print("GB accessed", co["bytes accessed"] / 1e9)
   return step_compiled
 
 
