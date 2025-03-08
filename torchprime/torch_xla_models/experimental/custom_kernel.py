@@ -13,7 +13,6 @@ import torch_xla.core.xla_builder as xb
 from torch.library import custom_op
 from torch_xla.distributed.spmd import Mesh
 
-_XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0") == "1"
 
 @contextmanager
 def _jax_env_context():
