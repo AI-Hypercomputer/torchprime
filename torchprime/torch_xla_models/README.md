@@ -80,7 +80,7 @@ tp run torchprime/torch_xla_models/train.py \
 ### Llama 3.1 405B on v6e-256
 
 Recipe for global batch size 64, sequence length 8192.
-Expected step duration: 27.349s. MFU: 21.48%.
+Expected step duration: 19.642s. MFU: 29.91%.
 
 ```sh
 export LIBTPU_INIT_ARGS='--xla_tpu_enable_flash_attention=false --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_overlap_compute_collective_tc=true --xla_enable_async_all_gather=true --xla_tpu_scoped_vmem_limit_kib=98304'

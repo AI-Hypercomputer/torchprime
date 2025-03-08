@@ -24,6 +24,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla.distributed.fsdp import checkpoint_module
+from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
 
 # Transformers imports
 from transformers import (
@@ -81,6 +82,14 @@ class Trainer:
     self.input_sharding_spec = xs.ShardingSpec(
       mesh, (("data", "fsdp"), None), minibatch=minibatch
     )
+
+    # Recursively replace `nn.Linear` layers with einsum operations in the model.
+    # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
+    # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
+    model = apply_xla_patch_to_nn_linear(model)
+
+    # Annotate model weights and activations with sharding constraints to distribute
+    # the training across devices following the SPMD paradigm.
     sharding_config = OmegaConf.to_container(
       self.config.model.scaling.sharding, resolve=True
     )
@@ -88,6 +97,8 @@ class Trainer:
       sharding_config, dict
     ), f"Sharding config {sharding_config} must be a dict"
     model = shard_torch_xla_model_from_config(model, config=sharding_config)
+
+    # Rematerialize forward computation during the backward pass if requested.
     model = self._checkpoint_model(model)
     model = self._add_optimization_barrier_model(model)
     self.model = model
