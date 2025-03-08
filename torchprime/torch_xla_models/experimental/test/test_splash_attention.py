@@ -54,7 +54,8 @@ class SplashAttentionTest(unittest.TestCase):
       sa_v_layout="HEAD_DIM_MINOR",
       mesh=str(xs.get_global_mesh()),
     )
-    # Common dimensions for all tests. NUM_HEADS, SEQ_LEN, HEAD_DIM must >= 128
+    # Common dimensions for all tests. Spalsh attention kernel requires
+    # NUM_HEADS, SEQ_LEN, HEAD_DIM must >= 128.
     self.BATCH_SIZE = 4
     self.NUM_HEADS = 128
     self.SEQ_LEN = 128
@@ -126,6 +127,7 @@ class SplashAttentionTest(unittest.TestCase):
   )
   @with_jax_high_precision
   def test_splash_attention_sharding(self):
+    n_devices = xr.global_runtime_device_count()
     q = (
       torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM)
       .requires_grad_(True)
@@ -143,10 +145,10 @@ class SplashAttentionTest(unittest.TestCase):
     )
     o = splash_attention(q, k, v, self.config.to_json())
     torch_xla.sync()
-    # TODO: Currently the output is `{replicated}`. Check why Maxtext use
-    # replicated in Splash attention kernel by default? Or maybe we are wrong
-    # about what Maxtext is doing.
-    print(torch_xla._XLAC._get_xla_sharding_spec(o))
+    self.assertEqual(
+      torch_xla._XLAC._get_xla_sharding_spec(o),
+      f"{{devices=[{n_devices},1,1,1]<=[{n_devices}]}}",
+    )
 
   @unittest.skipIf(
     xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
