@@ -245,6 +245,7 @@ class LlamaAttention(nn.Module):
         SplashAttentionConfig,
         splash_attention,
       )
+
       sa_config = SplashAttentionConfig(
         sa_block_q=512,
         sa_block_kv=512,
@@ -258,7 +259,7 @@ class LlamaAttention(nn.Module):
         sa_q_layout="HEAD_DIM_MINOR",
         sa_k_layout="HEAD_DIM_MINOR",
         sa_v_layout="HEAD_DIM_MINOR",
-        mesh = str(xs.get_global_mesh())
+        mesh=str(xs.get_global_mesh()),
       )
       attn_output = splash_attention(
         query_states, key_states, value_states, sa_config.to_json()
@@ -266,6 +267,7 @@ class LlamaAttention(nn.Module):
     elif self.config.flash_attention:
       # Integrated with PyTorch/XLA Pallas Flash Attention:
       from torch_xla.experimental.custom_kernel import flash_attention
+
       query_states /= math.sqrt(self.head_dim)
 
       attn_output = flash_attention(

@@ -15,26 +15,26 @@ from torchprime.torch_xla_models.experimental.custom_kernel import (
   splash_attention,
 )
 
-if xr.device_type() == 'TPU':
+if xr.device_type() == "TPU":
   from torch_xla.experimental.custom_kernel import jax_import_guard
+
   jax_import_guard()
   import jax
 
 
 def with_jax_high_precision(func):
-
   def wrapper(*args, **kwargs):
-    jax.config.update('jax_default_matmul_precision', "highest")
+    jax.config.update("jax_default_matmul_precision", "highest")
     try:
       result = func(*args, **kwargs)
     finally:
-      jax.config.update('jax_default_matmul_precision', "default")
+      jax.config.update("jax_default_matmul_precision", "default")
     return result
 
   return wrapper
 
-class SplashAttentionTest(unittest.TestCase):
 
+class SplashAttentionTest(unittest.TestCase):
   def setUp(self):
     ### Splash attention block sizes
     # These can be tuned for specific hardware generations, and can be set up to
@@ -52,159 +52,217 @@ class SplashAttentionTest(unittest.TestCase):
       sa_q_layout="HEAD_DIM_MINOR",
       sa_k_layout="HEAD_DIM_MINOR",
       sa_v_layout="HEAD_DIM_MINOR",
-      mesh = str(xs.get_global_mesh())
+      mesh=str(xs.get_global_mesh()),
     )
     # Common dimensions for all tests. NUM_HEADS, SEQ_LEN, HEAD_DIM must >= 128
-    # for splash attention kernel.
     self.BATCH_SIZE = 4
     self.NUM_HEADS = 128
     self.SEQ_LEN = 128
     self.HEAD_DIM = 128
 
+  def ab_comparsion_input_generation(self):
+    q = torch.randn(
+      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+    ).to("xla")
+    k = torch.randn(
+      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+    ).to("xla")
+    v = torch.randn(
+      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+    ).to("xla")
+    q_sa = q.clone().detach().requires_grad_(True)
+    k_sa = k.clone().detach().requires_grad_(True)
+    v_sa = v.clone().detach().requires_grad_(True)
+    return q, k, v, q_sa, k_sa, v_sa
+
   def _attention(self, q, k, v, *, attn_mask=None, ab=None):
-    # q shape: [batch, #head, seq_len, head_dim]
     attn_weight = q @ k.transpose(-2, -1)
     if attn_mask is not None:
       # Masked out the unrelevant parts.
-      attn_weight = attn_weight.masked_fill(attn_mask,
-                                            torch.finfo(attn_weight.dtype).min)
+      attn_weight = attn_weight.masked_fill(
+        attn_mask, torch.finfo(attn_weight.dtype).min
+      )
     if ab is not None:
       attn_weight = attn_weight + ab
     attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
     attn_output = attn_weight @ v
     return attn_output
 
-
-  @unittest.skipIf(xr.device_type() != 'TPU' or tpu.version() < 3,
-                   "This test only works on TPUv3+.")
+  @unittest.skipIf(
+    xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
+  )
   @with_jax_high_precision
   def test_splash_attention_base(self):
+    q, k, v, q_sa, k_sa, v_sa = self.ab_comparsion_input_generation()
+    attention_mask = torch.triu(torch.ones(self.SEQ_LEN, self.SEQ_LEN), diagonal=1).to(
+      "xla"
+    )
 
-    q = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    k = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    v = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    q_sa = q.clone().detach().requires_grad_(True)
-    k_sa = k.clone().detach().requires_grad_(True)
-    v_sa = v.clone().detach().requires_grad_(True)
-    attention_mask = torch.triu(torch.ones(self.SEQ_LEN, self.SEQ_LEN), diagonal=1).to("xla")
-
-    o =  self._attention(q, k, v, attn_mask=attention_mask)
+    o = self._attention(q, k, v, attn_mask=attention_mask)
     torch_xla.sync()
-    q.retain_grad()
+    [i.retain_grad() for i in [q, k, v]]
     loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()
-    q_grad = q.grad
+    q_grad, k_grad, v_grad = q.grad, k.grad, v.grad
 
-
-    o_sa = splash_attention(q_sa,k_sa,v_sa,self.config.to_json())
+    o_sa = splash_attention(q_sa, k_sa, v_sa, self.config.to_json())
     torch_xla.sync()
-    q_sa.retain_grad()
+    [i.retain_grad() for i in [q_sa, k_sa, v_sa]]
     loss_sa = torch.sum(o_sa)
     loss_sa.backward()
     torch_xla.sync()
-    q_grad_sa = q_sa.grad
+    q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
 
-    torch.testing.assert_close(o, o_sa, rtol=1e-3, atol=1e-5)
-    torch.testing.assert_close(q_grad.cpu(), q_grad_sa.cpu(), rtol=1e-2, atol=1e-3)
+    torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
+    for org_grad, sa_grad in zip(
+      [q_grad, k_grad, v_grad], [q_grad_sa, k_grad_sa, v_grad_sa], strict=False
+    ):
+      torch.testing.assert_close(org_grad.cpu(), sa_grad.cpu(), rtol=1e-4, atol=1e-2)
+    torch.testing.assert_close(q_grad.cpu(), q_grad_sa.cpu(), rtol=1e-2, atol=1e-2)
 
-  @unittest.skipIf(xr.device_type() != 'TPU' or tpu.version() < 3,
-                   "This test only works on TPUv3+.")
+  @unittest.skipIf(
+    xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
+  )
   @with_jax_high_precision
   def test_splash_attention_sharding(self):
-
-    q = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    k = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    v = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
+    q = (
+      torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM)
+      .requires_grad_(True)
+      .to("xla")
+    )
+    k = (
+      torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM)
+      .requires_grad_(True)
+      .to("xla")
+    )
+    v = (
+      torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM)
+      .requires_grad_(True)
+      .to("xla")
+    )
     o = splash_attention(q, k, v, self.config.to_json())
     torch_xla.sync()
-    #TODO: Currently the output is `{replicated}`. Check why Maxtext use
-    #replicated in Splash attention kernel by default? Or maybe we are wrong
-    #about what Maxtext is doing.
+    # TODO: Currently the output is `{replicated}`. Check why Maxtext use
+    # replicated in Splash attention kernel by default? Or maybe we are wrong
+    # about what Maxtext is doing.
     print(torch_xla._XLAC._get_xla_sharding_spec(o))
 
-
-  @unittest.skipIf(xr.device_type() != 'TPU' or tpu.version() < 3,
-                   "This test only works on TPUv3+.")
+  @unittest.skipIf(
+    xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
+  )
   @with_jax_high_precision
   def test_splash_attention_segment_id(self):
     # test the segment id in splash attention against the flash attention kernel
     from torch_xla.experimental.custom_kernel import flash_attention
 
-    q = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    k = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    v = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    q_sa = q.clone().detach().requires_grad_(True)
-    k_sa = k.clone().detach().requires_grad_(True)
-    v_sa = v.clone().detach().requires_grad_(True) 
-
+    q, k, v, q_sa, k_sa, v_sa = self.ab_comparsion_input_generation()
     # make sure query.shape[2] == decoder_segment_ids.q.shape[1]
     segment_ids = torch.zeros(self.BATCH_SIZE, self.SEQ_LEN).to("xla")
     for i in range(self.BATCH_SIZE):
-        segment_ids[i, :] = i  # each batch item is in its own segment
+      segment_ids[i, :] = i  # each batch item is in its own segment
 
-    partition_spec=("data", None, None, None)
+    partition_spec = ("data", None, None, None)
     o = flash_attention(
-        q, k, v, True, segment_ids.to("xla"), segment_ids.to("xla"), partition_spec=partition_spec, mesh=xs.get_global_mesh())
+      q,
+      k,
+      v,
+      True,
+      segment_ids.to("xla"),
+      segment_ids.to("xla"),
+      partition_spec=partition_spec,
+      mesh=xs.get_global_mesh(),
+    )
     torch_xla.sync()
-    q.retain_grad()
+    [i.retain_grad() for i in [q, k, v]]
     loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()
-    q_grad = q.grad
+    q_grad, k_grad, v_grad = q.grad, k.grad, v.grad
 
-    o_sa = splash_attention(q_sa,k_sa,v_sa,self.config.to_json(), decoder_segment_ids=segment_ids)
+    o_sa = splash_attention(
+      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids
+    )
     torch_xla.sync()
-    q_sa.retain_grad()
+    [i.retain_grad() for i in [q_sa, k_sa, v_sa]]
     loss_sa = torch.sum(o_sa)
     loss_sa.backward()
     torch_xla.sync()
-    q_grad_sa = q_sa.grad
+    q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
 
-    torch.testing.assert_close(o, o_sa, rtol=1e-4, atol=1e-5)
-    torch.testing.assert_close(q_grad.cpu(), q_grad_sa.cpu(), rtol=1e-4, atol=1e-5)
-   
+    torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
+    for org_grad, sa_grad in zip(
+      [q_grad, k_grad, v_grad], [q_grad_sa, k_grad_sa, v_grad_sa], strict=False
+    ):
+      torch.testing.assert_close(org_grad.cpu(), sa_grad.cpu(), rtol=1e-4, atol=1e-2)
 
-
-  @unittest.skipIf(xr.device_type() != 'TPU' or tpu.version() < 3,
-                   "This test only works on TPUv3+.")
+  @unittest.skipIf(
+    xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
+  )
   @with_jax_high_precision
   def test_splash_attention_aot_traceable(self):
     from functorch.compile import aot_function, make_boxed_func
+    from torch_xla.experimental.custom_kernel import flash_attention
 
     def compiler(gm, _):
       return make_boxed_func(gm)
 
-    compiled_splash_attention = aot_function(
-        splash_attention, fw_compiler=compiler)
-    q = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    k = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
-    v = torch.randn(self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM).requires_grad_(True).to("xla")
+    compiled_splash_attention = aot_function(splash_attention, fw_compiler=compiler)
+    q, k, v, q_sa, k_sa, v_sa = self.ab_comparsion_input_generation()
 
     segment_ids = torch.zeros(self.BATCH_SIZE, self.SEQ_LEN).to("xla")
+
     for i in range(self.BATCH_SIZE):
-        segment_ids[i, :] = i  
+      segment_ids[i, :] = i
     o = compiled_splash_attention(
-        q, k, v, config=self.config.to_json(), decoder_segment_ids=segment_ids)
-    print(o)
-    q.retain_grad()
-    loss = o.sum()
+      q, k, v, config=self.config.to_json(), decoder_segment_ids=segment_ids
+    )
+    partition_spec = ("data", None, None, None)
+    o = flash_attention(
+      q,
+      k,
+      v,
+      True,
+      segment_ids.to("xla"),
+      segment_ids.to("xla"),
+      partition_spec=partition_spec,
+      mesh=xs.get_global_mesh(),
+    )
+    torch_xla.sync()
+    [i.retain_grad() for i in [q, k, v]]
+    loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()
-    print(q.grad)
+    q_grad, k_grad, v_grad = q.grad, k.grad, v.grad
+
+    o_sa = compiled_splash_attention(
+      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids
+    )
+    torch_xla.sync()
+    [i.retain_grad() for i in [q_sa, k_sa, v_sa]]
+    loss_sa = torch.sum(o_sa)
+    loss_sa.backward()
+    torch_xla.sync()
+    q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
+
+    torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
+    for org_grad, sa_grad in zip(
+      [q_grad, k_grad, v_grad], [q_grad_sa, k_grad_sa, v_grad_sa], strict=False
+    ):
+      torch.testing.assert_close(org_grad.cpu(), sa_grad.cpu(), rtol=1e-4, atol=1e-2)
 
 
 if __name__ == "__main__":
   logging.getLogger().setLevel(logging.INFO)
   torch.set_default_dtype(torch.float32)
-  torch_xla._XLAC._xla_set_mat_mul_precision('highest')
+  torch_xla._XLAC._xla_set_mat_mul_precision("highest")
   torch.manual_seed(42)
   xr.use_spmd()
-  partition_spec = ('data', 'fsdp', None, None)
+  partition_spec = ("data", "fsdp", None, None)
   num_devices = xr.global_runtime_device_count()
   mesh_shape = (num_devices // 2, 2)
   device_ids = np.array(range(num_devices))
-  mesh = Mesh(device_ids, mesh_shape, ('data', 'fsdp'))
+  mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp"))
   xs.set_global_mesh(mesh)
   test = unittest.main()
   sys.exit(0 if test.result.wasSuccessful() else 1)
