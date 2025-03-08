@@ -20,6 +20,7 @@ router_aux_loss_coef: 0.02
 vocab_size: 32000
 attention_bias: false
 attention_dropout: 0.0
-flash_attention: true
+# choose attention_kernel from: [flash_attention, splash_attention, null]
+attention_kernel: flash_attention
 moe_implementation: gmm
 tokenizer_name: mistralai/Mixtral-8x7B-v0.1

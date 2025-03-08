@@ -36,30 +36,29 @@ def with_jax_high_precision(func):
 
 class SplashAttentionTest(unittest.TestCase):
   def setUp(self):
-    ### Splash attention block sizes
-    # These can be tuned for specific hardware generations, and can be set up to
-    # the model's sequence length.
-    self.config = SplashAttentionConfig(
-      sa_block_q=512,
-      sa_block_kv=512,
-      sa_block_kv_compute=512,
-      sa_block_q_dkv=512,
-      sa_block_kv_dkv=512,
-      sa_block_kv_dkv_compute=512,
-      sa_block_q_dq=512,
-      sa_block_kv_dq=512,
-      sa_use_fused_bwd_kernel=False,
-      sa_q_layout="HEAD_DIM_MINOR",
-      sa_k_layout="HEAD_DIM_MINOR",
-      sa_v_layout="HEAD_DIM_MINOR",
-      mesh=str(xs.get_global_mesh()),
-    )
     # Common dimensions for all tests. Spalsh attention kernel requires
     # NUM_HEADS, SEQ_LEN, HEAD_DIM must >= 128.
     self.BATCH_SIZE = 4
     self.NUM_HEADS = 128
     self.SEQ_LEN = 128
     self.HEAD_DIM = 128
+    self.partition_spec = (("data", "fsdp"), None, None, None)
+    self.gen_kernel_config(self.partition_spec)
+
+  def gen_kernel_config(self, partition_spec):
+    if partition_spec is None:
+      partition_spec = (None,) * 4
+    else:
+      logical_axis_rules = (
+        ("activation_batch", partition_spec[0]),
+        ("activation_heads", partition_spec[1]),
+        ("activation_length", partition_spec[2]),
+        ("activation_kv", partition_spec[3]),
+      )
+    self.config = SplashAttentionConfig(
+      mesh=str(xs.get_global_mesh()),
+      logical_axis_rules=logical_axis_rules,
+    )
 
   def ab_comparsion_input_generation(self):
     q = torch.randn(
@@ -163,8 +162,8 @@ class SplashAttentionTest(unittest.TestCase):
     segment_ids = torch.zeros(self.BATCH_SIZE, self.SEQ_LEN).to("xla")
     for i in range(self.BATCH_SIZE):
       segment_ids[i, :] = i  # each batch item is in its own segment
+    segment_ids_sa = segment_ids.clone().detach()
 
-    partition_spec = ("data", None, None, None)
     o = flash_attention(
       q,
       k,
@@ -172,7 +171,7 @@ class SplashAttentionTest(unittest.TestCase):
       True,
       segment_ids.to("xla"),
       segment_ids.to("xla"),
-      partition_spec=partition_spec,
+      partition_spec=self.partition_spec,
       mesh=xs.get_global_mesh(),
     )
     torch_xla.sync()
@@ -183,7 +182,7 @@ class SplashAttentionTest(unittest.TestCase):
     q_grad, k_grad, v_grad = q.grad, k.grad, v.grad
 
     o_sa = splash_attention(
-      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids
+      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids_sa
     )
     torch_xla.sync()
     [i.retain_grad() for i in [q_sa, k_sa, v_sa]]
@@ -213,13 +212,10 @@ class SplashAttentionTest(unittest.TestCase):
     q, k, v, q_sa, k_sa, v_sa = self.ab_comparsion_input_generation()
 
     segment_ids = torch.zeros(self.BATCH_SIZE, self.SEQ_LEN).to("xla")
-
     for i in range(self.BATCH_SIZE):
       segment_ids[i, :] = i
-    o = compiled_splash_attention(
-      q, k, v, config=self.config.to_json(), decoder_segment_ids=segment_ids
-    )
-    partition_spec = ("data", None, None, None)
+    segment_ids_sa = segment_ids.clone().detach()
+
     o = flash_attention(
       q,
       k,
@@ -227,7 +223,7 @@ class SplashAttentionTest(unittest.TestCase):
       True,
       segment_ids.to("xla"),
       segment_ids.to("xla"),
-      partition_spec=partition_spec,
+      partition_spec=self.partition_spec,
       mesh=xs.get_global_mesh(),
     )
     torch_xla.sync()
@@ -238,7 +234,7 @@ class SplashAttentionTest(unittest.TestCase):
     q_grad, k_grad, v_grad = q.grad, k.grad, v.grad
 
     o_sa = compiled_splash_attention(
-      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids
+      q_sa, k_sa, v_sa, self.config.to_json(), decoder_segment_ids=segment_ids_sa
     )
     torch_xla.sync()
     [i.retain_grad() for i in [q_sa, k_sa, v_sa]]
@@ -260,7 +256,6 @@ if __name__ == "__main__":
   torch_xla._XLAC._xla_set_mat_mul_precision("highest")
   torch.manual_seed(42)
   xr.use_spmd()
-  partition_spec = ("data", "fsdp", None, None)
   num_devices = xr.global_runtime_device_count()
   mesh_shape = (num_devices // 2, 2)
   device_ids = np.array(range(num_devices))

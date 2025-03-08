@@ -18,7 +18,8 @@ initializer_range: 0.02
 rms_norm_eps: 1.0e-05
 attention_dropout: false
 attention_bias: false
-flash_attention: true
+# choose attention_kernel from: [flash_attention, splash_attention, null]
+attention_kernel: flash_attention
 rope_theta: 500000.0
 rope_scaling:
   factor: 8.0

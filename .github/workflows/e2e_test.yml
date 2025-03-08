@@ -16,6 +16,7 @@ jobs:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
+      llama-3.1-8b-sa-name: ${{ steps.run-llama-3.1-8b-SplashAttention.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
       llama-3-8b-2-slice-name: ${{ steps.run-llama-3-8b-2-slice.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
@@ -61,7 +62,25 @@ jobs:
             dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
-
+      - name: Run Llama 3.1 8B (Splash Attention)
+        id: run-llama-3.1-8b-SplashAttention
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          XLA_IR_DEBUG: 1
+          XLA_HLO_DEBUG: 1
+        run: |
+          name=$(e2e_testing/gen_name.py llama-3.1-8b)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          tp run \
+            --name $name \
+            torchprime/torch_xla_models/train.py \
+            model=llama-3-8b \
+            model.attention_kernel=splash_attention \
+            global_batch_size=8 \
+            ici_mesh.fsdp=4 \
+            dataset_config_name=wikitext-2-raw-v1 \
+            profile_step=3 \
+            max_steps=15
       - name: Run Llama 3.0 8B (2D sharding)
         id: run-llama-3-8b-2d
         env:

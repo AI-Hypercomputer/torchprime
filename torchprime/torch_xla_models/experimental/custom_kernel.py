@@ -47,31 +47,35 @@ def jax_import_guard():
 
 @dataclasses.dataclass
 class SplashAttentionConfig:
-  sa_block_q: int
-  sa_block_kv: int
-  sa_block_kv_compute: int
-  sa_block_q_dkv: int
-  sa_block_kv_dkv: int
-  sa_block_kv_dkv_compute: int
-  sa_block_q_dq: int
-  sa_block_kv_dq: int
-  sa_use_fused_bwd_kernel: bool
-  sa_q_layout: str
-  sa_k_layout: str
-  sa_v_layout: str
+  ### Splash attention block sizes
+  # These can be tuned for specific hardware generations, and can be set up to
+  # the model's sequence length.
+  sa_block_q: int = 512
+  sa_block_kv: int = 512
+  sa_block_kv_compute: int = 512
+  sa_block_q_dkv: int = 512
+  sa_block_kv_dkv: int = 512
+  sa_block_kv_dkv_compute: int = 512
+  sa_block_q_dq: int = 512
+  sa_block_kv_dq: int = 512
+  sa_use_fused_bwd_kernel: bool = False
+  sa_q_layout: str = "HEAD_DIM_MINOR"
+  sa_k_layout: str = "HEAD_DIM_MINOR"
+  sa_v_layout: str = "HEAD_DIM_MINOR"
   mesh: str | None = None
-  BATCH: str = "activation_batch"
-  HEAD: str = "activation_heads"
-  LENGTH: str = "activation_length"
-  D_KV: str = "activation_kv"
-  flash_axis_names: tuple[str] = (BATCH, HEAD, LENGTH, D_KV)
+  flash_axis_names: tuple[str] = (
+    "activation_batch",
+    "activation_heads",
+    "activation_length",
+    "activation_kv",
+  )
   # Check more rules from MaxText config:
   # https://github.com/AI-Hypercomputer/maxtext/blob/462087ed90a60485a145e909e047bacc28397f82/MaxText/configs/base.yml#L261.
   logical_axis_rules: tuple[tuple[str] | str] = (
-    (BATCH, ("data", "fsdp")),
-    (HEAD, ()),
-    (LENGTH, ()),
-    (D_KV, ()),
+    ("activation_batch", ("data", "fsdp")),
+    ("activation_heads", ()),
+    ("activation_length", ()),
+    ("activation_kv", ()),
   )
   AttentionType_LOCAL_SLIDING: bool = False
   SLIDE_WINDOW_SIZE: int | None = None
@@ -156,7 +160,7 @@ def splash_attention_jax_fun_wrapper(
       )
     axis_names = nn.logical_to_mesh_axes(config.flash_axis_names)
     segment_axis_names = nn.logical_to_mesh_axes(
-      (config.BATCH, "activation_length_no_heads")
+      ("activation_batch", "activation_length_no_heads")
     )
 
     global_block_q = config.sa_block_q
