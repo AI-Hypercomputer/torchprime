@@ -74,7 +74,7 @@ jobs:
           tp run \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            model=llama-3-8b \
+            model=llama-3.1-8b \
             model.attention_kernel=splash_attention \
             global_batch_size=8 \
             ici_mesh.fsdp=4 \
