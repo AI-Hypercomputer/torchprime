@@ -211,14 +211,12 @@ def shard_torch_xla_model_from_config(
   If `mesh` is not given, there must be a registered global mesh.
   """
   import torch_xla.distributed.spmd as xs
-  from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 
   def shard_activation(tensor, spec: tuple[str, ...]):
     the_mesh = mesh if mesh is not None else xs.get_global_mesh()
     assert the_mesh is not None, "No mesh found"
-    # TODO(https://github.com/pytorch/xla/issues/8678): Replace with the simpler
-    # `mark_sharding_and_gradients`.
-    out = MarkShardingFunction.apply(tensor, the_mesh, spec)
+    # TODO: upstream this to torch_xla
+    out = AotMarkShardingFunction.apply(tensor, the_mesh, spec)
     assert isinstance(out, torch.Tensor)
     return out
 
@@ -236,6 +234,58 @@ def shard_torch_xla_model_from_config(
     shard_activation,
     shard_param,
   )
+
+
+@torch.library.custom_op("xla::aot_mark_sharding", mutates_args=())
+def _aot_mark_sharding(t: torch.Tensor, mesh: str, partition_spec: str) -> torch.Tensor:
+  if t is None:
+    return None
+
+  import ast
+
+  import torch_xla.distributed.spmd as xs
+
+  the_mesh = xs.Mesh.from_str(mesh)
+  assert the_mesh is not None
+  partition_spec_eval = ast.literal_eval(partition_spec)
+  return xs.mark_sharding(t.clone(), the_mesh, partition_spec_eval).global_tensor
+
+
+@_aot_mark_sharding.register_fake
+def aot_mark_sharding_fake(
+  t: torch.Tensor, mesh: str, partition_spec: str
+) -> torch.Tensor:
+  if t is None:
+    return None
+  return torch.empty_like(t)
+
+
+class AotMarkShardingFunction(torch.autograd.Function):
+  """
+  Autograd function to mark_sharding on intermediate tensors and the gradient
+  of the intermediate tensors during backward pass.
+
+  Usage:
+  new_tensor = MarkShardingFunction.apply(tensor, mesh, ('axis_1', 'axis_2'))
+
+  This is required to guide GSPMD sharding propagation better during the
+  backward pass as during complicated workloads the compiler can introduce extra
+  collectives that can hurt performance.
+  """
+
+  @staticmethod
+  def forward(ctx, torch_tensor: torch.Tensor, mesh, partition_spec) -> torch.Tensor:
+    o = _aot_mark_sharding(torch_tensor, str(mesh), str(partition_spec))
+    ctx.partition_spec = partition_spec
+    ctx.mesh = mesh
+    return o
+
+  @staticmethod
+  def backward(ctx, grad_output: torch.Tensor):
+    partition_spec = ctx.partition_spec
+    mesh = ctx.mesh
+    o = _aot_mark_sharding(grad_output, str(mesh), str(partition_spec))
+    return o, None, None
 
 
 def _process_tail_index_syntax(

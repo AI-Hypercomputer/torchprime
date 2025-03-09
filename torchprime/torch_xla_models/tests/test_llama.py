@@ -116,15 +116,27 @@ def get_llama_3_1_405b() -> LlamaFixture:
   return LlamaFixture(vocab_size, hf_model, model)
 
 
+def noop(mod):
+  return mod
+
+
+def scan_decoders(mod):
+  import torchprime.torch_xla_models.scan_layers
+
+  return torchprime.torch_xla_models.scan_layers.compile(mod, "model.layers")
+
+
 @pytest.mark.parametrize(
   "fixture",
   [get_llama_3_8b, get_llama_3_1_405b],
   ids=["Llama 3.0 8B", "Llama 3.1 405B"],
 )
-def test_forward_our_model_against_hf_model(fixture):
+@pytest.mark.parametrize("transform", [noop, scan_decoders])
+def test_forward_our_model_against_hf_model(fixture, transform):
   fixture = fixture()
   device = torch_xla.device()
   model_xla = copy.deepcopy(fixture.model).to(device)
+  model_xla = transform(model_xla)
   hf_model_xla = copy.deepcopy(fixture.hf_model).to(device)
   torch_xla.sync()
   input_sizes = [8, 128, 256]
