@@ -153,6 +153,15 @@ jobs:
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
     secrets: inherit
 
+  llama-3.1-8b-sa:
+    name: Llama 3.1 8B (Spalsh Attention)
+    needs: tp-run
+    uses: ./.github/workflows/reusable_e2e_check.yml
+    with:
+      jobset_name: ${{ needs.tp-run.outputs.llama-3.1-8b-sa-name }}
+      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
+    secrets: inherit
+
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
     needs: tp-run
