@@ -32,7 +32,7 @@ def get_llama_3_8b() -> LlamaFixture:
     intermediate_size=16,
     vocab_size=vocab_size,
   )
-  config.flash_attention = False
+  config.attention_kernel = None
   torchprime_config = OmegaConf.create(
     {
       "vocab_size": 128,
@@ -47,7 +47,7 @@ def get_llama_3_8b() -> LlamaFixture:
       "rms_norm_eps": 1.0e-05,
       "attention_dropout": False,
       "attention_bias": False,
-      "flash_attention": False,
+      "attention_kernel": None,
       "rope_theta": 500000.0,
     }
   )
@@ -71,7 +71,7 @@ def get_llama_3_1_405b() -> LlamaFixture:
     intermediate_size=32,
     vocab_size=vocab_size,
   )
-  config.flash_attention = False
+  config.attention_kernel = None
   torchprime_config = OmegaConf.create(
     {
       "vocab_size": 256,
@@ -86,7 +86,7 @@ def get_llama_3_1_405b() -> LlamaFixture:
       "rms_norm_eps": 1.0e-05,
       "attention_dropout": False,
       "attention_bias": False,
-      "flash_attention": False,
+      "attention_kernel": None,
       "rope_theta": 500000.0,
       "rope_scaling": {
         "factor": 8.0,
