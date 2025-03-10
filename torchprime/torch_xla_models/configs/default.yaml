@@ -47,3 +47,12 @@ dcn_mesh:
   fsdp: 1
   tensor: 1
   expert: 1
+
+# These are default values for model scaling configuration.
+# They can be overridden on the command line or by importing one of the presets
+# in the `model/remat` directory.
+model:
+  remat:
+    # If specified, compile a module of type `HomogeneousSequential` located at the
+    # given path in the module tree using `torch_xla.experimental.scan_layers`.
+    scan_layers: null

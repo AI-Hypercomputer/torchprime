@@ -1,6 +1,7 @@
 defaults:
   - _self_  # refers to this config file
-  - scaling: mixtral-fsdp  # refers to scaling/mixtral-fsdp.yaml
+  - sharding: mixtral-fsdp  # refers to sharding/mixtral-fsdp.yaml
+  - remat: mixtral  # refers to remat/mixtral.yaml
 
 model_class: mixtral.MixtralForCausalLM  # Used to import the model from this class
 bos_token_id: 1

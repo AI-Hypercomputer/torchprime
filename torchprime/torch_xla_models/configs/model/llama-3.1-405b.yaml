@@ -1,6 +1,7 @@
 defaults:
   - _self_
-  - scaling: llama-fsdp-tp
+  - sharding: llama-fsdp-tp
+  - remat: llama
 
 model_class: llama.LlamaForCausalLM
 vocab_size: 128256

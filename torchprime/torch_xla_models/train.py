@@ -20,6 +20,7 @@ import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
 import transformers
 from datasets import load_dataset
+from functorch.compile import default_partition
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
@@ -37,11 +38,13 @@ from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
+from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
+from torchprime.torch_xla_models import remat_all, scan_layers
 from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
 
 check_min_version("4.39.3")
@@ -90,9 +93,7 @@ class Trainer:
 
     # Annotate model weights and activations with sharding constraints to distribute
     # the training across devices following the SPMD paradigm.
-    sharding_config = OmegaConf.to_container(
-      self.config.model.scaling.sharding, resolve=True
-    )
+    sharding_config = OmegaConf.to_container(self.config.model.sharding, resolve=True)
     assert isinstance(
       sharding_config, dict
     ), f"Sharding config {sharding_config} must be a dict"
@@ -173,12 +174,31 @@ class Trainer:
 
   def _checkpoint_model(self, model: nn.Module):
     classes = self._get_classes_by_names(
-      model, self.config.model.scaling.get("activation_checkpoint_layers", [])
+      model, self.config.model.remat.get("activation_checkpoint_layers", [])
     )
     if not classes:
       return model
 
     logger.info(f"Enabling activation checkpointing on {classes}")
+
+    layers_to_scan = self.config.model.remat.get("scan_layers", None)
+    if layers_to_scan is not None:
+      assert isinstance(layers_to_scan, str)
+      logger.info(f"Compiling module `{layers_to_scan}` with scan")
+      partition_fn = default_partition
+      if classes:
+        # Enable activation checkpointing via graph partitioner.
+        seq = model.get_submodule(layers_to_scan)
+        assert isinstance(seq, HomogeneousSequential)
+        if len(classes) == 1 and list(classes)[0] == seq.repeated_layer:
+          partition_fn = remat_all.remat_all_partition_fn
+        else:
+          raise NotImplementedError(
+            f"When compiling decoder layers with scan and \
+              activation checkpointing is also requested, we only support \
+              checkpointing {seq.repeated_layer} i.e. the layer being scanned."
+          )
+      return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn)
 
     def maybe_checkpoint(mod, _name):
       if isinstance(mod, tuple(classes)):
@@ -189,7 +209,7 @@ class Trainer:
 
   def _add_optimization_barrier_model(self, model: nn.Module):
     classes = self._get_classes_by_names(
-      model, self.config.model.scaling.get("optimization_barrier_layers", [])
+      model, self.config.model.remat.get("optimization_barrier_layers", [])
     )
     if not classes:
       return model
