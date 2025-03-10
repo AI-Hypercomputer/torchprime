@@ -62,8 +62,7 @@ def buildpush(
     _run(
       f"{sudo_cmd} docker tag {docker_tag} {docker_url}",
     )
-    if torchprime_docker_tag != "local_run":
-      _run(f"{sudo_cmd} docker push {docker_url}")
+    _run(f"{sudo_cmd} docker push {docker_url}")
   except subprocess.CalledProcessError as e:
     print(f"Error running command: {e}")
     exit(e.returncode)

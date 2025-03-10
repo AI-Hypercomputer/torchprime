@@ -9,7 +9,7 @@ defaults:
 
 dataset_name: wikitext
 dataset_config_name: wikitext-103-raw-v1
-global_batch_size: 1024
+global_batch_size: 8
 logging_steps: 10
 max_steps: 15
 block_size: 8192
@@ -31,7 +31,7 @@ lr_scheduler:
 # "Inter-Chip Interconnect".
 ici_mesh:
   data: 1
-  fsdp: 256
+  fsdp: 4
   tensor: 1
   expert: 1
 

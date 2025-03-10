@@ -23,13 +23,6 @@ from watchdog.observers import Observer
 import torchprime.launcher.doctor
 from torchprime.launcher.buildpush import buildpush
 
-_DOCKER_ENV_FORWARD_LIST = [
-  "HF_TOKEN",
-  "XLA_IR_DEBUG",
-  "XLA_HLO_DEBUG",
-  "LIBTPU_INIT_ARGS",
-]
-
 
 @dataclass_json
 @dataclass
@@ -202,55 +195,6 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
 
 
 @cli.command(
-  name="docker-run",
-  context_settings=dict(
-    ignore_unknown_options=True,
-  ),
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
-def docker_run(args, use_hf: bool):
-  """
-  Runs the provided training command locally for quick testing.
-  """
-  config = read_config()
-
-  click.echo(get_project_dir().absolute())
-
-  # Build docker image.
-  build_arg = "USE_TRANSFORMERS=true" if use_hf else None
-  docker_project = config.docker_project
-  if docker_project is None:
-    docker_project = config.project
-  docker_url = buildpush(
-    docker_project, torchprime_docker_tag="local_run", build_arg=build_arg
-  )
-  # Forward a bunch of important env vars.
-  env_forwarding = [
-    arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
-  ]
-  command = [
-    "python",
-  ] + list(args)
-  docker_command = [
-    "docker",
-    "run",
-    "-i",
-    *env_forwarding,
-    "--privileged",
-    "--net",
-    "host",
-    "--rm",
-    "-v",
-    f"{os.getcwd()}:/workspace",
-    "-w",
-    "/workspace",
-    docker_url,
-  ] + command
-  subprocess.run(docker_command, check=True)
-
-
-@cli.command(
   context_settings=dict(
     ignore_unknown_options=True,
   )
@@ -300,8 +244,12 @@ def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
 
   # Forward a bunch of important env vars.
   env_forwarding = [
-    arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
+    *forward_env("HF_TOKEN"),  # HuggingFace token
+    *forward_env("XLA_IR_DEBUG"),  # torch_xla debugging flag
+    *forward_env("XLA_HLO_DEBUG"),  # torch_xla debugging flag
+    *forward_env("LIBTPU_INIT_ARGS"),  # XLA flags
   ]
+
   # Pass artifact dir and jobset name as env vars.
   artifact_arg = [
     "--env",
