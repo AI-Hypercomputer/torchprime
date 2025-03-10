@@ -39,6 +39,9 @@ class SplashAttentionTest(unittest.TestCase):
     # Common dimensions for all tests. Spalsh attention kernel requires
     # NUM_HEADS, SEQ_LEN, HEAD_DIM must >= 128.
     self.BATCH_SIZE = 4
+    # Test GQA with different Q and KV heads.
+    self.NUM_Q_HEADS = 128
+    self.NUM_KV_HEADS = 64
     self.NUM_HEADS = 128
     self.SEQ_LEN = 128
     self.HEAD_DIM = 128
@@ -60,22 +63,59 @@ class SplashAttentionTest(unittest.TestCase):
       logical_axis_rules=logical_axis_rules,
     )
 
+  def maybe_expend_kv(self, hidden_state):
+    if hidden_state.size(1) == self.NUM_Q_HEADS:
+      return hidden_state
+    num_kv_group = self.NUM_Q_HEADS // self.NUM_KV_HEADS
+    return hidden_state.repeat_interleave(num_kv_group, dim=1)
+
+  def maybe_reduce_kv_grad(self, hidden_state_grad):
+    # For GQA, the kv grad shape is [BATCH_SIZE, NUM_Q_HEADS, SEQ_LEN,
+    # HEAD_DIM]. We need to convert it back to [BATCH_SIZE, NUM_Q_HEADS,
+    # SEQ_LEN, HEAD_DIM]. The returned grad should be sum over the kv heads over
+    # each group to preserve the magnitude of gradients.
+    if hidden_state_grad.size(1) == self.NUM_KV_HEADS:
+      return hidden_state_grad
+    num_kv_group = self.NUM_Q_HEADS // self.NUM_KV_HEADS
+    return hidden_state_grad.view(
+      self.BATCH_SIZE,
+      self.NUM_Q_HEADS // num_kv_group,
+      num_kv_group,
+      self.SEQ_LEN,
+      self.HEAD_DIM,
+    ).sum(dim=2)
+
   def ab_comparsion_input_generation(self):
     q = torch.randn(
-      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+      self.BATCH_SIZE, self.NUM_Q_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
     ).to("xla")
     k = torch.randn(
-      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+      self.BATCH_SIZE,
+      self.NUM_KV_HEADS,
+      self.SEQ_LEN,
+      self.HEAD_DIM,
+      requires_grad=True,
     ).to("xla")
     v = torch.randn(
-      self.BATCH_SIZE, self.NUM_HEADS, self.SEQ_LEN, self.HEAD_DIM, requires_grad=True
+      self.BATCH_SIZE,
+      self.NUM_KV_HEADS,
+      self.SEQ_LEN,
+      self.HEAD_DIM,
+      requires_grad=True,
     ).to("xla")
     q_sa = q.clone().detach().requires_grad_(True)
     k_sa = k.clone().detach().requires_grad_(True)
     v_sa = v.clone().detach().requires_grad_(True)
+
+    # Repeat the kv tensors to match the q tensor heads. This is required for flash
+    k = self.maybe_expend_kv(k)
+    v = self.maybe_expend_kv(v)
+    torch_xla.sync()
     return q, k, v, q_sa, k_sa, v_sa
 
   def _attention(self, q, k, v, *, attn_mask=None, ab=None):
+    k = self.maybe_expend_kv(k)
+    v = self.maybe_expend_kv(v)
     attn_weight = q @ k.transpose(-2, -1)
     if attn_mask is not None:
       # Masked out the unrelevant parts.
@@ -114,12 +154,16 @@ class SplashAttentionTest(unittest.TestCase):
     torch_xla.sync()
     q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
 
+    with torch.no_grad():
+      k_grad = self.maybe_reduce_kv_grad(k_grad)
+      v_grad = self.maybe_reduce_kv_grad(v_grad)
+
     torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
+
     for org_grad, sa_grad in zip(
       [q_grad, k_grad, v_grad], [q_grad_sa, k_grad_sa, v_grad_sa], strict=False
     ):
       torch.testing.assert_close(org_grad.cpu(), sa_grad.cpu(), rtol=1e-4, atol=1e-2)
-    torch.testing.assert_close(q_grad.cpu(), q_grad_sa.cpu(), rtol=1e-2, atol=1e-2)
 
   @unittest.skipIf(
     xr.device_type() != "TPU" or tpu.version() < 3, "This test only works on TPUv3+."
@@ -163,7 +207,6 @@ class SplashAttentionTest(unittest.TestCase):
     for i in range(self.BATCH_SIZE):
       segment_ids[i, :] = i  # each batch item is in its own segment
     segment_ids_sa = segment_ids.clone().detach()
-
     o = flash_attention(
       q,
       k,
@@ -191,7 +234,12 @@ class SplashAttentionTest(unittest.TestCase):
     torch_xla.sync()
     q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
 
+    with torch.no_grad():
+      k_grad = self.maybe_reduce_kv_grad(k_grad)
+      v_grad = self.maybe_reduce_kv_grad(v_grad)
+
     torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
+
     for org_grad, sa_grad in zip(
       [q_grad, k_grad, v_grad], [q_grad_sa, k_grad_sa, v_grad_sa], strict=False
     ):
@@ -242,6 +290,10 @@ class SplashAttentionTest(unittest.TestCase):
     loss_sa.backward()
     torch_xla.sync()
     q_grad_sa, k_grad_sa, v_grad_sa = q_sa.grad, k_sa.grad, v_sa.grad
+
+    with torch.no_grad():
+      k_grad = self.maybe_reduce_kv_grad(k_grad)
+      v_grad = self.maybe_reduce_kv_grad(v_grad)
 
     torch.testing.assert_close(o.cpu(), o_sa.cpu(), rtol=1e-3, atol=1e-5)
     for org_grad, sa_grad in zip(

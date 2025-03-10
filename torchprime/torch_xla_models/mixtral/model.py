@@ -228,9 +228,10 @@ class MixtralAttention(nn.Module):
       query_states, key_states, cos, sin, position_ids
     )
 
-    # repeat k/v heads if n_kv_heads < n_heads
-    key_states = repeat_kv(key_states, self.num_key_value_groups)
-    value_states = repeat_kv(value_states, self.num_key_value_groups)
+    if self.config.attention_kernel != "splash_attention":
+      # repeat k/v heads if n_kv_heads < n_heads
+      key_states = repeat_kv(key_states, self.num_key_value_groups)
+      value_states = repeat_kv(value_states, self.num_key_value_groups)
 
     # Non FA path doesn't deal with 2D sharding.
     partition_spec = None
