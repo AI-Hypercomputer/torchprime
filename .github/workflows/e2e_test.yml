@@ -16,7 +16,7 @@ jobs:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
-      llama-3.1-8b-sa-name: ${{ steps.run-llama-3.1-8b-SplashAttention.outputs.name }}
+      llama-3.1-8b-sa-name: ${{ steps.run-llama-3_1-8b-SplashAttention.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
       llama-3-8b-2-slice-name: ${{ steps.run-llama-3-8b-2-slice.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
@@ -63,7 +63,7 @@ jobs:
             profile_step=3 \
             max_steps=15
       - name: Run Llama 3.1 8B (Splash Attention)
-        id: run-llama-3.1-8b-SplashAttention
+        id: run-llama-3_1-8b-SplashAttention
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
