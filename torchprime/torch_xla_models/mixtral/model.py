@@ -237,7 +237,7 @@ class MixtralAttention(nn.Module):
     partition_spec = None
     if xs.get_global_mesh() is not None:
       partition_spec = (("data", "fsdp"), "tensor", None, None)
-    if self.config.flash_attention == "splash_attention":
+    if self.config.attention_kernel == "splash_attention":
       # Integrated with PyTorch/XLA Pallas Splash Attention:
       assert (
         xs.get_global_mesh() is not None
