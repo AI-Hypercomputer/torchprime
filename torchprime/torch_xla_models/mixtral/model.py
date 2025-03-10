@@ -32,6 +32,7 @@ from torch import nn
 from torch.nn import init
 
 from torchprime.torch_xla_models.loss import cross_entropy_loss
+from torchprime.torch_xla_models.scan_layers import HomogeneousSequential
 from torchprime.torch_xla_models.topology import get_num_slices
 
 
@@ -129,8 +130,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
   Returns:
       `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
   """
-  cos = cos[position_ids].unsqueeze(unsqueeze_dim)
-  sin = sin[position_ids].unsqueeze(unsqueeze_dim)
+  cos = cos[position_ids.long()].unsqueeze(unsqueeze_dim)
+  sin = sin[position_ids.long()].unsqueeze(unsqueeze_dim)
   q_embed = (q * cos) + (rotate_half(q) * sin)
   k_embed = (k * cos) + (rotate_half(k) * sin)
   return q_embed, k_embed
@@ -204,7 +205,7 @@ class MixtralAttention(nn.Module):
     self,
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
-    position_ids: torch.LongTensor | None = None,
+    position_ids: torch.Tensor | None = None,
   ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
     bsz, q_len, _ = hidden_states.size()
 
@@ -790,7 +791,9 @@ class MixtralMoeBlock(nn.Module):
     return loss
 
   @xp.trace_me("MixtralMoeBlock")
-  def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+  def forward(
+    self, hidden_states: torch.Tensor
+  ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     batch_size, sequence_length, hidden_dim = hidden_states.shape
     hidden_states = hidden_states.view(-1, hidden_dim)
     # router_logits: (batch * sequence_length, n_experts)
@@ -869,7 +872,11 @@ class MixtralMoeBlock(nn.Module):
         final_hidden_states = final_hidden_states.reshape(
           batch_size, sequence_length, hidden_dim
         )
-    return final_hidden_states, router_logits, loss
+      case _:
+        raise NotImplementedError(
+          f"Unsupported moe implementation {self.moe_implementation}"
+        )
+    return final_hidden_states, router_logits, torch.tensor(loss)
 
 
 class MixtralDecoderLayer(nn.Module):
@@ -889,9 +896,10 @@ class MixtralDecoderLayer(nn.Module):
   def forward(
     self,
     hidden_states: torch.Tensor,
+    cumulative_loss: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
-    position_ids: torch.LongTensor | None = None,
-  ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    position_ids: torch.Tensor | None = None,
+  ) -> tuple[torch.Tensor, torch.Tensor]:
     residual = hidden_states
 
     hidden_states = self.input_layernorm(hidden_states)
@@ -910,7 +918,7 @@ class MixtralDecoderLayer(nn.Module):
     hidden_states, router_logits, loss = self.block_sparse_moe(hidden_states)
     hidden_states = residual + hidden_states
 
-    outputs = (hidden_states, loss)
+    outputs = (hidden_states, cumulative_loss + loss)
     return outputs
 
 
@@ -928,8 +936,11 @@ class MixtralModel(nn.Module):
     self.config = config
     self.vocab_size = config.vocab_size
     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-    self.layers = nn.ModuleList(
-      [
+
+    # `HomogeneousSequential` is similar to `nn.Sequential` but can be compiled with
+    # `scan` described in https://pytorch.org/xla/release/r2.6/features/scan.html.
+    self.layers = HomogeneousSequential(
+      *[
         MixtralDecoderLayer(config, layer_idx)
         for layer_idx in range(config.num_hidden_layers)
       ]
@@ -957,7 +968,7 @@ class MixtralModel(nn.Module):
     batch_size, seq_length = input_ids.shape
 
     device = input_ids.device
-    position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
+    position_ids = torch.arange(seq_length, dtype=torch.long, device=device).float()
     position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
     inputs_embeds = self.embed_tokens(input_ids)
@@ -973,22 +984,18 @@ class MixtralModel(nn.Module):
 
     hidden_states = inputs_embeds
 
-    total_loss = 0.0
-    for decoder_layer in self.layers:
-      layer_outputs = decoder_layer(
-        hidden_states,
-        attention_mask=causal_mask,
-        position_ids=position_ids,
-      )
+    load_balance_loss = torch.tensor(0.0, device=device)
+    hidden_states, load_balance_loss = self.layers(
+      hidden_states,
+      load_balance_loss,
+      attention_mask=causal_mask,
+      position_ids=position_ids,
+    )
 
-      hidden_states = layer_outputs[0]
-      load_balance_loss = layer_outputs[-1]
-      total_loss += load_balance_loss
-
-    total_loss = total_loss / len(self.layers)
+    load_balance_loss = load_balance_loss / len(self.layers)
 
     hidden_states = self.norm(hidden_states)
-    return (hidden_states, total_loss)
+    return (hidden_states, load_balance_loss)
 
 
 class MixtralForCausalLM(nn.Module):

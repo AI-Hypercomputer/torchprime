@@ -1,8 +1,7 @@
-from typing import Any, TypeVar
+from typing import Any
 
 import torch.nn as nn
 
-Input = TypeVar("Input")
 PyTree = Any
 
 
@@ -22,7 +21,7 @@ class HomogeneousSequential(nn.Sequential):
     assert len(types) == 1, f"All modules must be of the same type. Got {types}"
     self.repeated_layer = types.pop()
 
-  def forward(self, input: Input, **broadcasted_inputs: PyTree) -> Input:
+  def forward(self, *input, **broadcasted_inputs: PyTree):
     """
     Much like `torch.nn.Sequential`, this takes `input` and forwards it to the
     first module it contains. It then "chains" outputs to inputs sequentially for
@@ -33,5 +32,11 @@ class HomogeneousSequential(nn.Sequential):
     without changes (i.e. "broadcasted").
     """
     for module in self:
-      input = module(input, **broadcasted_inputs)
+      input = module(*splat(input), **broadcasted_inputs)
     return input
+
+
+def splat(input):
+  if not isinstance(input, list | tuple):
+    input = (input,)
+  return input
