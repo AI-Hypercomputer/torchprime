@@ -249,11 +249,52 @@ def splash_attention_jax_fun_wrapper(
     return x
 
 
+@functools.lru_cache(maxsize=16)
+def _get_jax_forward_function(config_json: str, attn_logits_soft_cap, has_segment_ids):
+  """Cached factory function to create JAX forward functions"""
+  config = SplashAttentionConfig.from_json(config_json)
+  if has_segment_ids:
+    return functools.partial(
+      splash_attention_jax_fun_wrapper,
+      config=config,
+      attn_logits_soft_cap=attn_logits_soft_cap,
+    )
+  else:
+    return functools.partial(
+      splash_attention_jax_fun_wrapper,
+      decoder_segment_ids=None,
+      config=config,
+      attn_logits_soft_cap=attn_logits_soft_cap,
+    )
+
+
+@functools.lru_cache(maxsize=16)
+def _get_jax_backward_function(config_json: str, attn_logits_soft_cap, has_segment_ids):
+  """Cached factory function to create JAX backward functions"""
+  jax_f = _get_jax_forward_function(config_json, attn_logits_soft_cap, has_segment_ids)
+  import jax
+
+  if has_segment_ids:
+
+    def jax_grad_f_wrapper(query, key, value, decoder_segment_ids, grad_output):
+      primals, f_vjp = jax.vjp(jax_f, query, key, value, decoder_segment_ids)
+      return f_vjp(grad_output)
+
+    return jax_grad_f_wrapper
+  else:
+
+    def jax_grad_f_wrapper(query, key, value, grad_output):
+      primals, f_vjp = jax.vjp(jax_f, query, key, value)
+      return f_vjp(grad_output)
+
+    return jax_grad_f_wrapper
+
+
 def tpu_splash_attention_jax_call_wrapper(
   query: torch.Tensor,
   key: torch.Tensor,
   value: torch.Tensor,
-  config: SplashAttentionConfig,
+  config: str,
   decoder_segment_ids: torch.Tensor | None,
   attn_logits_soft_cap: float | None = None,
   is_forward: bool = True,
@@ -263,43 +304,25 @@ def tpu_splash_attention_jax_call_wrapper(
   query = query.contiguous()
   key = key.contiguous()
   value = value.contiguous()
-  import jax
 
   # TODO: xb.call_jax() doesn't accept the input tensor with shape size 0. We
   # have to split the decoder_segment_ids to be None or torch.Tensor cases.
   # Later we can unify those two cases once 0 size shape tensor is supported.
-  if decoder_segment_ids is not None and decoder_segment_ids.shape:
-    jax_f = functools.partial(
-      splash_attention_jax_fun_wrapper,
-      config=config,
-      attn_logits_soft_cap=attn_logits_soft_cap,
-    )
-
-    def jax_grad_f_wrapper(query, key, value, decoder_segment_ids, grad_output):
-      primals, f_vjp = jax.vjp(jax_f, query, key, value, decoder_segment_ids)
-      return f_vjp(grad_output)
-
-    input_args = [query, key, value, decoder_segment_ids]
-  else:
-    jax_f = functools.partial(
-      splash_attention_jax_fun_wrapper,
-      decoder_segment_ids=None,
-      config=config,
-      attn_logits_soft_cap=attn_logits_soft_cap,
-    )
-
-    def jax_grad_f_wrapper(query, key, value, grad_output):
-      primals, f_vjp = jax.vjp(jax_f, query, key, value)
-      return f_vjp(grad_output)
-
-    input_args = [query, key, value]
+  has_decoder_ids = decoder_segment_ids is not None and decoder_segment_ids.shape
+  input_args = (
+    [query, key, value, decoder_segment_ids] if has_decoder_ids else [query, key, value]
+  )
   if is_forward:
+    jax_f = _get_jax_forward_function(config, attn_logits_soft_cap, has_decoder_ids)
     output = xb.call_jax(jax_f, input_args, {}, "splash_attention_jax_fun_wrapper_fw")
     return (output, None, None)
   else:
     # TODO: find out a way to skip grad computation for decoder_segment_ids
+    jax_grad_f = _get_jax_backward_function(
+      config, attn_logits_soft_cap, has_decoder_ids
+    )
     q_grad, k_grad, v_grad, *_rest = xb.call_jax(
-      jax_grad_f_wrapper,
+      jax_grad_f,
       input_args + [grad_output],
       {},
       "splash_attention_jax_fun_wrapper_bw",
@@ -316,7 +339,6 @@ def sa_custom_forward(
   decoder_segment_ids: torch.Tensor | None,
   attn_logits_soft_cap: float | None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-  config = SplashAttentionConfig.from_json(config)
   return tpu_splash_attention_jax_call_wrapper(
     q,
     k,
@@ -352,7 +374,6 @@ def sa_custom_backward(
   decoder_segment_ids: torch.Tensor | None,
   attn_logits_soft_cap: float | None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-  config = SplashAttentionConfig.from_json(config)
   o = tpu_splash_attention_jax_call_wrapper(
     q,
     k,
