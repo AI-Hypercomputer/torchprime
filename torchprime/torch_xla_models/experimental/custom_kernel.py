@@ -50,15 +50,15 @@ class SplashAttentionConfig:
   ### Splash attention block sizes
   # These can be tuned for specific hardware generations, and can be set up to
   # the model's sequence length.
-  sa_block_q: int = 512
-  sa_block_kv: int = 512
-  sa_block_kv_compute: int = 512
-  sa_block_q_dkv: int = 512
-  sa_block_kv_dkv: int = 512
-  sa_block_kv_dkv_compute: int = 512
-  sa_block_q_dq: int = 512
-  sa_block_kv_dq: int = 512
-  sa_use_fused_bwd_kernel: bool = False
+  sa_block_q: int = 2048
+  sa_block_kv: int = 2048
+  sa_block_kv_compute: int = 2048
+  sa_block_q_dkv: int = 2048
+  sa_block_kv_dkv: int = 2048
+  sa_block_kv_dkv_compute: int = 2048
+  sa_block_q_dq: int = 2048
+  sa_block_kv_dq: int = 2048
+  sa_use_fused_bwd_kernel: bool = True
   sa_q_layout: str = "HEAD_DIM_MINOR"
   sa_k_layout: str = "HEAD_DIM_MINOR"
   sa_v_layout: str = "HEAD_DIM_MINOR"
