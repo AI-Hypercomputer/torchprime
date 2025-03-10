@@ -24,7 +24,7 @@ class TestYourModule(unittest.TestCase):
       intermediate_size=16,
       vocab_size=self.vocab_size,
     )
-    config.flash_attention = False
+    config.attention_kernel = None
     torchprime_config = OmegaConf.create(
       {
         "vocab_size": 128,
@@ -42,7 +42,7 @@ class TestYourModule(unittest.TestCase):
         "router_aux_loss_coef": 0.02,
         "attention_dropout": 0.0,
         "attention_bias": False,
-        "flash_attention": False,
+        "attention_kernel": None,
         "moe_implementation": "static",
       }
     )

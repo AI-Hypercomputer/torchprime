@@ -262,7 +262,7 @@ class MixtralAttention(nn.Module):
       attn_output = splash_attention(
         query_states, key_states, value_states, sa_config.to_json()
       )
-    elif self.config.flash_attention == "flash_attention":
+    elif self.config.attention_kernel == "flash_attention":
       # Integrated with PyTorch/XLA Pallas Flash Attention:
       from torch_xla.experimental.custom_kernel import flash_attention
 
