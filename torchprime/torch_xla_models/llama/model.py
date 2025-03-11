@@ -198,9 +198,15 @@ class LlamaAttention(nn.Module):
       self.num_key_value_heads * self.head_dim,
       bias=config.attention_bias,
     )
-    self.o_proj = nn.Linear(
-      self.hidden_size, self.hidden_size, bias=config.attention_bias
+
+    self.o_proj_weight = nn.Parameter(
+      torch.zeros((self.hidden_size, self.hidden_size), requires_grad=True)
     )
+    self.o_proj_weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+    self.o_proj = FunctionalLinear()
+    assert not config.attention_bias
+    self.shard_o_proj_weight = Identity()
+
     self.core_attention = CoreAttention(config)
     self._init_rope()
 
@@ -243,9 +249,26 @@ class LlamaAttention(nn.Module):
     attn_output = self.core_attention(
       self.head_dim, attention_mask, bsz, q_len, query_states, key_states, value_states
     )
-    attn_output = self.o_proj(attn_output)
+
+    # This is a bit hacky: we pass through `self.o_proj_weight` through `shard_o_proj_weight`
+    # so that both the weight and the gradient with respect to the weight are sharded
+    # correctly when captured by scan. Not to mention this also makes the state dict
+    # incompatible with Hugging Face. How can we do better?
+    attn_output = self.o_proj(self.shard_o_proj_weight(self.o_proj_weight), attn_output)
 
     return attn_output
+
+
+class FunctionalLinear(nn.Module):
+  def forward(self, weight, x):
+    from torch_xla.distributed.spmd.xla_sharding import XLAPatchedLinear
+
+    return XLAPatchedLinear.apply(x, weight, None)
+
+
+class Identity(nn.Module):
+  def forward(self, v):
+    return v * 1
 
 
 class CoreAttention(nn.Module):
