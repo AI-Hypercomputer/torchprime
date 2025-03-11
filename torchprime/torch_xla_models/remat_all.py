@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import torch._functorch.config
 import torch.fx
 from functorch.compile import min_cut_rematerialization_partition
+from torch.utils.checkpoint import CheckpointPolicy
 
 
 @contextmanager
@@ -22,7 +23,7 @@ def remat_all_config():
   try:
     # Set activation_memory_budget to zero to force the min cut partitioner
     # to recompute instead of saving. Also don't ban the recomputing of any ops.
-    torch._functorch.config.activation_memory_budget = 0.0
+    torch._functorch.config.activation_memory_budget = 1
     torch._functorch.config.aggressive_recomputation = True
     torch._functorch.config.recompute_views = True
     torch._functorch.config.ban_recompute_reductions = False
@@ -70,6 +71,13 @@ def remat_all_partition_fn(
   activations and recompute all of them during the backward pass.
   """
   with remat_all_config():
+    # Mark anything that does not have a policy as MUST_RECOMPUTE
+    for node in joint_module.graph.nodes:
+      if node.op == "call_function" and "recompute" not in node.meta:
+        # This trick is taken from https://github.com/pytorch/pytorch/blob/1eba9b3aa3c43f86f4a2c807ac8e12c4a7767340/torch/utils/checkpoint.py#L1290
+        node.meta["recompute"] = CheckpointPolicy.MUST_RECOMPUTE
+        node.meta["ac_graph_id"] = 0
+
     return min_cut_rematerialization_partition(
       joint_module, _joint_inputs, num_fwd_outputs=num_fwd_outputs
     )

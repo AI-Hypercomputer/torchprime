@@ -29,6 +29,7 @@ from transformers.utils import logging
 
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
+from torchprime.torch_xla_models import offloading
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 logger = logging.get_logger(__name__)
@@ -311,6 +312,11 @@ class LlamaDecoderLayer(nn.Module):
             attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
             query_sequence_length, key_sequence_length)` if default attention is used.
     """
+    # This gives the `hidden_states` tensor a name so that we can layer specify
+    # to offload this tensor to host RAM to save memory. This is not a standard
+    # torch API because there is no such feature in PyTorch. Instead, the name
+    # becomes node metadata during FX graph capture.
+    hidden_states = offloading.offload_name(hidden_states, "decoder_input")
 
     residual = hidden_states
 

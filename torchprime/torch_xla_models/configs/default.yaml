@@ -56,3 +56,8 @@ model:
     # If specified, compile a module of type `HomogeneousSequential` located at the
     # given path in the module tree using `torch_xla.experimental.scan_layers`.
     scan_layers: null
+
+    # If specified, offload these tensors to host RAM during the forward pass and
+    # move them back during the backward pass. Currently only inputs to the layer
+    # specified in `scan_layers` is supported.
+    offload_tensors: []

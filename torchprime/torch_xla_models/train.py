@@ -4,6 +4,7 @@ import logging
 import math
 import sys
 from contextlib import contextmanager
+from functools import partial
 from timeit import default_timer as timer
 
 # Third-party library imports
@@ -44,7 +45,7 @@ from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
-from torchprime.torch_xla_models import remat_all, scan_layers
+from torchprime.torch_xla_models import offloading, remat_all, scan_layers
 from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
 
 check_min_version("4.39.3")
@@ -176,22 +177,36 @@ class Trainer:
     classes = self._get_classes_by_names(
       model, self.config.model.remat.get("activation_checkpoint_layers", [])
     )
-    if not classes:
-      return model
-
-    logger.info(f"Enabling activation checkpointing on {classes}")
 
     layers_to_scan = self.config.model.remat.get("scan_layers", None)
+    offload_tensors = self.config.model.remat.get("offload_tensors", [])
+    if len(offload_tensors):
+      logger.info(
+        f"Will offload these tensors to host RAM when not needed: {offload_tensors}"
+      )
+      if layers_to_scan is None:
+        raise NotImplementedError("Host offloading only works with scan")
+      if len(classes) != 1:
+        raise NotImplementedError(
+          "Host offloading only works when activation checkpointing exactly one layer"
+        )
     if layers_to_scan is not None:
       assert isinstance(layers_to_scan, str)
       logger.info(f"Compiling module `{layers_to_scan}` with scan")
       partition_fn = default_partition
       if classes:
-        # Enable activation checkpointing via graph partitioner.
+        # When scan is requested, we implement activation checkpointing via a
+        # graph partitioner instead of `checkpoint_module`.
         seq = model.get_submodule(layers_to_scan)
         assert isinstance(seq, HomogeneousSequential)
         if len(classes) == 1 and list(classes)[0] == seq.repeated_layer:
-          partition_fn = remat_all.remat_all_partition_fn
+          if not len(offload_tensors):
+            partition_fn = remat_all.remat_all_partition_fn
+          else:
+            partition_fn = partial(
+              offloading.remat_all_and_offload_these_inputs,
+              names_to_offload=offload_tensors,
+            )
         else:
           raise NotImplementedError(
             f"When compiling decoder layers with scan and \
@@ -199,6 +214,11 @@ class Trainer:
               checkpointing {seq.repeated_layer} i.e. the layer being scanned."
           )
       return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn)
+
+    if not classes:
+      return model
+
+    logger.info(f"Enabling activation checkpointing on {classes}")
 
     def maybe_checkpoint(mod, _name):
       if isinstance(mod, tuple(classes)):
