@@ -201,6 +201,7 @@ class LlamaAttention(nn.Module):
     self.o_proj = nn.Linear(
       self.hidden_size, self.hidden_size, bias=config.attention_bias
     )
+    self.core_attention = CoreAttention(config)
     self._init_rope()
 
   def _init_rope(self):
@@ -239,10 +240,32 @@ class LlamaAttention(nn.Module):
 
     key_states = repeat_kv(key_states, self.num_key_value_groups)
     value_states = repeat_kv(value_states, self.num_key_value_groups)
+    attn_output = self.core_attention(
+      self.head_dim, attention_mask, bsz, q_len, query_states, key_states, value_states
+    )
+    attn_output = self.o_proj(attn_output)
 
+    return attn_output
+
+
+class CoreAttention(nn.Module):
+  def __init__(self, config: DictConfig):
+    super().__init__()
+    self.config = config
+
+  def forward(
+    self,
+    head_dim,
+    attention_mask,
+    bsz,
+    q_len,
+    query_states,
+    key_states,
+    value_states,
+  ):
     if not self.config.flash_attention:
       attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
-        self.head_dim
+        head_dim
       )
 
       if attention_mask is not None:  # no matter the length, we just slice it
@@ -254,14 +277,14 @@ class LlamaAttention(nn.Module):
         attn_weights, dim=-1, dtype=torch.float32
       ).to(query_states.dtype)
       attn_weights = nn.functional.dropout(
-        attn_weights, p=self.attention_dropout, training=self.training
+        attn_weights, p=self.config.attention_dropout, training=self.training
       )
       attn_output = torch.matmul(attn_weights, value_states)
     else:
       # Integrated with PyTorch/XLA Pallas Flash Attention:
       from torch_xla.experimental.custom_kernel import flash_attention
 
-      query_states /= math.sqrt(self.head_dim)
+      query_states /= math.sqrt(head_dim)
 
       attn_output = flash_attention(
         query_states,
@@ -272,18 +295,15 @@ class LlamaAttention(nn.Module):
       )
     assert attn_output is not None
 
-    if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+    num_heads = self.config.num_attention_heads
+    if attn_output.size() != (bsz, num_heads, q_len, head_dim):
       raise ValueError(
-        f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+        f"`attn_output` should be of size {(bsz, num_heads, q_len, head_dim)}, but is"
         f" {attn_output.size()}"
       )
 
     attn_output = attn_output.transpose(1, 2).contiguous()
-
-    attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
-    attn_output = self.o_proj(attn_output)
-
+    attn_output = attn_output.reshape(bsz, q_len, self.config.hidden_size)
     return attn_output
 
 
