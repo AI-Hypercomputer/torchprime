@@ -106,20 +106,36 @@ sharding_map_scan = {
 
 sharding_map_llama_new = {
 'tok_embeddings.weight': ("tp", "fsdp"), # torch.Size([202048, 1024])
-'layers.*.attention.wq.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
-'layers.*.attention.wk.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
-'layers.*.attention.wv.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
-'layers.*.attention.wo.weight': ("fsdp", "tp"), # torch.Size([1024, 1024])
-'layers.*.feed_forward.shared_expert.w1.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
-'layers.*.feed_forward.shared_expert.w2.weight': ("fsdp", "tp"), # torch.Size([1024, 2048])
-'layers.*.feed_forward.shared_expert.w3.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
-'layers.*.feed_forward.gate.weight': (None, "fsdp"), # torch.Size([16, 1024])
-'layers.*.feed_forward.gate.bias': ("fsdp",), # torch.Size([16])
-'layers.*.feed_forward.cond_ffn.w1': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
-'layers.*.feed_forward.cond_ffn.w2': (None, "fsdp", "tp"), # torch.Size([16, 1024, 2048])
-'layers.*.feed_forward.cond_ffn.w3': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
-'layers.*.attention_norm.weight': ("fsdp",), # torch.Size([1024])
-'layers.*.ffn_norm.weight': ("fsdp",), # torch.Size([1024])
+# 'layers.*.attention.wq.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+# 'layers.*.attention.wk.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+# 'layers.*.attention.wv.weight': ("tp", "fsdp"), # torch.Size([1024, 1024])
+# 'layers.*.attention.wo.weight': ("fsdp", "tp"), # torch.Size([1024, 1024])
+# 'layers.*.feed_forward.shared_expert.w1.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
+# 'layers.*.feed_forward.shared_expert.w2.weight': ("fsdp", "tp"), # torch.Size([1024, 2048])
+# 'layers.*.feed_forward.shared_expert.w3.weight': ("tp", "fsdp"), # torch.Size([2048, 1024])
+# 'layers.*.feed_forward.gate.weight': (None, "fsdp"), # torch.Size([16, 1024])
+# 'layers.*.feed_forward.gate.bias': ("fsdp",), # torch.Size([16])
+# 'layers.*.feed_forward.cond_ffn.w1': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
+# 'layers.*.feed_forward.cond_ffn.w2': (None, "fsdp", "tp"), # torch.Size([16, 1024, 2048])
+# 'layers.*.feed_forward.cond_ffn.w3': (None, "tp", "fsdp"), # torch.Size([16, 2048, 1024])
+# 'layers.*.attention_norm.weight': ("fsdp",), # torch.Size([1024])
+# 'layers.*.ffn_norm.weight': ("fsdp",), # torch.Size([1024])
+
+'layers.params.attention___wq___weight': (None, "tp", "fsdp"), # torch.Size([48, 5120, 5120])
+'layers.params.attention___wk___weight': (None, "tp", "fsdp"), # torch.Size([48, 1024, 5120])
+'layers.params.attention___wv___weight': (None, "tp", "fsdp"), # torch.Size([48, 1024, 5120])
+'layers.params.attention___wo___weight': (None, "fsdp", "tp"), # torch.Size([48, 5120, 5120])
+'layers.params.attention_norm___weight': (None, "fsdp"), # torch.Size([48, 5120])
+'layers.params.feed_forward___cond_ffn___w1': (None, None, "tp", "fsdp"), # torch.Size([48, 16, 8192, 5120])
+'layers.params.feed_forward___cond_ffn___w2': (None, None, "fsdp", "tp"), # torch.Size([48, 16, 5120, 8192])
+'layers.params.feed_forward___cond_ffn___w3': (None, None, "tp", "fsdp"), # torch.Size([48, 16, 8192, 5120])
+'layers.params.feed_forward___gate___bias': (None, None), # torch.Size([48, 16])
+'layers.params.feed_forward___gate___weight': (None, None, "fsdp"), # torch.Size([48, 16, 5120])
+'layers.params.feed_forward___shared_expert___w1___weight': (None, "tp", "fsdp"), # torch.Size([48, 8192, 5120])
+'layers.params.feed_forward___shared_expert___w2___weight': (None, "fsdp", "tp"), # torch.Size([48, 5120, 8192])
+'layers.params.feed_forward___shared_expert___w3___weight': (None, "tp", "fsdp"), # torch.Size([48, 8192, 5120])
+'layers.params.ffn_norm___weight': (None, "fsdp"), # torch.Size([48, 5120])
+
 'norm.weight': ("fsdp",), # torch.Size([1024])
 'output.weight': ("tp", "fsdp"), # torch.Size([202048, 1024])
 }
@@ -275,6 +291,7 @@ def main(config: DictConfig):
   if config.internal_override_layers > 0:
     args.n_layers = config.internal_override_layers
 
+
   with torch.device("meta"):
     if config.model_impl == "scan":
       sharding_map = sharding_map_scan
@@ -297,9 +314,11 @@ def main(config: DictConfig):
       args.max_seq_len = config.seqlen
       llama = TitanModel(args)
     elif config.model_impl == "llama_new":
-      args = llama_new_args.make_17b(1, config.seqlen, tiny=True)
-      llama = llama_new.CoreTransformer(args)
+      args = llama_new_args.make_17b(1, config.seqlen, tiny=False)
       sharding_map = sharding_map_llama_new
+      if config.internal_override_layers > 0:
+        args.n_layers = config.internal_override_layers
+      llama = llama_new.CoreTransformer(args)
     else:
       raise AssertionError("unknown impl: " + config.model_impl)
   #print_sharding_map_template(llama.state_dict())

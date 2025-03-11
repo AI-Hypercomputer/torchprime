@@ -19,6 +19,8 @@ from .args import ModelArgs, MoEArgs
 from .datatypes import CoreTransformerInput, CoreTransformerOutput
 from .moe import MoE, ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
 
+from torchprime.experimental.torchax_models.llama.model_with_scan import ScanLayer
+
 
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -325,8 +327,11 @@ class CoreTransformer(nn.Module):
         self.tok_embeddings = VocabParallelEmbedding(args.vocab_size, args.dim, init_method=lambda x: x)
 
         self.layers = torch.nn.ModuleList()
-        for layer_id in range(args.n_layers):
-            self.layers.append(TransformerBlock(layer_id, args))
+
+        # for layer_id in range(args.n_layers):
+        #     self.layers.append(TransformerBlock(layer_id, args))
+
+        self.layers = ScanLayer(TransformerBlock(0, args), args.n_layers)
 
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.output = ColumnParallelLinear(args.dim, args.vocab_size, bias=False, init_method=lambda x: x)
@@ -366,8 +371,9 @@ class CoreTransformer(nn.Module):
     def forward(self, tokens, start_pos, freqs_cis, mask):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
-        for layer in self.layers:
-            h = layer(h, start_pos, freqs_cis, mask)
+        # for layer in self.layers:
+        #     h = layer(h, start_pos, freqs_cis, mask)
+        h = self.layers(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
         output = self.output(h).float()
         return output
