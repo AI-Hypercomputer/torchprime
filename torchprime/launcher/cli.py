@@ -293,6 +293,8 @@ def run(
       "--project",
       config.project,
       "--enable-debug-logs",
+      "--priority",
+      "high",
       # The following lets xpk propagate user program failures as jobset exit code.
       "--restart-on-user-code-failure",
       "--max-restarts",

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import asdict
 from typing import Any
-
+import torch_xla.debug.profiler as xp
 import torch
 import torch_xla
 import torch_xla.core.xla_builder as xb
@@ -58,6 +58,14 @@ class SplashAttentionConfig:
   sa_block_kv_dkv_compute: int = 2048
   sa_block_q_dq: int = 2048
   sa_block_kv_dq: int = 2048
+  # sa_block_q: int = 512
+  # sa_block_kv: int = 512
+  # sa_block_kv_compute: int = 512
+  # sa_block_q_dkv: int = 512
+  # sa_block_kv_dkv: int = 512
+  # sa_block_kv_dkv_compute: int = 512
+  # sa_block_q_dq: int = 512
+  # sa_block_kv_dq: int = 512
   sa_use_fused_bwd_kernel: bool = True
   sa_q_layout: str = "HEAD_DIM_MINOR"
   sa_k_layout: str = "HEAD_DIM_MINOR"
@@ -126,7 +134,8 @@ class SplashAttentionConfig:
     return mesh_lib.Mesh(device_array, axis_names=mesh.axis_names)
 
 
-def splash_attention_jax_fun_wrapper(
+@xp.trace_me("splash_attention_kernel_wrapper")
+def splash_attention_jax_wrapper(
   query,
   key,
   value,
@@ -248,20 +257,19 @@ def splash_attention_jax_fun_wrapper(
     # x.shape = [batch, heads, seq_length, head_dim]
     return x
 
-
 @functools.lru_cache(maxsize=16)
 def _get_jax_forward_function(config_json: str, attn_logits_soft_cap, has_segment_ids):
   """Cached factory function to create JAX forward functions"""
   config = SplashAttentionConfig.from_json(config_json)
   if has_segment_ids:
     return functools.partial(
-      splash_attention_jax_fun_wrapper,
+      splash_attention_jax_wrapper,
       config=config,
       attn_logits_soft_cap=attn_logits_soft_cap,
     )
   else:
     return functools.partial(
-      splash_attention_jax_fun_wrapper,
+      splash_attention_jax_wrapper,
       decoder_segment_ids=None,
       config=config,
       attn_logits_soft_cap=attn_logits_soft_cap,
@@ -290,6 +298,7 @@ def _get_jax_backward_function(config_json: str, attn_logits_soft_cap, has_segme
     return jax_grad_f_wrapper
 
 
+@xp.trace_me("tpu_splash_attention_jax_call_wrapper")
 def tpu_splash_attention_jax_call_wrapper(
   query: torch.Tensor,
   key: torch.Tensor,
@@ -314,7 +323,7 @@ def tpu_splash_attention_jax_call_wrapper(
   )
   if is_forward:
     jax_f = _get_jax_forward_function(config, attn_logits_soft_cap, has_decoder_ids)
-    output = xb.call_jax(jax_f, input_args, {}, "splash_attention_jax_fun_wrapper_fw")
+    output = xb.call_jax(jax_f, input_args, {}, "splash_attention_jax_wrapper_fw")
     return (output, None, None)
   else:
     # TODO: find out a way to skip grad computation for decoder_segment_ids
@@ -325,7 +334,7 @@ def tpu_splash_attention_jax_call_wrapper(
       jax_grad_f,
       input_args + [grad_output],
       {},
-      "splash_attention_jax_fun_wrapper_bw",
+      "splash_attention_jax_wrapper_bw",
     )
     return (q_grad, k_grad, v_grad)
 
