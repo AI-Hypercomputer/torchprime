@@ -6,6 +6,7 @@ import torch.fx as fx
 from functorch.compile import aot_function, make_boxed_func  # type:ignore
 from torch.utils._pytree import tree_iter
 from torch.utils.checkpoint import CheckpointPolicy
+from torch_xla.experimental.stablehlo_custom_call import place_to_device, place_to_host
 
 from .remat_all import remat_all_partition_fn
 
@@ -56,7 +57,9 @@ def remat_all_and_offload_these_inputs(
   names_to_offload_set = set(names_to_offload)
 
   # Modify the module such that all `offload_name` tensors whose name match
-  # `names_to_offload_set` must be saved during the forward pass.
+  # `names_to_offload_set` must be saved during the forward pass. Then these
+  # nodes will show up in the output of the `fwd` graph as additional
+  # residuals. Later, we'll walk over the graph output to identify the nodes.
   for node in joint_module.graph.nodes:
     if (
       node.op == "call_function"
@@ -74,8 +77,8 @@ def remat_all_and_offload_these_inputs(
     fw_example_args = _make_arguments(fwd)
     bw_example_args = _make_arguments(bwd)
 
-  fw_name_in_output_indices = _get_name_in_output_indices(fwd)
-  bw_name_in_input_names = _get_name_in_input_names(
+  fw_name_in_output_indices = _get_offload_name_to_fw_output_indices(fwd)
+  bw_name_in_input_names = _get_offload_name_to_bw_input_names(
     bwd, num_fwd_outputs, fw_name_in_output_indices
   )
 
@@ -91,12 +94,18 @@ In the backward graph:
   """
 
   for name in names_to_offload_set:
-    assert name in fw_name_in_output_indices, _debug(
-      f"Did not find {name} in fw_name_in_output_indices: {fw_name_in_output_indices}."
-    )
-    assert name in bw_name_in_input_names, _debug(
-      f"Did not find {name} in bw_name_in_input_names: {bw_name_in_input_names}."
-    )
+    if name not in fw_name_in_output_indices:
+      raise ValueError(
+        _debug(
+          f"Did not find {name} in fw_name_in_output_indices: {fw_name_in_output_indices}."
+        )
+      )
+    if name not in bw_name_in_input_names:
+      raise ValueError(
+        _debug(
+          f"Did not find {name} in bw_name_in_input_names: {bw_name_in_input_names}."
+        )
+      )
 
   with torch.no_grad():
 
@@ -106,11 +115,7 @@ In the backward graph:
         [fw_name_in_output_indices[name] for name in names_to_offload_set]
       )
       return tuple(
-        torch.ops.xla.place_to_host(v)  # type: ignore
-        if i  # type:ignore
-        in indices_to_offload
-        else v
-        for i, v in enumerate(out)
+        place_to_host(v) if i in indices_to_offload else v for i, v in enumerate(out)
       )
 
     def backward(**kwargs):
@@ -118,9 +123,7 @@ In the backward graph:
         [bw_name_in_input_names[name] for name in names_to_offload_set]
       )
       kwargs = {
-        k: torch.ops.xla.place_to_device(v)  # type: ignore
-        if k in arguments_to_move_back
-        else v
+        k: place_to_device(v) if k in arguments_to_move_back else v
         for k, v in kwargs.items()
       }
       return bwd(**kwargs)
@@ -162,7 +165,8 @@ def _make_arguments(gm: fx.GraphModule):
   return example_args
 
 
-def _get_named_nodes(gm: torch.fx.GraphModule):
+def _get_offload_name_nodes(gm: torch.fx.GraphModule):
+  """Build a dict from `offload_name` function call nodes to their names."""
   named_nodes: dict[Any, str] = {}
 
   for node in gm.graph.nodes:
@@ -172,14 +176,18 @@ def _get_named_nodes(gm: torch.fx.GraphModule):
       and node.target.name() == offload_name._qualname  # type: ignore
     ):
       assert isinstance(node.args[1], str)
-      named_nodes[node] = node.args[1]
+      name = node.args[1]
+      named_nodes[node] = name
 
   return named_nodes
 
 
-def _get_name_in_output_indices(gm: torch.fx.GraphModule):
-  named_nodes = _get_named_nodes(gm)
-  name_in_output_indices: dict[str, int] = {}
+def _get_offload_name_to_fw_output_indices(gm: torch.fx.GraphModule):
+  """Given a forward graph `gm`, build a dict from tensor names to their
+  position in the forward graph outputs."""
+
+  named_nodes = _get_offload_name_nodes(gm)
+  res: dict[str, int] = {}
 
   for node in gm.graph.nodes:
     if node.op == "output":
@@ -188,26 +196,29 @@ def _get_name_in_output_indices(gm: torch.fx.GraphModule):
         continue
       for i, arg in enumerate(next(iter(node.args))):  # type: ignore
         if arg in named_nodes:
-          name_in_output_indices[named_nodes[arg]] = i
+          res[named_nodes[arg]] = i
 
-  return name_in_output_indices
+  return res
 
 
-def _get_name_in_input_names(
+def _get_offload_name_to_bw_input_names(
   gm: torch.fx.GraphModule,
   num_fwd_outputs: int,
-  fw_name_in_output_indices: dict[str, int],
+  offload_name_to_output_indices: dict[str, int],
 ):
-  name_in_input_names = {}
+  """Given a backward graph `gm`, build a dict from tensor names to their
+  corresponding keyword argument names in the backward graph inputs."""
+
+  res = {}
   placeholder_idx = 0
   bw_input_idx_to_name = {}
-  for k, v in fw_name_in_output_indices.items():
+  for k, v in offload_name_to_output_indices.items():
     bw_input_idx_to_name[v - num_fwd_outputs] = k
 
   for node in gm.graph.nodes:
     if node.op == "placeholder":
       if placeholder_idx in bw_input_idx_to_name:
-        name_in_input_names[bw_input_idx_to_name[placeholder_idx]] = node.target
+        res[bw_input_idx_to_name[placeholder_idx]] = node.target
       placeholder_idx += 1
 
-  return name_in_input_names
+  return res
