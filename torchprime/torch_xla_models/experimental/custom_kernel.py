@@ -6,21 +6,30 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import asdict
 from typing import Any
-import torch_xla.debug.profiler as xp
+
 import torch
 import torch_xla
-import torch_xla.core.xla_builder as xb
+import torch_xla.debug.profiler as xp
 from torch.library import custom_op
+from torch.utils._pytree import tree_flatten
+from torch_xla.core.xla_builder import jax_func_to_xla_computation
 from torch_xla.distributed.spmd import Mesh
+
+# use the global var to cache XlaComputation
+func_arg_to_XlaComputation: dict[tuple[Any], str] = {}
 
 
 @contextmanager
 def _jax_env_context():
   try:
+    previous_skip_megascale_env = os.environ.get("SKIP_MEGASCALE_PJRT_CLIENT", None)
     os.environ["SKIP_MEGASCALE_PJRT_CLIENT"] = "true"
     yield
   finally:
-    os.environ.pop("SKIP_MEGASCALE_PJRT_CLIENT", None)
+    if previous_skip_megascale_env:
+      os.environ["SKIP_MEGASCALE_PJRT_CLIENT"] = previous_skip_megascale_env
+    else:
+      os.environ.pop("SKIP_MEGASCALE_PJRT_CLIENT", None)
 
 
 def requires_jax(func: Callable) -> Callable:
@@ -45,6 +54,31 @@ def jax_import_guard():
   torch_xla._XLAC._init_computation_client()
 
 
+def call_jax(jax_func, args, kwargs=None, name=None):
+  """
+  Call a JAX function `jax_func` with the given `args` and `kwargs` that may contain
+  XLA tensors.
+  """
+  global func_arg_to_XlaComputation
+  kwargs = kwargs or {}
+  flattened, _spec = tree_flatten((args, kwargs))
+
+  arg_shapes = []
+  kwargs_shapes = {}
+  for item in kwargs.items():
+    kwargs_shapes[item[0]] = (
+      item[1].shape if isinstance(item[1], torch.Tensor) else item
+    )
+  for item in args:
+    arg_shapes.append(item.shape if isinstance(item, torch.Tensor) else item)
+  hash_key = (jax_func, tuple(arg_shapes), repr(sorted(kwargs_shapes.items())).encode())
+  if hash_key not in func_arg_to_XlaComputation:
+    xla_computation = jax_func_to_xla_computation(jax_func, args, kwargs, name)
+    func_arg_to_XlaComputation[hash_key] = xla_computation
+  xla_computation = func_arg_to_XlaComputation[hash_key]
+  return xla_computation(flattened)
+
+
 @dataclasses.dataclass
 class SplashAttentionConfig:
   ### Splash attention block sizes
@@ -58,14 +92,6 @@ class SplashAttentionConfig:
   sa_block_kv_dkv_compute: int = 2048
   sa_block_q_dq: int = 2048
   sa_block_kv_dq: int = 2048
-  # sa_block_q: int = 512
-  # sa_block_kv: int = 512
-  # sa_block_kv_compute: int = 512
-  # sa_block_q_dkv: int = 512
-  # sa_block_kv_dkv: int = 512
-  # sa_block_kv_dkv_compute: int = 512
-  # sa_block_q_dq: int = 512
-  # sa_block_kv_dq: int = 512
   sa_use_fused_bwd_kernel: bool = True
   sa_q_layout: str = "HEAD_DIM_MINOR"
   sa_k_layout: str = "HEAD_DIM_MINOR"
@@ -257,6 +283,7 @@ def splash_attention_jax_wrapper(
     # x.shape = [batch, heads, seq_length, head_dim]
     return x
 
+
 @functools.lru_cache(maxsize=16)
 def _get_jax_forward_function(config_json: str, attn_logits_soft_cap, has_segment_ids):
   """Cached factory function to create JAX forward functions"""
@@ -323,14 +350,14 @@ def tpu_splash_attention_jax_call_wrapper(
   )
   if is_forward:
     jax_f = _get_jax_forward_function(config, attn_logits_soft_cap, has_decoder_ids)
-    output = xb.call_jax(jax_f, input_args, {}, "splash_attention_jax_wrapper_fw")
+    output = call_jax(jax_f, input_args, {}, "splash_attention_jax_wrapper_fw")
     return (output, None, None)
   else:
     # TODO: find out a way to skip grad computation for decoder_segment_ids
     jax_grad_f = _get_jax_backward_function(
       config, attn_logits_soft_cap, has_decoder_ids
     )
-    q_grad, k_grad, v_grad, *_rest = xb.call_jax(
+    q_grad, k_grad, v_grad, *_rest = call_jax(
       jax_grad_f,
       input_args + [grad_output],
       {},
