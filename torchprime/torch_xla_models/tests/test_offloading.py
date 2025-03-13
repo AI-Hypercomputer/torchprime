@@ -102,6 +102,54 @@ def test_offload_multiple():
   assert hlo.count('xla_buffer_placement="device"') == 2
 
 
+def test_offload_middle_tensor():
+  def fn(x, y):
+    x = torch.sin(x)
+    y = torch.sin(y)
+    x = offload_name(x, "x")
+    y = offload_name(y, "y")
+    x = torch.exp(x)
+    y = torch.exp(y)
+    return x @ y
+
+  fw_compiler, get_fwd = _make_get_graph_compiler()
+  bw_compiler, get_bwd = _make_get_graph_compiler()
+
+  x = torch.randn((1, 10)).to(torch_xla.device()).detach().requires_grad_(True)
+  y = torch.randn((10, 1)).to(torch_xla.device()).detach().requires_grad_(True)
+  fn_compiled = aot_function(
+    fn,
+    fw_compiler=fw_compiler,
+    bw_compiler=bw_compiler,
+    partition_fn=partial(
+      remat_all_and_offload_these_inputs, names_to_offload=["x", "y"]
+    ),
+  )
+  out = fn_compiled(x, y)
+  out.backward()
+  hlo: str = torch_xla._XLAC._get_xla_tensors_hlo([x.grad, y.grad])
+
+  # Test that the graph involves four device placement ops, two for each grad.
+  assert hlo.count("annotate_device_placement") == 4
+  assert hlo.count('xla_buffer_placement="pinned_host"') == 2
+  assert hlo.count('xla_buffer_placement="device"') == 2
+
+  # Check the FX graph.
+  fw_graph = get_fwd()
+  bw_graph = get_bwd()
+
+  # Forward graph does two sin and two exp
+  assert _count_function_calls(fw_graph, "sin") == 2
+  assert _count_function_calls(fw_graph, "exp") == 2
+
+  # Backward graph does two cos (backward of sin) and two exp (backward of exp).
+  # It won't do two sin because the input into the exp is offloaded. Therefore,
+  # there is no need to recompute the input to the exp.
+  assert _count_function_calls(bw_graph, "sin") == 0
+  assert _count_function_calls(bw_graph, "cos") == 2
+  assert _count_function_calls(bw_graph, "exp") == 2
+
+
 def test_offload_wrong_name():
   def fn(x, y):
     x = offload_name(x, "x")
