@@ -99,6 +99,7 @@ tp run torchprime/experimental/torchax_models/run.py global_batch_size=256
 
 `tp run` will broadcast the specified command to all VMs in the XPK cluster,
 which is the convention for running SPMD distributed workloads.
+See `tp run --help` for more advanced features.
 
 #### Env vars passed to the workload
 

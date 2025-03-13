@@ -70,8 +70,9 @@ def cli(ctx, interactive):
 @click.option(
   "--num-slices",
   required=False,
+  type=int,
   default=1,
-  help="Number of TPU slice to use. Defaults to 1",
+  help="Number of TPU slice to use by default. Defaults to 1",
 )
 @click.option(
   "--tpu-type",
@@ -210,8 +211,10 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
 @click.option(
   "--num-slices",
   required=False,
+  type=int,
   default=None,
-  help="Temporarily override the number of TPU slice to use for this run.",
+  help="Temporarily override the number of TPU slice to use for this run. "
+  "If unspecified, `tp run` will use the slice count configured in `tp use`.",
 )
 @click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
 @click.option(
