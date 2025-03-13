@@ -19,6 +19,8 @@ from .args import ModelArgs, MoEArgs
 from .datatypes import CoreTransformerInput, CoreTransformerOutput
 from .moe import MoE, ColumnParallelLinear, RowParallelLinear, VocabParallelEmbedding
 
+from torchprime.experimental.torchax_models.mixtral_model import MixtralMoeBlock
+
 from torchprime.experimental.torchax_models.llama.model_with_scan import ScanLayer
 
 
@@ -258,30 +260,44 @@ class MOEFeedForward(torch.nn.Module):
         hidden_dim=hidden_dim,
     )
 
-    self.gate = torch.nn.Linear(dim, moe_args.num_experts)
-    self.cond_ffn = ConditionalFeedForward(num_local_experts, dim, hidden_dim)
-    self.dim = dim
-    self.num_activated_experts = moe_args.top_k
+    self.gated_experts = MixtralMoeBlock(
+        intermediate_size=hidden_dim,
+        hidden_size=dim,
+        num_local_experts=num_local_experts,
+        num_experts_per_tok=1,
+        capacity_factor=moe_args.capacity_factor
+    )
 
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
-    bsz, seq, hidden = x.shape
-    # [B, T, D], combine BT, for prefill B = 1, for decode, T = 1
-    x = x.view(-1, self.dim)
-    # T = num_tokens, E = num_experts, D = hidden dim, A = activated experts
-    # x: [T, D]
-    scores = self.gate(x)  # [T, E]
-    expert_weights = torch.sigmoid(scores)
-    # expert_weights = F.softmax(scores, dim=-1)
-    expert_weights, expert_indices = torch.topk(
-        expert_weights, self.num_activated_experts, dim=-1
-    )  # [T, A], [T, A]
-    #expert_weights /= expert_weights.sum(dim=-1, keepdim=True)  # [T, A]
-    expert_outs = self.cond_ffn(x, expert_indices)
-    expert_outs = torch.einsum("tai,ta -> ti", expert_outs, expert_weights)
-    # Changes back to [B, T, D]
-    expert_outs = expert_outs.reshape(bsz, seq, hidden)
-    shared_exp_out = self.shared_expert(x).reshape(bsz, seq, hidden)
-    return expert_outs + shared_exp_out
+    # self.gate = torch.nn.Linear(dim, moe_args.num_experts)
+    # self.cond_ffn = ConditionalFeedForward(num_local_experts, dim, hidden_dim)
+    # self.dim = dim
+    # self.num_activated_experts = moe_args.top_k
+
+  def forward(self, x):
+    experts_outs = self.gated_experts(x) 
+    shared_exp_out = self.shared_expert(x)
+    return experts_outs + shared_exp_out
+
+
+#   def forward(self, x: torch.Tensor) -> torch.Tensor:
+#     bsz, seq, hidden = x.shape
+#     # [B, T, D], combine BT, for prefill B = 1, for decode, T = 1
+#     x = x.view(-1, self.dim)
+#     # T = num_tokens, E = num_experts, D = hidden dim, A = activated experts
+#     # x: [T, D]
+#     scores = self.gate(x)  # [T, E]
+#     expert_weights = torch.sigmoid(scores)
+#     # expert_weights = F.softmax(scores, dim=-1)
+#     expert_weights, expert_indices = torch.topk(
+#         expert_weights, self.num_activated_experts, dim=-1
+#     )  # [T, A], [T, A]
+#     #expert_weights /= expert_weights.sum(dim=-1, keepdim=True)  # [T, A]
+#     expert_outs = self.cond_ffn(x, expert_indices)
+#     expert_outs = torch.einsum("tai,ta -> ti", expert_outs, expert_weights)
+#     # Changes back to [B, T, D]
+#     expert_outs = expert_outs.reshape(bsz, seq, hidden)
+#     shared_exp_out = self.shared_expert(x).reshape(bsz, seq, hidden)
+#     return expert_outs + shared_exp_out
 
 
 
@@ -300,6 +316,7 @@ class TransformerBlock(nn.Module):
             multiple_of=args.multiple_of,
             moe_args=args.moe_args,
         )
+
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)

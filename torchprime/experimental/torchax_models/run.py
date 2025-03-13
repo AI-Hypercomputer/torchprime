@@ -3,6 +3,7 @@ import math
 
 import hydra
 import jax
+import jax.numpy as jnp
 import numpy as np
 import splash_attn
 import torch
@@ -135,7 +136,10 @@ sharding_map_llama_new = {
 'layers.params.feed_forward___shared_expert___w2___weight': (None, "fsdp", "tp"), # torch.Size([48, 5120, 8192])
 'layers.params.feed_forward___shared_expert___w3___weight': (None, "tp", "fsdp"), # torch.Size([48, 8192, 5120])
 'layers.params.ffn_norm___weight': (None, "fsdp"), # torch.Size([48, 5120])
-
+'layers.params.feed_forward___gated_experts___experts___w1': (None, None, "tp", "fsdp"),
+'layers.params.feed_forward___gated_experts___experts___w2': (None, None, "tp", "fsdp"),
+'layers.params.feed_forward___gated_experts___experts___w3': (None, None, "tp", "fsdp"),
+'layers.params.feed_forward___gated_experts___gate___weight': (None, None, "fsdp"),
 'norm.weight': ("fsdp",), # torch.Size([1024])
 'output.weight': ("tp", "fsdp"), # torch.Size([202048, 1024])
 }
@@ -168,12 +172,8 @@ def _process_sharding_name(name):
 
 def register_attention(fn):
   from torchax.ops import ops_registry
-
   env = torchax.default_env()
-  k = torch.nn.functional.scaled_dot_product_attention
-  env._ops[k] = ops_registry.Operator(
-    k, fn, is_jax_function=False, is_user_defined=True, needs_env=False
-  )
+  env.override_op_definition(torch.nn.functional.scaled_dot_product_attention, fn)
 
 def print_sharding_map_template(state_dict):
   for k, v in state_dict.items():
@@ -187,6 +187,11 @@ def make_weight_shard(weight_meta, slice_index):
     return interop.jax_view(
       torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype)
     )
+
+# torch must use int64, we want to give it int32
+def _override_one_hot(tensor, num_classes=-1):
+  assert num_classes != -1, 'must pass in num classes explicitly'
+  return tensor.apply_jax(jax.nn.one_hot, num_classes, dtype=tensor.jax().dtype)
 
 
 def create_sharded_weights(model, mesh, sharding_map):
@@ -241,6 +246,8 @@ def main(config: DictConfig):
   torch.manual_seed(0)
   torch.set_default_dtype(torch.bfloat16)
   torchax.enable_performance_mode()
+  env = torchax.default_env()
+  env.override_op_definition(torch.nn.functional.one_hot, _override_one_hot)
 
   print("Local devices:", jax.local_device_count())
   fsdp_size = len(jax.devices()) // config.tp
