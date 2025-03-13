@@ -38,6 +38,23 @@ def test_offload_simple():
 
   # Test that the graph that computes `x.grad` involves two device placement ops,
   # one to move `x` to host, another to move `x` to device.
+  #
+  # For reference, an "offload to host" HLO call looks like this:
+  #
+  #   %custom-call.4 = f32[1,10] custom-call(f32[1,10]{1,0} %p1.3),
+  #       custom_call_target="annotate_device_placement",
+  #       custom_call_has_side_effect=true,
+  #       api_version=API_VERSION_UNSPECIFIED,
+  #       frontend_attributes={_xla_buffer_placement="pinned_host"}
+  #
+  # And an "move back to device" HLO call looks like this:
+  #
+  #   %custom-call.5 = f32[1,10] custom-call(f32[1,10] %custom-call.4),
+  #       custom_call_target="annotate_device_placement",
+  #       custom_call_has_side_effect=true,
+  #       api_version=API_VERSION_UNSPECIFIED,
+  #       frontend_attributes={_xla_buffer_placement="device"}
+  #
   assert hlo.count("annotate_device_placement") == 2
   assert hlo.count('xla_buffer_placement="pinned_host"') == 1
   assert hlo.count('xla_buffer_placement="device"') == 1

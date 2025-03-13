@@ -62,11 +62,8 @@ def remat_all_and_offload_these_inputs(
   # residuals. Later, we'll walk over the graph output to identify the nodes.
   for node in joint_module.graph.nodes:
     if (
-      node.op == "call_function"
-      and hasattr(node.target, "name")
-      and node.target.name() == offload_name._qualname  # type: ignore
-      and node.args[1] in names_to_offload_set
-    ):
+      tensor_name := _get_tensor_name_if_node_is_offload_name(node)
+    ) and tensor_name in names_to_offload_set:
       # This trick is taken from https://github.com/pytorch/pytorch/blob/1eba9b3aa3c43f86f4a2c807ac8e12c4a7767340/torch/utils/checkpoint.py#L1290
       node.meta["recompute"] = CheckpointPolicy.MUST_SAVE
 
@@ -170,14 +167,8 @@ def _get_offload_name_nodes(gm: torch.fx.GraphModule):
   named_nodes: dict[Any, str] = {}
 
   for node in gm.graph.nodes:
-    if (
-      node.op == "call_function"
-      and hasattr(node.target, "name")
-      and node.target.name() == offload_name._qualname  # type: ignore
-    ):
-      assert isinstance(node.args[1], str)
-      name = node.args[1]
-      named_nodes[node] = name
+    if tensor_name := _get_tensor_name_if_node_is_offload_name(node):
+      named_nodes[node] = tensor_name
 
   return named_nodes
 
@@ -222,3 +213,18 @@ def _get_offload_name_to_bw_input_names(
       placeholder_idx += 1
 
   return res
+
+
+def _get_tensor_name_if_node_is_offload_name(node: torch.fx.Node) -> str | None:
+  """If the node is a call to the `offload_name` function, return the `name` string argument
+  that was used to call the function. Otherwise, return None.
+  """
+  if (
+    node.op == "call_function"
+    and hasattr(node.target, "name")
+    and node.target.name() == offload_name._qualname  # type: ignore
+  ):
+    assert isinstance(node.args[1], str)
+    return node.args[1]
+
+  return None
