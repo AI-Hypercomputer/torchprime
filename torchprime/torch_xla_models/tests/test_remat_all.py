@@ -38,7 +38,10 @@ def test_remat_all():
   # Backward graph does these ops
   assert _count_function_calls(bw_graph, "mm") == 3  # 1 forward + 2 backward
   assert _count_function_calls(bw_graph, "sin") == 1  # 1 forward
-  assert _count_function_calls(bw_graph, "exp") == 1  # 1 backward (gradient of exp)
+  # 1 backward (gradient of exp). There is no forward exp because the output
+  # of the last node `c` in the `fn` is not required to compute gradients for nodes
+  # within the `fn`.
+  assert _count_function_calls(bw_graph, "exp") == 1
   assert _count_function_calls(bw_graph, "cos") == 1  # 1 backward (gradient of sin)
 
   # Test that forward outputs 2 residuals that is the two inputs. In other word,
@@ -52,6 +55,89 @@ def test_remat_all():
   x_grad, y_grad = bw_graph(residual_1, residual_2, c_grad)
   torch.testing.assert_close(x_grad, x.grad)
   torch.testing.assert_close(y_grad, y.grad)
+
+
+def test_remat_all_view():
+  """Test rematerialization of view operations."""
+
+  def fn(x, y):
+    a = x.view(2, 5)
+    b = a.view(5, 2)
+    c = b.view(1, 10)
+
+    d = y.view(2, 5)
+    e = d.view(5, 2)
+    f = e.view(10, 1)
+
+    g = c @ f
+    h = torch.sin(g)
+    i = h.view(1)
+    j = torch.exp(i)
+    return j
+
+  fw_compiler, get_fwd = _make_get_graph_compiler()
+  bw_compiler, get_bwd = _make_get_graph_compiler()
+
+  x = torch.randn((1, 10), requires_grad=True)
+  y = torch.randn((10, 1), requires_grad=True)
+  fn_compiled = aot_function(
+    fn,
+    fw_compiler=fw_compiler,
+    bw_compiler=bw_compiler,
+    partition_fn=remat_all_partition_fn,
+  )
+  out = fn_compiled(x, y)
+  out.backward()
+
+  fw_graph = get_fwd()
+  bw_graph = get_bwd()
+
+  # Seven view in total counted from `fn`.
+  assert _count_function_calls(fw_graph, "view") == 7
+
+  # All forward views should be rematerialized in the backward, plus each of their gradients.
+  assert _count_function_calls(bw_graph, "view") == 7 * 2
+
+
+def test_remat_all_reductions():
+  """Test that even reductions can be rematerialized.
+
+  What is a "reduction"? Basically going from large input to small output, c.f.
+  https://github.com/pytorch/pytorch/blob/38e81a53324146d445a81eb8f80bccebe623eb35/torch/_functorch/partitioners.py#L1101
+  """
+
+  def fn(x, y):
+    # Reduce x from 64x64 to 2x2.
+    x = x.view(2, 2, 32, 32).sum(dim=-1).mean(dim=-1)
+    x = torch.sin(x)
+    # Reduce y from 64x64 to 2x2.
+    y = y.view(2, 2, 32, 32).sum(dim=-1).mean(dim=-1)
+    y = torch.sin(y)
+    # Multiply them into a scalar.
+    return x.reshape(1, 4) @ y.reshape(4, 1)
+
+  fw_compiler, get_fwd = _make_get_graph_compiler()
+  bw_compiler, get_bwd = _make_get_graph_compiler()
+
+  x = torch.randn((64, 64), requires_grad=True)
+  y = torch.randn((64, 64), requires_grad=True)
+  fn_compiled = aot_function(
+    fn,
+    fw_compiler=fw_compiler,
+    bw_compiler=bw_compiler,
+    partition_fn=remat_all_partition_fn,
+  )
+  out = fn_compiled(x, y)
+  out.backward()
+
+  fw_graph = get_fwd()
+  bw_graph = get_bwd()
+
+  # Sum and mean are all "reductions" and they should all still be recomputed.
+  assert _count_function_calls(fw_graph, "sum") == 2
+  assert _count_function_calls(fw_graph, "mean") == 2
+  assert _count_function_calls(bw_graph, "sum") == 2
+  assert _count_function_calls(bw_graph, "mean") == 2
 
 
 def test_remat_all_llama3():
