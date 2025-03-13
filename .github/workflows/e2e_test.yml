@@ -17,6 +17,7 @@ jobs:
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
+      llama-3-8b-2-slice-name: ${{ steps.run-llama-3-8b-2-slice.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
       artifact-dir: ${{ steps.artifacts.outputs.artifact_dir }}
     steps:
@@ -102,6 +103,28 @@ jobs:
             profile_step=3 \
             max_steps=15
 
+      - name: Run Llama 3.0 8B (2 slice)
+        id: run-llama-3-8b-2-slice
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          XLA_IR_DEBUG: 1
+          XLA_HLO_DEBUG: 1
+        run: |
+          name=$(e2e_testing/gen_name.py llama-3-8b-2-slice)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          tp run \
+            --name $name \
+            --num-slices 2 \
+            torchprime/torch_xla_models/train.py \
+            model=llama-3-8b \
+            model/scaling=llama-fsdp \
+            global_batch_size=16 \
+            dcn_mesh.fsdp=2 \
+            ici_mesh.fsdp=4 \
+            dataset_config_name=wikitext-2-raw-v1 \
+            profile_step=3 \
+            max_steps=15
+
   llama-3-8b:
     name: Llama 3.0 8B
     needs: tp-run
@@ -117,6 +140,15 @@ jobs:
     uses: ./.github/workflows/reusable_e2e_check.yml
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2d-name }}
+      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
+    secrets: inherit
+
+  llama-3-8b-2-slice:
+    name: Llama 3.0 8B (2 slice)
+    needs: tp-run
+    uses: ./.github/workflows/reusable_e2e_check.yml
+    with:
+      jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2-slice-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
     secrets: inherit
 

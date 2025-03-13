@@ -207,6 +207,12 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   "defaults to one based on the date and time.",
   default=None,
 )
+@click.option(
+  "--num-slices",
+  required=False,
+  default=None,
+  help="Temporarily override the number of TPU slice to use for this run.",
+)
 @click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
 @click.option(
   "--use-local-wheel",
@@ -214,7 +220,9 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   help="Use local torch and torch_xla wheels under folder local_dist/",
 )
 @interactive
-def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
+def run(
+  args, name: str | None, num_slices: int | None, use_hf: bool, use_local_wheel: bool
+):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
   """
@@ -258,6 +266,9 @@ def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
     f"TORCHPRIME_JOBSET_NAME={workload_name}",
   ]
 
+  if num_slices is None:
+    num_slices = config.num_slices
+
   ensure_command("xpk")
   xpk_command = (
     [
@@ -273,7 +284,7 @@ def run(args, name: str | None, use_hf: bool, use_local_wheel: bool):
       "--tpu-type",
       config.tpu_type,
       "--num-slices",
-      str(config.num_slices),
+      str(num_slices),
       "--zone",
       config.zone,
       "--project",

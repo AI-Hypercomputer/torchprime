@@ -15,7 +15,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
     container:
-      image: us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_${{ matrix.python-version }}_tpuvm_cxx11_20250312
+      image: us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_${{ matrix.python-version }}_tpuvm_cxx11_20250313
     steps:
     - uses: actions/checkout@v4
     - name: Install torchax
