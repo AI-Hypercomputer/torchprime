@@ -22,6 +22,7 @@ import math
 
 import torch
 import torch_xla.debug.profiler as xp
+import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 from torch import nn
 from transformers.activations import ACT2FN
@@ -244,8 +245,9 @@ class LlamaAttention(nn.Module):
     cos, sin = self.rotary_emb(value_states, position_ids)
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-    key_states = repeat_kv(key_states, self.num_key_value_groups)
-    value_states = repeat_kv(value_states, self.num_key_value_groups)
+    if self.config.attention_kernel != "splash_attention":
+      key_states = repeat_kv(key_states, self.num_key_value_groups)
+      value_states = repeat_kv(value_states, self.num_key_value_groups)
     attn_output = self.core_attention(
       self.head_dim, attention_mask, bsz, q_len, query_states, key_states, value_states
     )
@@ -286,7 +288,49 @@ class CoreAttention(nn.Module):
     key_states,
     value_states,
   ):
-    if not self.config.flash_attention:
+    partition_spec = None
+    if xs.get_global_mesh() is not None:
+      partition_spec = (("data", "fsdp"), "tensor", None, None)
+    if self.config.attention_kernel == "splash_attention":
+      # Integrated with PyTorch/XLA Pallas Splash Attention:
+      assert (
+        xs.get_global_mesh() is not None
+      ), "Global mesh is required for Splash Attention"
+      from torchprime.torch_xla_models.experimental.custom_kernel import (
+        SplashAttentionConfig,
+        splash_attention,
+      )
+
+      if partition_spec is None:
+        partition_spec = (None,) * 4
+      logical_axis_rules = (
+        ("activation_batch", partition_spec[0]),
+        ("activation_heads", partition_spec[1]),
+        ("activation_length", partition_spec[2]),
+        ("activation_kv", partition_spec[3]),
+      )
+      sa_config = SplashAttentionConfig(
+        mesh=str(xs.get_global_mesh()),
+        logical_axis_rules=logical_axis_rules,
+      )
+      query_states /= math.sqrt(head_dim)
+      attn_output = splash_attention(
+        query_states, key_states, value_states, sa_config.to_json()
+      )
+    elif self.config.attention_kernel == "flash_attention":
+      # Integrated with PyTorch/XLA Pallas Flash Attention:
+      from torch_xla.experimental.custom_kernel import flash_attention
+
+      query_states /= math.sqrt(head_dim)
+
+      attn_output = flash_attention(
+        query_states,
+        key_states,
+        value_states,
+        causal=True,
+        partition_spec=partition_spec,
+      )
+    else:
       attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
         head_dim
       )
@@ -303,21 +347,8 @@ class CoreAttention(nn.Module):
         attn_weights, p=self.config.attention_dropout, training=self.training
       )
       attn_output = torch.matmul(attn_weights, value_states)
-    else:
-      # Integrated with PyTorch/XLA Pallas Flash Attention:
-      from torch_xla.experimental.custom_kernel import flash_attention
 
-      query_states /= math.sqrt(head_dim)
-
-      attn_output = flash_attention(
-        query_states,
-        key_states,
-        value_states,
-        causal=True,
-        partition_spec=(("data", "fsdp"), "tensor", None, None),
-      )
     assert attn_output is not None
-
     num_heads = self.config.num_attention_heads
     if attn_output.size() != (bsz, num_heads, q_len, head_dim):
       raise ValueError(
