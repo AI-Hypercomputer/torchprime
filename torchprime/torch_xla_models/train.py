@@ -2,7 +2,9 @@
 import importlib
 import logging
 import math
+import random
 import sys
+import time
 from contextlib import contextmanager
 from functools import partial
 from timeit import default_timer as timer
@@ -95,9 +97,9 @@ class Trainer:
     # Annotate model weights and activations with sharding constraints to distribute
     # the training across devices following the SPMD paradigm.
     sharding_config = OmegaConf.to_container(self.config.model.sharding, resolve=True)
-    assert isinstance(
-      sharding_config, dict
-    ), f"Sharding config {sharding_config} must be a dict"
+    assert isinstance(sharding_config, dict), (
+      f"Sharding config {sharding_config} must be a dict"
+    )
     model = shard_torch_xla_model_from_config(model, config=sharding_config)
 
     # Rematerialize forward computation during the backward pass if requested.
@@ -381,7 +383,25 @@ def main(config: DictConfig):
 
   # TODO: Add tokenizer models to torchprime
   tokenizer_name = config.model.tokenizer_name
-  tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+
+  retry_count = 10
+  retry_delay = 3
+  tokenizer = None
+  for attempt in range(retry_count):
+    try:
+      tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+      break  # Success, exit the retry loop
+    except Exception as e:
+      if attempt < retry_count - 1:
+        logger.warning(
+          f"Error: {e}. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{retry_count})"
+        )
+        time.sleep(retry_delay + random.random() * 5)
+      else:
+        logger.error(
+          f"Failed to load tokenizer after {retry_count} attempts due to ReadTimeoutError: {e}"
+        )
+        raise  # Re-raise the exception after exhausting retries
 
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
@@ -392,12 +412,30 @@ def main(config: DictConfig):
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
-  # Downloading and loading a dataset from the hub.
-  data = load_dataset(
-    config.dataset_name,
-    config.dataset_config_name,
-    cache_dir=config.cache_dir,
-  )["train"]
+  # Downloading and loading a dataset from the hub with retry logic.
+  retry_count = 10
+  retry_delay = 3
+  data = None
+  for attempt in range(retry_count):
+    try:
+      data = load_dataset(
+        config.dataset_name,
+        config.dataset_config_name,
+        cache_dir=config.cache_dir,
+      )["train"]
+      break  # Success, exit the retry loop
+    except Exception as e:
+      if attempt < retry_count - 1:
+        logger.warning(
+          f"Error: {e}. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{retry_count})"
+        )
+        time.sleep(retry_delay + random.random() * 5)
+      else:
+        logger.error(
+          f"Failed to load dataset after {retry_count} attempts due to ReadTimeoutError: {e}"
+        )
+        raise  # Re-raise the exception after exhausting retries
+
   column_names = list(data.features)
   data = data.map(
     lambda samples: tokenizer(samples["text"]),
