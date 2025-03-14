@@ -162,10 +162,8 @@ class Trainer:
       self.train_dataset,
       # Data collator will default to DataCollatorWithPadding, so we change it.
       collate_fn=default_data_collator,
-      num_workers=4,
       batch_size=batch_size,
       sampler=sampler,
-      prefetch_factor=1,
       drop_last=True,
     )
     loader = pl.MpDeviceLoader(

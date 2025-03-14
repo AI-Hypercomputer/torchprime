@@ -13,7 +13,7 @@ from torch_xla.distributed.spmd import Mesh
 from torch_xla.experimental.custom_kernel import requires_jax
 
 # use the global var to cache XlaComputation
-func_arg_to_XlaComputation: dict[tuple[Any], str] = {}
+_FUNC_ARG_TO_XLA_COMPUTATION: dict[tuple[Any], str] = {}
 
 
 def call_jax(jax_func, args, kwargs=None, name=None):
@@ -22,7 +22,7 @@ def call_jax(jax_func, args, kwargs=None, name=None):
   contain XLA tensors. We copied the function from torch_xla.core.xla_builder
   with modifications to cache the XlaComputation based on input shapes.
   """
-  global func_arg_to_XlaComputation
+  global _FUNC_ARG_TO_XLA_COMPUTATION
   kwargs = kwargs or {}
   flattened, _spec = tree_flatten((args, kwargs))
 
@@ -35,10 +35,10 @@ def call_jax(jax_func, args, kwargs=None, name=None):
   for item in args:
     arg_shapes.append(item.shape if isinstance(item, torch.Tensor) else item)
   hash_key = (jax_func, tuple(arg_shapes), repr(sorted(kwargs_shapes.items())).encode())
-  if hash_key not in func_arg_to_XlaComputation:
+  if hash_key not in _FUNC_ARG_TO_XLA_COMPUTATION:
     xla_computation = jax_func_to_xla_computation(jax_func, args, kwargs, name)
-    func_arg_to_XlaComputation[hash_key] = xla_computation
-  xla_computation = func_arg_to_XlaComputation[hash_key]
+    _FUNC_ARG_TO_XLA_COMPUTATION[hash_key] = xla_computation
+  xla_computation = _FUNC_ARG_TO_XLA_COMPUTATION[hash_key]
   return xla_computation(flattened)
 
 
