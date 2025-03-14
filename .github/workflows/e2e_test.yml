@@ -69,7 +69,7 @@ jobs:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
         run: |
-          name=$(e2e_testing/gen_name.py llama-3_1-8b-sa)
+          name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
           tp run \
             --name $name \
