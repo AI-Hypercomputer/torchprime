@@ -237,6 +237,9 @@ class MixtralAttention(nn.Module):
     partition_spec = None
     if xs.get_global_mesh() is not None:
       partition_spec = (("data", "fsdp"), "tensor", None, None)
+      # TODO(bhavya01): Check to see if the segment_ids_partition_spec is
+      # correct.
+      segment_ids_partition_spec = (("data", "fsdp"), None)
     if self.config.attention_kernel == "splash_attention":
       # Integrated with PyTorch/XLA Pallas Splash Attention:
       assert (
@@ -247,16 +250,13 @@ class MixtralAttention(nn.Module):
         splash_attention,
       )
 
-      if partition_spec is None:
-        partition_spec = (None,) * 4
-      logical_axis_rules = (
-        ("activation_batch", partition_spec[0]),
-        ("activation_heads", partition_spec[1]),
-        ("activation_length", partition_spec[2]),
-        ("activation_kv", partition_spec[3]),
+      sa_config = SplashAttentionConfig(
+        mesh=str(xs.get_global_mesh()),
       )
       sa_config = SplashAttentionConfig(
-        mesh=str(xs.get_global_mesh()), logical_axis_rules=logical_axis_rules
+        mesh=str(xs.get_global_mesh()),
+        qkv_partition_spec=partition_spec,
+        segment_ids_partition_spec=segment_ids_partition_spec,
       )
       query_states /= math.sqrt(self.head_dim)
       attn_output = splash_attention(

@@ -46,21 +46,11 @@ class SplashAttentionTest(unittest.TestCase):
     self.SEQ_LEN = 128
     self.HEAD_DIM = 128
     self.partition_spec = (("data", "fsdp"), None, None, None)
-    self.gen_kernel_config(self.partition_spec)
-
-  def gen_kernel_config(self, partition_spec):
-    if partition_spec is None:
-      partition_spec = (None,) * 4
-    else:
-      logical_axis_rules = (
-        ("activation_batch", partition_spec[0]),
-        ("activation_heads", partition_spec[1]),
-        ("activation_length", partition_spec[2]),
-        ("activation_kv", partition_spec[3]),
-      )
+    segment_ids_partition_spec = (("data", "fsdp"), None)
     self.config = SplashAttentionConfig(
       mesh=str(xs.get_global_mesh()),
-      logical_axis_rules=logical_axis_rules,
+      qkv_partition_spec=self.partition_spec,
+      segment_ids_partition_spec=segment_ids_partition_spec,
     )
 
   def maybe_expend_kv(self, hidden_state):
@@ -79,7 +69,7 @@ class SplashAttentionTest(unittest.TestCase):
     num_kv_group = self.NUM_Q_HEADS // self.NUM_KV_HEADS
     return hidden_state_grad.view(
       self.BATCH_SIZE,
-      self.NUM_Q_HEADS // num_kv_group,
+      self.NUM_KV_HEADS,
       num_kv_group,
       self.SEQ_LEN,
       self.HEAD_DIM,
@@ -140,7 +130,8 @@ class SplashAttentionTest(unittest.TestCase):
 
     o = self._attention(q, k, v, attn_mask=attention_mask)
     torch_xla.sync()
-    [i.retain_grad() for i in [q, k, v]]
+    for i in [q, k, v]:
+      i.retain_grad()
     loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()
@@ -218,7 +209,8 @@ class SplashAttentionTest(unittest.TestCase):
       mesh=xs.get_global_mesh(),
     )
     torch_xla.sync()
-    [i.retain_grad() for i in [q, k, v]]
+    for i in [q, k, v]:
+      i.retain_grad()
     loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()
@@ -275,7 +267,8 @@ class SplashAttentionTest(unittest.TestCase):
       mesh=xs.get_global_mesh(),
     )
     torch_xla.sync()
-    [i.retain_grad() for i in [q, k, v]]
+    for i in [q, k, v]:
+      i.retain_grad()
     loss = torch.sum(o)
     loss.backward()
     torch_xla.sync()

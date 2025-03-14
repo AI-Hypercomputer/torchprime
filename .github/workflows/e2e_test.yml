@@ -16,7 +16,7 @@ jobs:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
-      llama-3.1-8b-sa-name: ${{ steps.run-llama-3_1-8b-SplashAttention.outputs.name }}
+      llama-3_1-8b-sa-name: ${{ steps.run-llama-3_1-8b-SplashAttention.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
       llama-3-8b-2-slice-name: ${{ steps.run-llama-3-8b-2-slice.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
@@ -153,12 +153,12 @@ jobs:
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
     secrets: inherit
 
-  llama-3.1-8b-sa:
+  llama-3_1-8b-sa:
     name: Llama 3.1 8B (Spalsh Attention)
     needs: tp-run
     uses: ./.github/workflows/reusable_e2e_check.yml
     with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3.1-8b-sa-name }}
+      jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-sa-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
     secrets: inherit
 
