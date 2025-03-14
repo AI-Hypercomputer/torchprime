@@ -15,7 +15,7 @@ import click
 def buildpush(
   torchprime_project_id,
   torchprime_docker_url=None,
-  torchprime_docker_tag=None,
+  push_docker=True,
   *,
   build_arg=None,
 ) -> str:
@@ -36,7 +36,7 @@ def buildpush(
 
   # Determine Docker tag
   default_tag = f"{datetime_str}-{random_chars}"
-  docker_tag = torchprime_docker_tag if torchprime_docker_tag else default_tag
+  docker_tag = default_tag
 
   # Determine Docker URL
   default_url = f"gcr.io/{torchprime_project_id}/torchprime-{user}:{docker_tag}"
@@ -62,7 +62,8 @@ def buildpush(
     _run(
       f"{sudo_cmd} docker tag {docker_tag} {docker_url}",
     )
-    _run(f"{sudo_cmd} docker push {docker_url}")
+    if push_docker:
+      _run(f"{sudo_cmd} docker push {docker_url}")
   except subprocess.CalledProcessError as e:
     print(f"Error running command: {e}")
     exit(e.returncode)
@@ -83,9 +84,10 @@ if __name__ == "__main__":
   # Read environment variables or use defaults
   torchprime_project_id = os.getenv("TORCHPRIME_PROJECT_ID", "tpu-pytorch")
   torchprime_docker_url = os.getenv("TORCHPRIME_DOCKER_URL", None)
-  torchprime_docker_tag = os.getenv("TORCHPRIME_DOCKER_TAG", None)
+  push_docker_str = os.getenv("TORCHPRIME_PUSH_DOCKER", "true")
+  push_docker = push_docker_str.lower() in ("true", "1", "yes", "y")
   buildpush(
     torchprime_project_id,
     torchprime_docker_url,
-    torchprime_docker_tag,
+    push_docker,
   )
