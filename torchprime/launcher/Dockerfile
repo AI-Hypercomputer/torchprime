@@ -60,7 +60,7 @@ RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
 
 # This should not install any packages. Only symlink the source code.
 RUN pip install --no-deps -e .
-
+RUN pip install -r requirements.txt
 RUN if [ "$USE_TRANSFORMERS" = "true" ] && [ -d "local_transformers" ]; then \
         echo "Using local transformers repo"; \
     elif [ "$USE_TRANSFORMERS" = "true" ]; then \

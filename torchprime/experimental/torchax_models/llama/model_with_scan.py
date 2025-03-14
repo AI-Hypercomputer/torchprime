@@ -206,7 +206,6 @@ class Attention(nn.Module):
     xq = interop.call_jax(checkpoint_name, xq, "query_proj")
     xk = interop.call_jax(checkpoint_name, xk, "key_proj")
     xv = interop.call_jax(checkpoint_name, xv, "value_proj")
-
     keys = xk
     values = xv
 
@@ -341,19 +340,19 @@ class ScanLayer(nn.Module):
     assert not kwargs
     weights = {k: self.params[self._param_name_new(k)] for k in self.layer_weights_keys}
     scan = interop.torch_view(jax.lax.scan)
-    # policy = jax.checkpoint_policies.save_and_offload_only_these_names(
-    #   names_which_can_be_saved=[],
-    #   names_which_can_be_offloaded=[
-    #     "decoder_layer_input",
-    #     "query_proj",
-    #     "key_proj",
-    #     "value_proj",
-    #     "out_proj",
-    #   ],
-    #   offload_src="device",
-    #   offload_dst="pinned_host",
-    # )
-    policy=None
+    policy = jax.checkpoint_policies.save_and_offload_only_these_names(
+      names_which_can_be_saved=[],
+      names_which_can_be_offloaded=[
+        "decoder_layer_input",
+        "query_proj",
+        "key_proj",
+        "value_proj",
+        "out_proj",
+      ],
+      offload_src="device",
+      offload_dst="pinned_host",
+    )
+    #policy=None
 
     def eval_one_layer(args, weight):
       # unpack args
@@ -371,7 +370,6 @@ class ScanLayer(nn.Module):
       _eval_one_layer,
       args,
       weights,
-      unroll=4
     )
     return h[0]
 

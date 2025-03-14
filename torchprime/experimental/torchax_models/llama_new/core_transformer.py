@@ -8,6 +8,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 import jax
+from jax.ad_checkpoint import checkpoint_name
+from jax.sharding import PartitionSpec as P
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -165,8 +167,18 @@ class Attention(nn.Module):
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
+        xq.shard_(P("fsdp", None, "tp", None))
+        xk.shard_(P("fsdp", None, "tp", None))
+        xv.shard_(P("fsdp", None, "tp", None))
+
+        xq.apply_jax_(checkpoint_name, "query_proj")
+        xk.apply_jax_(checkpoint_name, "key_proj")
+        xv.apply_jax_(checkpoint_name, "value_proj")
+
+
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
+        # apply names for host offload policy
 
         xq, xk, xv = [t.transpose(1, 2) for t in (xq, xk, xv)]
 
@@ -176,6 +188,7 @@ class Attention(nn.Module):
         attn_output = F.scaled_dot_product_attention(xq, xk, xv, attn_mask=mask, dropout_p=0.0)
         attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         output = self.wo(attn_output)
+        output.apply_jax_(checkpoint_name, "out_proj")
         return output
 
 
@@ -274,6 +287,7 @@ class MOEFeedForward(torch.nn.Module):
     # self.num_activated_experts = moe_args.top_k
 
   def forward(self, x):
+
     experts_outs = self.gated_experts(x) 
     shared_exp_out = self.shared_expert(x)
     return experts_outs + shared_exp_out
@@ -328,6 +342,9 @@ class TransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
     ):
+
+        x.apply_jax_(checkpoint_name, "decoder_layer_input")
+        x.shard_(P("fsdp", None, "tp"))
         h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
         out = h + self.feed_forward(self.ffn_norm(h))
         return out

@@ -22,6 +22,7 @@ from omegaconf import DictConfig, OmegaConf
 from torchax import interop
 
 from torchprime.mesh import custom_mesh
+from torchprime.metrics.mfu import compute_mfu
 
 sharding_map_original = {
   "freqs_cis": (),  #  torch.complex64 (2048, 64)
@@ -292,7 +293,7 @@ def main(config: DictConfig):
       offload_dst="pinned_host",
     )
   else:
-    policy = jax.checkpoint_policies.nothing_saveable
+    policy = jax.checkpoint_policies.dots_with_no_batch_dims_saveable
 
   args = model.ModelArgs(**model.transformer_configs[config.model_type])
   if config.internal_override_layers > 0:
@@ -380,7 +381,7 @@ def main(config: DictConfig):
   register_attention(custom_attention)
 
   with mesh:
-    train.train_loop(
+    min_loop_time_secs = train.train_loop(
       mesh,
       llama,
       sharded_weights,
@@ -393,6 +394,35 @@ def main(config: DictConfig):
       use_shmap=(config.model_impl == "scan_manual"),
       profile_dir=config.profile_dir,
     )
+
+  num_layers, hidden, interm_size = llama.layers.params.feed_forward___shared_expert___w1___weight.shape
+  
+  hf_config = {
+    "hidden_size": hidden,
+    "intermediate_size": interm_size,
+    "num_attention_heads": args.n_heads,
+    "num_hidden_layers": num_layers,
+    "num_key_value_heads": args.n_kv_heads,
+    "torch_dtype": "bfloat16",
+    "vocab_size": args.vocab_size,
+  }
+  result = compute_mfu(
+    hf_config,
+    batch_size=config.global_batch_size,
+    sequence_length=config.seqlen,
+    step_duration=min_loop_time_secs,
+    tpu_name=config.tpu_name,
+  )
+
+  print('HANQ num_devices:', jax.device_count())
+  print('HANQ global bs:', config.global_batch_size)
+  print('HANQ seq len:', config.seqlen)
+  print('HANQ step time (s):', min_loop_time_secs)
+  print('HANQ MFU', result.mfu)
+  print('HANQ throughput:', 
+        config.global_batch_size * config.seqlen / min_loop_time_secs)
+
+  
 
 
 if __name__ == "__main__":
