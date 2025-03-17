@@ -1,6 +1,7 @@
 defaults:
   - _self_  # refers to this config file
-  - scaling: llama-fsdp  # refers to scaling/llama-fsdp.yaml
+  - sharding: llama-fsdp  # refers to sharding/llama-fsdp.yaml
+  - remat: llama  # refers to remat/llama.yaml
 
 model_class: llama.LlamaForCausalLM  # Used to import the model from this class
 vocab_size: 128256

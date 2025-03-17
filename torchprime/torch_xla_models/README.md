@@ -137,8 +137,10 @@ tp run torchprime/torch_xla_models/train.py \
 - `train.py`: Main training script that sets up the model, data, and training loop
 - `configs/base.yaml`: Configuration file for the training script
 - `configs/model`: Configuration files for models
-- `configs/model/scaling`: Configuration files for scaling the training of a model, e.g.
-  rematerialization, sharding tensors.
+- `configs/model/sharding`: Configuration files for distributing the training
+  over many chips
+- `configs/model/remat`: Configuration files for rematerialization strategy e.g.
+  activation checkpointing, host offloading
 - `llama/model.py`: Implementation of the Llama model family
 - `mixtral/model.py`: Implementation of the Mixtral model family
 

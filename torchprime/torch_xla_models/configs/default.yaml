@@ -47,3 +47,26 @@ dcn_mesh:
   fsdp: 1
   tensor: 1
   expert: 1
+
+# These are default values for model activation rematerialization configuration.
+# They can be overridden on the command line or by importing one of the presets
+# in the `model/remat` directory.
+model:
+  remat:
+    # The class names of model layers whose intermediate activations should be
+    # recomputed during the backward pass (i.e. activation checkpointing).
+    activation_checkpoint_layers: []
+
+    # If not null, compile a module of type `HomogeneousSequential` located at the
+    # given path in the module tree using `torch_xla.experimental.scan_layers`.
+    scan_layers: null
+
+    # If specified, offload these tensors to host RAM during the forward pass and
+    # move them back during the backward pass.
+    #
+    # The tensors to be offloaded should be given a name by wrapping them with the
+    # `torchprime.torch_xla_models.offloading.offload_name` call. Then the same
+    # name could be specified here to offload that tensor.
+    #
+    # Currently in order to offload tensors, `scan_layers` must also be enabled.
+    offload_tensors: []
