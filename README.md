@@ -169,6 +169,7 @@ Finally, each model may also provide a GPU "original" version that illustrates
 and attributes where this model code came from, if any. This also helps to
 show case what changes we have done to make it performant on TPU. The original
 version is not expected to be run.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request.
@@ -176,62 +177,25 @@ Contributions are welcome! Please feel free to submit a pull request.
 When developing, use `pip install -e '.[dev]'` to install dev dependencies such
 as linter and formatter.
 
-### How to run tests:
+### How to run tests
 
 ```sh
 pytest
 ```
 
-### How to run some of the tests, and re-run them whenever you change a file:
+### How to run some of the tests, and re-run them whenever you change a file
 
 ```sh
 tp -i test ... # replace with path to tests/directories
 ```
 
-
-### How to run HuggingFace transformer models
-Torchprime supports run with huggingface models by taking advantage of `tp run`.
-To use huggingface models, you can clone
-[huggingface/transformers](https://github.com/huggingface/transformers) under
-torchprime and name it as `local_transformers`. This allows you to pick any
-branch or make code modifications in transformers for experiment:
-```
-git clone https://github.com/huggingface/transformers.git local_transformers
-```
-If huggingface transformer doesn't exist, torchprime will automatically clone
-the repo and build the docker for experiment. To switch to huggingface models,
-add flag `--use-hf` to `tp run` command:
-```
-tp run --use-hf torchprime/hf_models/train.py
-```
-
-### How to run inside the docker container locally
-You can also run locally without XPK with docker. When running inside the docker
-container, it will use the same dependencies and build process as used in the
-XPK approach, improving the hermeticity and reliability.
-```
-tp docker-run torchprime/torch_xla_models/train.py
-```
-This will run the TorchPrime docker image locally. You can also add `--use-hf`
-to run HuggingFace model locally.
-```
-tp docker-run --use-hf torchprime/hf_models/train.py
-```
-
-### How to run locally without XPK:
-```
-tp dbrun torchprime/torch_xla_models/train.py
-```
-This will run the TorchPrime docker image locally. You can also add `--use-hf`
-to run HuggingFace model locally.
-
-### How to format:
+### How to format
 
 ```sh
 ruff format
 ```
 
-### How to lint:
+### How to lint
 
 ```sh
 ruff check [--fix]
@@ -239,6 +203,23 @@ ruff check [--fix]
 
 You can install a Ruff VSCode plugin to check errors and format files from
 the editor.
+
+### How to run inside the docker container locally
+
+You can also run locally without XPK with docker. When running inside the docker
+container, it will use the same dependencies and build process as used in the
+XPK approach, improving the hermeticity and reliability.
+
+```sh
+tp docker-run torchprime/torch_xla_models/train.py
+```
+
+This will run the TorchPrime docker image locally. You can also add `--use-hf`
+to run HuggingFace model locally.
+
+```sh
+tp docker-run --use-hf torchprime/hf_models/train.py
+```
 
 ## Run distributed training with local torch/torch_xla wheel
 

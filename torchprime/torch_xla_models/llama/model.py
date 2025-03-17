@@ -28,7 +28,9 @@ from torch import nn
 from transformers.activations import ACT2FN
 from transformers.utils import logging
 
+from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
+from torchprime.torch_xla_models import offloading
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 logger = logging.get_logger(__name__)
@@ -328,8 +330,8 @@ class LlamaDecoderLayer(nn.Module):
     self,
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
-    position_ids: torch.LongTensor | None = None,
-  ) -> torch.FloatTensor:
+    position_ids: torch.Tensor | None = None,
+  ) -> torch.Tensor:
     """
     Args:
         hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -337,6 +339,11 @@ class LlamaDecoderLayer(nn.Module):
             attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
             query_sequence_length, key_sequence_length)` if default attention is used.
     """
+    # This gives the `hidden_states` tensor a name so that we can layer specify
+    # to offload this tensor to host RAM to save memory. This is not a standard
+    # torch API because there is no such feature in PyTorch. Instead, the name
+    # becomes node metadata during FX graph capture.
+    hidden_states = offloading.offload_name(hidden_states, "decoder_input")
 
     residual = hidden_states
 
@@ -370,10 +377,12 @@ class LlamaModel(nn.Module):
   def __init__(self, config: DictConfig):
     super().__init__()
     self.vocab_size = config.vocab_size
-
     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-    self.layers = nn.ModuleList(
-      [
+
+    # `HomogeneousSequential` is similar to `nn.Sequential` but can be compiled with
+    # `scan` described in https://pytorch.org/xla/release/r2.6/features/scan.html.
+    self.layers = HomogeneousSequential(
+      *[
         LlamaDecoderLayer(config, layer_idx)
         for layer_idx in range(config.num_hidden_layers)
       ]
@@ -385,15 +394,16 @@ class LlamaModel(nn.Module):
     self,
     input_ids: torch.LongTensor,
     attention_mask: torch.FloatTensor | None = None,
-  ) -> torch.FloatTensor:
+  ) -> torch.Tensor:
+    # convert input ids to embeddings
     inputs_embeds = self.embed_tokens(input_ids)
 
-    position_ids = torch.arange(
-      inputs_embeds.shape[1], device=inputs_embeds.device
-    ).unsqueeze(0)
-
-    # Create a causal mask without calling the current method
     seq_length = inputs_embeds.size(1)
+    position_ids = (
+      torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).float()
+    )
+
+    # Create a causal attention mask
     causal_mask = torch.triu(
       torch.full((seq_length, seq_length), float("-inf"), device=inputs_embeds.device),
       diagonal=1,
@@ -403,14 +413,10 @@ class LlamaModel(nn.Module):
     if attention_mask is not None:
       causal_mask = causal_mask * attention_mask[:, None, None, :]
 
-    # embed positions
-    hidden_states = inputs_embeds
-
     # decoder layers
-    for decoder_layer in self.layers:
-      hidden_states = decoder_layer(
-        hidden_states, attention_mask=causal_mask, position_ids=position_ids
-      )
+    hidden_states = self.layers(
+      inputs_embeds, attention_mask=causal_mask, position_ids=position_ids
+    )
 
     hidden_states = self.norm(hidden_states)
     return hidden_states
