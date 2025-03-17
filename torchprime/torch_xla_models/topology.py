@@ -85,6 +85,7 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
     dcn_mesh_shape=dcn_mesh_shape,
     num_devices=num_devices,
     num_slices=get_num_slices(),
+    hierarchical_friendly=config.hierarchical_friendly,
   )
   if devices is not None:
     mesh_shape = tuple(np.multiply(ici_mesh_shape, dcn_mesh_shape).tolist())

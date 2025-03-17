@@ -17,6 +17,7 @@ def maybe_get_custom_mesh(
   dcn_mesh_shape: Sequence[int],
   num_devices: int,
   num_slices: int,
+  hierarchical_friendly=True,
 ) -> np.ndarray | None:
   """
   Get a more performant custom mesh given the mesh shape if applicable.
@@ -46,6 +47,7 @@ def maybe_get_custom_mesh(
       dcn_mesh_shape=dcn_mesh_shape,
       num_devices=num_devices,
       num_slices=num_slices,
+      hierarchical_friendly=hierarchical_friendly,
     )
   return None
 
@@ -138,6 +140,7 @@ def _get_64x4_hybrid_ring_mesh(
   dcn_mesh_shape: Sequence[int],
   num_devices: int,
   num_slices: int,
+  hierarchical_friendly=True,
 ) -> np.ndarray:
   num_devices_per_granule = num_devices // num_slices
   devices = [
@@ -157,7 +160,11 @@ def _get_64x4_hybrid_ring_mesh(
       if non_trivial_dcn_idx is not None:
         raise ValueError("Only up to one non-trivial DCN mesh dim is supported")
       non_trivial_dcn_idx = i
-  if non_trivial_dcn_idx is not None and ici_mesh_shape[non_trivial_dcn_idx] > 1:
+  if (
+    hierarchical_friendly
+    and non_trivial_dcn_idx is not None
+    and ici_mesh_shape[non_trivial_dcn_idx] > 1
+  ):
     # E.g. if we have ici_mesh_shape=(64, 4) and dcn_mesh_shape=(2, 1), we want to
     # first reshape the devices to (2, 64, 4), then transpose the first two dims.
     devices = devices.reshape(

@@ -48,6 +48,11 @@ dcn_mesh:
   tensor: 1
   expert: 1
 
+# Whether to make sharding friendly to hierarchical collectives.
+# This means the DCN groups becomes the inner split when both ICI and DCN contribute
+# to a mesh axes.
+hierarchical_friendly: true
+
 # These are default values for model scaling configuration.
 # They can be overridden on the command line or by importing one of the presets
 # in the `model/remat` directory.
