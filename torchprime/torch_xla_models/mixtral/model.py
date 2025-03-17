@@ -31,8 +31,8 @@ from omegaconf import DictConfig
 from torch import nn
 from torch.nn import init
 
+from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.torch_xla_models.loss import cross_entropy_loss
-from torchprime.torch_xla_models.scan_layers import HomogeneousSequential
 from torchprime.torch_xla_models.topology import get_num_slices
 
 
@@ -995,6 +995,8 @@ class MixtralModel(nn.Module):
     batch_size, seq_length = input_ids.shape
 
     device = input_ids.device
+    # TODO(https://github.com/pytorch/xla/issues/8783): Pass position_ids as `long()`
+    # when `scan` can take non-differentiable inputs.
     position_ids = torch.arange(seq_length, dtype=torch.long, device=device).float()
     position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 

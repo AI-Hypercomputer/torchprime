@@ -12,6 +12,11 @@ class HomogeneousSequentialScan(HomogeneousSequential):
     self.partition_fn = partition_fn
 
   def forward(self, *input, **broadcasted_inputs: PyTree):
+    # `self.children()` returns an iterator over the immediate submodules, i.e.
+    # the layers we want to scan over. In the `BroadcastArguments` we extend each
+    # layer's return value to also output the broadcasted inputs
+    # (position IDs in case of LLMs, etc). This plumbs those values across scan
+    # iterations so the same values are available to all layers.
     layers = [BroadcastArguments(m) for m in self.children()]
     if len(input) == 1:
       # Handle single argument case: we don't need to call the module with a tuple.

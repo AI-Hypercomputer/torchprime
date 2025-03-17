@@ -399,6 +399,9 @@ class LlamaModel(nn.Module):
     inputs_embeds = self.embed_tokens(input_ids)
 
     seq_length = inputs_embeds.size(1)
+
+    # TODO(https://github.com/pytorch/xla/issues/8783): Pass position_ids as `long()`
+    # when `scan` can take non-differentiable inputs.
     position_ids = (
       torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).float()
     )
