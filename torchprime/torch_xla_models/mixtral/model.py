@@ -359,12 +359,12 @@ class MixtralExpertCapacityTop2MLP(nn.Module):
     mesh = xs.get_global_mesh()
     assert mesh is not None
     layer_w1 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w1)
-    MarkShardingFunction.apply(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
+    layer_w1 = MarkShardingFunction.apply(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_w3 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w3)
-    MarkShardingFunction.apply(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
+    layer_w3 = MarkShardingFunction.apply(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_multiply = self.act_fn(layer_w1) * layer_w3
     intermediate_layer = torch.einsum("ebch,ehm->ebcm", layer_multiply, self.w2)
-    MarkShardingFunction.apply(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
+    intermediate_layer = MarkShardingFunction.apply(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
     return intermediate_layer
 
 
@@ -752,7 +752,7 @@ class MixtralMoeBlock(nn.Module):
     expert_mask_fused = expert_mask.view(
       batch_size, seq_len * self.top_k, self.num_experts
     )  # (batch, s * top_k, e)
-    MarkShardingFunction.apply(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
+    expert_mask_fused = MarkShardingFunction.apply(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
 
     expert_token_count_fused = torch.cumsum(
       expert_mask_fused, dim=1
@@ -760,7 +760,7 @@ class MixtralMoeBlock(nn.Module):
     expert_token_count = expert_token_count_fused.view(
       batch_size, seq_len, self.top_k, self.num_experts
     )  # (b, s, k, e)
-    MarkShardingFunction.apply(
+    expert_token_count = MarkShardingFunction.apply(
       expert_token_count, mesh, (("data", "fsdp", "expert"), None, None, None)
     )
 
@@ -862,19 +862,19 @@ class MixtralMoeBlock(nn.Module):
           selected_experts, expert_weights, mesh
         )
         mask_axes = (("data", "fsdp", "expert"), None, None, None)
-        MarkShardingFunction.apply(dispatch_mask, mesh, mask_axes)
-        MarkShardingFunction.apply(combine_mask, mesh, mask_axes)
+        dispatch_mask = MarkShardingFunction.apply(dispatch_mask, mesh, mask_axes)
+        combine_mask = MarkShardingFunction.apply(combine_mask, mesh, mask_axes)
         loss = self.load_balance_loss(selected_experts, expert_weights)
-        MarkShardingFunction.apply(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
+        hidden_states = MarkShardingFunction.apply(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
         with xp.Trace("bsm,bsec->ebcm"):
           dispatch = torch.einsum("bsm,bsec->ebcm", hidden_states, dispatch_mask)
-        MarkShardingFunction.apply(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
+        dispatch = MarkShardingFunction.apply(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
         expert_layer = self.experts(dispatch)
         with xp.Trace("ebcm,bsec -> bsm"):
           final_hidden_states = torch.einsum(
             "ebcm,bsec -> bsm", expert_layer, combine_mask
           )
-        MarkShardingFunction.apply(
+        final_hidden_states = MarkShardingFunction.apply(
           final_hidden_states, mesh, (("data", "fsdp", "expert"), None, None)
         )
       case "gmm_stack":
