@@ -30,6 +30,7 @@ import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 from torch import nn
 from torch.nn import init
+from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.torch_xla_models.loss import cross_entropy_loss
@@ -358,13 +359,12 @@ class MixtralExpertCapacityTop2MLP(nn.Module):
     mesh = xs.get_global_mesh()
     assert mesh is not None
     layer_w1 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w1)
-    xs.mark_sharding(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
+    MarkShardingFunction.apply(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_w3 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w3)
-    xs.mark_sharding(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
+    MarkShardingFunction.apply(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
     layer_multiply = self.act_fn(layer_w1) * layer_w3
     intermediate_layer = torch.einsum("ebch,ehm->ebcm", layer_multiply, self.w2)
-    xs.mark_sharding(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
-    # TODO(bbahl): checkpoint intermediate_layer
+    MarkShardingFunction.apply(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
     return intermediate_layer
 
 
@@ -745,9 +745,6 @@ class MixtralMoeBlock(nn.Module):
     expert_capacity_per_batch = int(
       (tokens_per_batch / self.num_experts) * self.capacity_factor
     )
-    print(
-      f"Applying potential token dropping with a batch expert_capacity of {expert_capacity_per_batch}"
-    )
 
     # calculate expert mask and drop tokens if needed
     # shape of output expert mask: (batch, sequence, num_experts_per_tok, num_experts)
@@ -755,7 +752,7 @@ class MixtralMoeBlock(nn.Module):
     expert_mask_fused = expert_mask.view(
       batch_size, seq_len * self.top_k, self.num_experts
     )  # (batch, s * top_k, e)
-    xs.mark_sharding(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
+    MarkShardingFunction.apply(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
 
     expert_token_count_fused = torch.cumsum(
       expert_mask_fused, dim=1
@@ -763,7 +760,7 @@ class MixtralMoeBlock(nn.Module):
     expert_token_count = expert_token_count_fused.view(
       batch_size, seq_len, self.top_k, self.num_experts
     )  # (b, s, k, e)
-    xs.mark_sharding(
+    MarkShardingFunction.apply(
       expert_token_count, mesh, (("data", "fsdp", "expert"), None, None, None)
     )
 
@@ -825,7 +822,7 @@ class MixtralMoeBlock(nn.Module):
     # router_logits: (batch * sequence_length, n_experts)
     router_logits = self.gate(hidden_states)
 
-    expert_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+    expert_weights = F.softmax(router_logits, dim=1, dtype=hidden_states.dtype)
     routing_weights, selected_experts = torch.topk(expert_weights, self.top_k, dim=-1)
     routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
     # we cast back to the input dtype
@@ -865,19 +862,19 @@ class MixtralMoeBlock(nn.Module):
           selected_experts, expert_weights, mesh
         )
         mask_axes = (("data", "fsdp", "expert"), None, None, None)
-        xs.mark_sharding(dispatch_mask, mesh, mask_axes)
-        xs.mark_sharding(combine_mask, mesh, mask_axes)
+        MarkShardingFunction.apply(dispatch_mask, mesh, mask_axes)
+        MarkShardingFunction.apply(combine_mask, mesh, mask_axes)
         loss = self.load_balance_loss(selected_experts, expert_weights)
-        xs.mark_sharding(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
+        MarkShardingFunction.apply(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
         with xp.Trace("bsm,bsec->ebcm"):
           dispatch = torch.einsum("bsm,bsec->ebcm", hidden_states, dispatch_mask)
-        xs.mark_sharding(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
+        MarkShardingFunction.apply(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
         expert_layer = self.experts(dispatch)
         with xp.Trace("ebcm,bsec -> bsm"):
           final_hidden_states = torch.einsum(
             "ebcm,bsec -> bsm", expert_layer, combine_mask
           )
-        xs.mark_sharding(
+        MarkShardingFunction.apply(
           final_hidden_states, mesh, (("data", "fsdp", "expert"), None, None)
         )
       case "gmm_stack":
