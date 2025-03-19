@@ -25,6 +25,14 @@ from torchprime.experimental.torchax_models.mixtral_model import MixtralMoeBlock
 
 from torchprime.experimental.torchax_models.llama.model_with_scan import ScanLayer
 
+shard_sequence = False
+
+def shard_attn_output(x):
+    if shard_sequence:
+        x.shard_(P(None, "fsdp", "tp", None))
+    else:
+        x.shard_(P("fsdp", None, "tp", None))
+
 
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -167,9 +175,9 @@ class Attention(nn.Module):
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
-        xq.shard_(P("fsdp", None, "tp", None))
-        xk.shard_(P("fsdp", None, "tp", None))
-        xv.shard_(P("fsdp", None, "tp", None))
+        shard_attn_output(xq)
+        shard_attn_output(xk)
+        shard_attn_output(xv)
 
         xq.apply_jax_(checkpoint_name, "query_proj")
         xk.apply_jax_(checkpoint_name, "key_proj")
@@ -344,7 +352,10 @@ class TransformerBlock(nn.Module):
     ):
 
         x.apply_jax_(checkpoint_name, "decoder_layer_input")
-        x.shard_(P("fsdp", None, "tp"))
+        if shard_sequence:
+            x.shard_(P(None, "fsdp", "tp"))
+        else:
+            x.shard_(P("fsdp", None, "tp"))
         h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
@@ -409,6 +420,10 @@ class CoreTransformer(nn.Module):
         #     h = layer(h, start_pos, freqs_cis, mask)
         h = self.layers(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
-        output = self.output(h).float()
+        output = self.output(h)
+        if shard_sequence:
+            output.shard_(P(None, "fsdp" ))
+        else:
+            output.shard_(P("fsdp" ))
         return output
 

@@ -354,7 +354,10 @@ def main(config: DictConfig):
   freqs_cis = env.j2t_iso(jax.device_put(freqs_cis, sharding))
 
   # NOTE: overriding attention to capture mesh and sharding info
-  partition = P("fsdp", "tp", None, None)
+  if config.shard_seqlen:
+    partition = P(None, "tp", "fsdp", None)
+  else:
+    partition = P("fsdp", "tp", None, None)
   attention = functools.partial(
     splash_attn.tpu_splash_attention,
     mesh,
@@ -380,6 +383,9 @@ def main(config: DictConfig):
 
   register_attention(custom_attention)
 
+  if config.shard_seqlen:
+    llama_new.shard_seqlen = True
+
   with mesh:
     min_loop_time_secs = train.train_loop(
       mesh,
@@ -393,6 +399,7 @@ def main(config: DictConfig):
       config.global_batch_size,
       use_shmap=(config.model_impl == "scan_manual"),
       profile_dir=config.profile_dir,
+      shard_seqlen=config.shard_seqlen,
     )
 
   num_layers, hidden, interm_size = llama.layers.params.feed_forward___shared_expert___w1___weight.shape

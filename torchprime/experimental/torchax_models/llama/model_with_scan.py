@@ -352,7 +352,8 @@ class ScanLayer(nn.Module):
       offload_src="device",
       offload_dst="pinned_host",
     )
-    #policy=None
+    #policy=jax.checkpoint_policies.dots_with_no_batch_dims_saveable
+    policy = None
 
     def eval_one_layer(args, weight):
       # unpack args
@@ -364,7 +365,7 @@ class ScanLayer(nn.Module):
     _eval_one_layer = interop.call_jax(
       jax.checkpoint,
       eval_one_layer,
-      policy=policy,
+      #policy=policy,
     )
     h, _ = scan(
       _eval_one_layer,

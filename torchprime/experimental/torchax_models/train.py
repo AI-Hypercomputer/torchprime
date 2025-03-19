@@ -98,6 +98,7 @@ def make_train_step(model_forward, loss_fn, optax_optimizer, policy):
       flattened = res.reshape(-1, num_tokens)
       label = label.reshape(-1)
       loss = loss_fn(flattened, label)
+      loss.shard_(P())  # loss is replicated
       return loss
 
   jloss = interop.jax_view(loss)
@@ -157,6 +158,7 @@ def train_loop(
   batch_size,
   use_shmap,
   profile_dir: str,
+  shard_seqlen=False,
 ):
   print("start training")
   min_loop_time = float('inf')
@@ -219,21 +221,25 @@ def train_loop(
   def _expand_input(input_seq):
     seqlen = input_seq.shape[1]
     freqs_cis = env.t2j_iso(input_freqs_cis[:seqlen])
-    mask = torch.full((seqlen, seqlen), float("-inf"), device="cpu")
-    mask = torch.triu(mask, diagonal=1)
+    mask = None
+    #mask = torch.full((seqlen, seqlen), float("-inf"), device="cpu")
+    # mask = torch.triu(mask, diagonal=1)
     return (input_seq, 0, freqs_cis, mask)
 
   replicated_sharding = NamedSharding(mesh, P())
   fsdp_sharding = NamedSharding(mesh, P("fsdp"))
+  seq_sharding= NamedSharding(mesh, P(None, "fsdp"))
 
-  def _shard_first_dim(x):
+  def _shard_first_dim(x, sharding):
     with jax.default_device(jax.devices("cpu")[0]):
       xj = env.to_xla(x).jax()
 
-    xj = jax.make_array_from_callback(xj.shape, fsdp_sharding, lambda a: xj[a])
+    xj = jax.make_array_from_callback(xj.shape, sharding, lambda a: xj[a])
     return xj
 
   def _replicate(x):
+    if x is None:
+      return None
     with jax.default_device(jax.devices("cpu")[0]):
       xj = env.to_xla(x).jax()
     xj = jax.make_array_from_callback(xj.shape, replicated_sharding, lambda a: xj)
@@ -247,10 +253,16 @@ def train_loop(
 
       input_seq, pos, freqs_cis, mask = _expand_input(inputs)
 
-      input_seq = _shard_first_dim(input_seq)
+      if shard_seqlen:
+        input_seq = _shard_first_dim(input_seq, seq_sharding)
+      else:
+        input_seq = _shard_first_dim(input_seq, fsdp_sharding)
       freqs_cis = freqs_cis
       mask = _replicate(mask)
-      labels = _shard_first_dim(labels)
+      if shard_seqlen:
+        labels = _shard_first_dim(labels, seq_sharding)
+      else:
+        labels = _shard_first_dim(labels, fsdp_sharding)
 
       print("INPUT shape", inputs.shape)
       if i == 0:
