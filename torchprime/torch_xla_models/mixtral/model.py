@@ -266,7 +266,7 @@ class MixtralAttention(nn.Module):
       )
     elif self.config.attention_kernel == "flash_attention":
       # Integrated with PyTorch/XLA Pallas Flash Attention:
-      from torch_xla.experimental.custom_kernel import flash_attention, FlashAttention
+      from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
 
       FlashAttention.DEFAULT_BLOCK_SIZES = {
         "block_q": 2048,
