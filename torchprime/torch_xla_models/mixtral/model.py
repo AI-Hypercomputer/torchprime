@@ -266,7 +266,21 @@ class MixtralAttention(nn.Module):
       )
     elif self.config.attention_kernel == "flash_attention":
       # Integrated with PyTorch/XLA Pallas Flash Attention:
-      from torch_xla.experimental.custom_kernel import flash_attention
+      from torch_xla.experimental.custom_kernel import flash_attention, FlashAttention
+
+      FlashAttention.DEFAULT_BLOCK_SIZES = {
+        "block_q": 2048,
+        "block_k_major": 512,
+        "block_k": 512,
+        "block_b": 2,
+        "block_q_major_dkv": 2048,
+        "block_k_major_dkv": 512,
+        "block_q_dkv": 2048,
+        "block_k_dkv": 512,
+        "block_q_dq": 2048,
+        "block_k_dq": 256,
+        "block_k_major_dq": 512,
+      }
 
       query_states /= math.sqrt(self.head_dim)
       attn_output = flash_attention(
@@ -359,12 +373,18 @@ class MixtralExpertCapacityTop2MLP(nn.Module):
     mesh = xs.get_global_mesh()
     assert mesh is not None
     layer_w1 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w1)
-    layer_w1 = MarkShardingFunction.apply(layer_w1, mesh, ("expert", ("data", "fsdp"), None, None))
+    layer_w1 = MarkShardingFunction.apply(
+      layer_w1, mesh, ("expert", ("data", "fsdp"), None, None)
+    )
     layer_w3 = torch.einsum("ebcm,emh->ebch", dispatch_input, self.w3)
-    layer_w3 = MarkShardingFunction.apply(layer_w3, mesh, ("expert", ("data", "fsdp"), None, None))
+    layer_w3 = MarkShardingFunction.apply(
+      layer_w3, mesh, ("expert", ("data", "fsdp"), None, None)
+    )
     layer_multiply = self.act_fn(layer_w1) * layer_w3
     intermediate_layer = torch.einsum("ebch,ehm->ebcm", layer_multiply, self.w2)
-    intermediate_layer = MarkShardingFunction.apply(intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None))
+    intermediate_layer = MarkShardingFunction.apply(
+      intermediate_layer, mesh, ("expert", ("data", "fsdp"), None, None)
+    )
     return intermediate_layer
 
 
@@ -752,7 +772,9 @@ class MixtralMoeBlock(nn.Module):
     expert_mask_fused = expert_mask.view(
       batch_size, seq_len * self.top_k, self.num_experts
     )  # (batch, s * top_k, e)
-    expert_mask_fused = MarkShardingFunction.apply(expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None))
+    expert_mask_fused = MarkShardingFunction.apply(
+      expert_mask_fused, mesh, (("data", "fsdp", "expert"), None, None)
+    )
 
     expert_token_count_fused = torch.cumsum(
       expert_mask_fused, dim=1
@@ -865,10 +887,14 @@ class MixtralMoeBlock(nn.Module):
         dispatch_mask = MarkShardingFunction.apply(dispatch_mask, mesh, mask_axes)
         combine_mask = MarkShardingFunction.apply(combine_mask, mesh, mask_axes)
         loss = self.load_balance_loss(selected_experts, expert_weights)
-        hidden_states = MarkShardingFunction.apply(hidden_states, mesh, (("data", "fsdp", "expert"), None, None))
+        hidden_states = MarkShardingFunction.apply(
+          hidden_states, mesh, (("data", "fsdp", "expert"), None, None)
+        )
         with xp.Trace("bsm,bsec->ebcm"):
           dispatch = torch.einsum("bsm,bsec->ebcm", hidden_states, dispatch_mask)
-        dispatch = MarkShardingFunction.apply(dispatch, mesh, ("expert", ("data", "fsdp"), None, None))
+        dispatch = MarkShardingFunction.apply(
+          dispatch, mesh, ("expert", ("data", "fsdp"), None, None)
+        )
         expert_layer = self.experts(dispatch)
         with xp.Trace("ebcm,bsec -> bsm"):
           final_hidden_states = torch.einsum(
