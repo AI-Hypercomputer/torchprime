@@ -9,6 +9,7 @@ def remat_all_partition_fn(
   _joint_inputs,
   *,
   num_fwd_outputs,
+  static_lifetime_input_indices=None,
 ):
   """
   remat_all_partition_fn is a graph partition function that closely matches the
@@ -26,7 +27,10 @@ def remat_all_partition_fn(
       node.meta["ac_graph_id"] = 0
 
   return min_cut_rematerialization_partition(
-    joint_module, _joint_inputs, num_fwd_outputs=num_fwd_outputs
+    joint_module,
+    _joint_inputs,
+    num_fwd_outputs=num_fwd_outputs,
+    static_lifetime_input_indices=static_lifetime_input_indices,
   )
 
 

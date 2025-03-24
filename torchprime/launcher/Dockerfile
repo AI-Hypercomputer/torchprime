@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_cxx11_20250313
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250322
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
@@ -47,15 +47,21 @@ COPY . /workspaces/torchprime
 # torch_xla using the 
 RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
         if [ -d "local_dist" ] && [ "$(find local_dist -name 'torch-*.whl' | wc -l)" -gt 0 ]; then \
-            pip install local_dist/torch-*.whl; \
+            pip install local_dist/torch-*.whl; pip install numpy==1.26.4; \
         else \
             echo "torch wheel not found in local_dist directory"; \
         fi; \
         if [ -d "local_dist" ] && [ "$(find local_dist -name 'torch_xla-*.whl' | wc -l)" -gt 0 ]; then \
-            pip install local_dist/torch_xla-*.whl; \
+            pip install local_dist/torch_xla-*.whl; pip install numpy==1.26.4; \
         else \
             echo "torch_xla wheel not found in local_dist directory"; \
         fi; \
+        pip install 'torch_xla[tpu]' \
+            -f https://storage.googleapis.com/libtpu-releases/index.html \
+            -f https://storage.googleapis.com/libtpu-wheels/index.html; \
+        pip install 'torch_xla[pallas]' \
+            -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \
+            -f https://storage.googleapis.com/jax-releases/jaxlib_nightly_releases.html; \
     fi
 
 # This should not install any packages. Only symlink the source code.
