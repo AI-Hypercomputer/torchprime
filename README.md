@@ -111,6 +111,13 @@ to the distributed workload, if found:
 - `XLA_HLO_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
 - `LIBTPU_INIT_ARGS`: XLA flags that affect compilation and execution behavior
 
+#### Additional CLI arguments passed to the workload
+
+Besides forwarding your command line arguments, `tp run` will add:
+
+- `profile_dir=[...]`: path to a [profile][torch_xla_profile] directory
+  accessible by the workload
+
 ## Model status
 
 Here are the status of various models. In general, there are five stages for
@@ -248,5 +255,6 @@ For more information on PyTorch/XLA, visit the
 [2]: https://github.com/pytorch/xla/tree/master/torchax
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
+[torch_xla_profile]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#performance-profiling
 [hydra]: https://hydra.cc/docs/intro/
 [torch_xla_dev_docker]: https://github.com/pytorch/xla/blob/master/CONTRIBUTING.md#manually-build-in-docker-container
