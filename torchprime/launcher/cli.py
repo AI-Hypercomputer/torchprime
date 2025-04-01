@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import re
 
 import click
 import toml
@@ -305,6 +306,10 @@ def run(
     workload_name = (
       f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}"
     )
+
+  if not (re.match(r'[a-z]([-a-z0-9]*[a-z0-9])?', workload_name) and len(workload_name) > 40):
+    raise RuntimeError(f"Work load name: {workload_name} not valid. Workload name must match [a-z]([-a-z0-9]*[a-z0-9])?. Consider using \"--name\" flag")
+
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
   # Forward a bunch of important env vars.
