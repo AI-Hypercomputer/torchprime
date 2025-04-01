@@ -307,8 +307,12 @@ def run(
       f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}"
     )
 
-  if not (re.match(r'[a-z]([-a-z0-9]*[a-z0-9])?', workload_name) and len(workload_name) > 40):
-    raise RuntimeError(f"Work load name: {workload_name} not valid. Workload name must match [a-z]([-a-z0-9]*[a-z0-9])?. Consider using \"--name\" flag to set correct name")
+  if not (
+    re.match(r"[a-z]([-a-z0-9]*[a-z0-9])?", workload_name) and len(workload_name) > 40
+  ):
+    raise RuntimeError(
+      f'Work load name: {workload_name} not valid. Workload name must match [a-z]([-a-z0-9]*[a-z0-9])?. Consider using "--name" flag to set correct name'
+    )
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
