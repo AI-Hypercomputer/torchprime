@@ -311,7 +311,11 @@ def run(
     re.match(r"[a-z]([-a-z0-9]*[a-z0-9])?", workload_name) and len(workload_name) < 40
   ):
     raise RuntimeError(
-      f'Work load name: {workload_name} not valid. Workload name must match [a-z]([-a-z0-9]*[a-z0-9])? and be less than 40 characters long. Consider using "--name" flag to set correct name'
+      f"""
+      Workload name: {workload_name} not valid. Workload name must match
+      [a-z]([-a-z0-9]*[a-z0-9])? and be less than 40 characters long. Consider
+      using "--name" flag to set correct name
+      """
     )
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
