@@ -2,44 +2,13 @@ import dataclasses
 import functools
 import json
 from dataclasses import asdict
-from typing import Any
 
 import torch
 import torch_xla.debug.profiler as xp
 from torch.library import custom_op
-from torch.utils._pytree import tree_flatten
-from torch_xla.core.xla_builder import jax_func_to_xla_computation
+from torch_xla.core.xla_builder import call_jax
 from torch_xla.distributed.spmd import Mesh
 from torch_xla.experimental.custom_kernel import requires_jax
-
-# use the global var to cache XlaComputation
-_FUNC_ARG_TO_XLA_COMPUTATION: dict[tuple[Any], str] = {}
-
-
-def call_jax(jax_func, args, kwargs=None, name=None):
-  """
-  Call a JAX function `jax_func` with the given `args` and `kwargs` that may
-  contain XLA tensors. We copied the function from torch_xla.core.xla_builder
-  with modifications to cache the XlaComputation based on input shapes.
-  """
-  global _FUNC_ARG_TO_XLA_COMPUTATION
-  kwargs = kwargs or {}
-  flattened, _spec = tree_flatten((args, kwargs))
-
-  arg_shapes = []
-  kwargs_shapes = {}
-  for item in kwargs.items():
-    kwargs_shapes[item[0]] = (
-      item[1].shape if isinstance(item[1], torch.Tensor) else item
-    )
-  for item in args:
-    arg_shapes.append(item.shape if isinstance(item, torch.Tensor) else item)
-  hash_key = (jax_func, tuple(arg_shapes), repr(sorted(kwargs_shapes.items())).encode())
-  if hash_key not in _FUNC_ARG_TO_XLA_COMPUTATION:
-    xla_computation = jax_func_to_xla_computation(jax_func, args, kwargs, name)
-    _FUNC_ARG_TO_XLA_COMPUTATION[hash_key] = xla_computation
-  xla_computation = _FUNC_ARG_TO_XLA_COMPUTATION[hash_key]
-  return xla_computation(flattened)
 
 
 @dataclasses.dataclass

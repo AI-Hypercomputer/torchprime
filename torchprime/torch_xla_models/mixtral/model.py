@@ -33,6 +33,7 @@ from torch.nn import init
 from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 
 from torchprime.layers.sequential import HomogeneousSequential
+from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 from torchprime.torch_xla_models.topology import get_num_slices
 
@@ -158,6 +159,7 @@ class MixtralAttention(nn.Module):
   def __init__(self, config: DictConfig, layer_idx: int | None = None):
     super().__init__()
     self.config = config
+    self.attention_block = AttentionModule(config)
     self.layer_idx = layer_idx
 
     self.hidden_size = config.hidden_size
@@ -230,100 +232,9 @@ class MixtralAttention(nn.Module):
       query_states, key_states, cos, sin, position_ids
     )
 
-    if self.config.attention_kernel != "splash_attention":
-      # repeat k/v heads if n_kv_heads < n_heads
-      key_states = repeat_kv(key_states, self.num_key_value_groups)
-      value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-    # Non FA path doesn't deal with 2D sharding.
-    partition_spec = None
-    if xs.get_global_mesh() is not None:
-      partition_spec = (("data", "fsdp"), "tensor", None, None)
-      # TODO(bhavya01): Check to see if the segment_ids_partition_spec is
-      # correct.
-      segment_ids_partition_spec = (("data", "fsdp"), None)
-    if self.config.attention_kernel == "splash_attention":
-      # Integrated with PyTorch/XLA Pallas Splash Attention:
-      assert (
-        xs.get_global_mesh() is not None
-      ), "Global mesh is required for Splash Attention"
-      from torchprime.torch_xla_models.experimental.custom_kernel import (
-        SplashAttentionConfig,
-        splash_attention,
-      )
-
-      sa_config = SplashAttentionConfig(
-        mesh=str(xs.get_global_mesh()),
-      )
-      sa_config = SplashAttentionConfig(
-        mesh=str(xs.get_global_mesh()),
-        qkv_partition_spec=partition_spec,
-        segment_ids_partition_spec=segment_ids_partition_spec,
-      )
-      query_states /= math.sqrt(self.head_dim)
-      attn_output = splash_attention(
-        query_states, key_states, value_states, sa_config.to_json()
-      )
-    elif self.config.attention_kernel == "flash_attention":
-      # Integrated with PyTorch/XLA Pallas Flash Attention:
-      from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
-
-      FlashAttention.DEFAULT_BLOCK_SIZES = {
-        "block_q": 2048,
-        "block_k_major": 512,
-        "block_k": 512,
-        "block_b": 2,
-        "block_q_major_dkv": 2048,
-        "block_k_major_dkv": 512,
-        "block_q_dkv": 2048,
-        "block_k_dkv": 512,
-        "block_q_dq": 2048,
-        "block_k_dq": 256,
-        "block_k_major_dq": 512,
-      }
-
-      query_states /= math.sqrt(self.head_dim)
-      attn_output = flash_attention(
-        query_states,
-        key_states,
-        value_states,
-        causal=True,
-        partition_spec=partition_spec,
-      )
-    else:
-      attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(
-        self.head_dim
-      )
-
-      if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-        raise ValueError(
-          f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-          f" {attn_weights.size()}"
-        )
-
-      if attention_mask is not None:
-        if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-          raise ValueError(
-            f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-          )
-
-        attn_weights = attn_weights + attention_mask
-
-      # upcast attention to fp32
-      attn_weights = nn.functional.softmax(
-        attn_weights, dim=-1, dtype=torch.float32
-      ).to(query_states.dtype)
-      attn_weights = nn.functional.dropout(
-        attn_weights, p=self.attention_dropout, training=self.training
-      )
-      attn_output = torch.matmul(attn_weights, value_states)
-
-    if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-      raise ValueError(
-        f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-        f" {attn_output.size()}"
-      )
-
+    attn_output = self.attention_block(
+      query_states, key_states, value_states, attention_mask
+    )
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
