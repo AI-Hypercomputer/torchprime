@@ -50,8 +50,11 @@ class AttentionModule(nn.Module):
 
     bsz, num_heads, q_len, head_dim = query_states.size()
     # TODO: q, k dim unintentionally changed after the apply_rotary_pos_emb. Use
-    # v's dim temporarily to bypass shape assertion failure.
+    # v's dim temporarily to bypass shape assertion failure. Remove the
+    # following line after resolving
+    # https://github.com/AI-Hypercomputer/torchprime/issues/195.
     head_dim = value_states.shape[-1]
+
     kv_seq_len = key_states.shape[-2]
 
     # Non FA path doesn't deal with 2D sharding.
