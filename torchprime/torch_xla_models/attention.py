@@ -42,8 +42,11 @@ class AttentionModule(nn.Module):
     attention_mask: torch.Tensor | None = None,
   ):
     if self.config.attention_kernel != "splash_attention":
-      key_states = repeat_kv(key_states, self.num_key_value_groups)
-      value_states = repeat_kv(value_states, self.num_key_value_groups)
+      num_key_value_groups = (
+        self.config.num_attention_heads // self.config.num_key_value_heads
+      )
+      key_states = repeat_kv(key_states, num_key_value_groups)
+      value_states = repeat_kv(value_states, num_key_value_groups)
 
     bsz, q_len, num_heads, head_dim = query_states.size()
 
