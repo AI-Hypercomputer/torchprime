@@ -48,7 +48,11 @@ class AttentionModule(nn.Module):
       key_states = repeat_kv(key_states, num_key_value_groups)
       value_states = repeat_kv(value_states, num_key_value_groups)
 
-    bsz, q_len, num_heads, head_dim = query_states.size()
+    bsz, num_heads, q_len, head_dim = query_states.size()
+    # TODO: q, k dim unintentionally changed after the apply_rotary_pos_emb. Use
+    # v's dim temporarily to bypass shape assertion failure.
+    head_dim = value_states.shape[-1]
+    kv_seq_len = key_states.shape[-2]
 
     # Non FA path doesn't deal with 2D sharding.
     self.partition_spec = None
@@ -107,6 +111,11 @@ class AttentionModule(nn.Module):
         attn_weights = torch.matmul(
           query_states, key_states.transpose(2, 3)
         ) / math.sqrt(head_dim)
+        if attn_weights.size() != (bsz, num_heads, q_len, kv_seq_len):
+          raise ValueError(
+            f"Attention weights should be of size {(bsz, num_heads, q_len, kv_seq_len)}, but is"
+            f" {attn_weights.size()}"
+          )
         if attention_mask is not None:  # no matter the length, we just slice it
           causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
           attn_weights = attn_weights + causal_mask
@@ -119,7 +128,7 @@ class AttentionModule(nn.Module):
         )
         attn_output = torch.matmul(attn_weights, value_states)
 
-    if attn_output.size() != (bsz, q_len, num_heads, head_dim):
+    if attn_output.size() != (bsz, num_heads, q_len, head_dim):
       raise ValueError(
         f"`attn_output` should be of size {(bsz, num_heads, q_len, head_dim)}, but is"
         f" {attn_output.size()}"
