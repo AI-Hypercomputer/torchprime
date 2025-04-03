@@ -31,41 +31,7 @@ class AttentionModule(nn.Module):
   def __init__(self, config, kernel_config: dict[str, Any] | None = None):
     super().__init__()
     self.config = config
-    # Non FA path doesn't deal with 2D sharding.
-    self.partition_spec = None
-    segment_ids_partition_spec = None
-    if xs.get_global_mesh() is not None:
-      self.partition_spec = (("data", "fsdp"), "tensor", None, None)
-      segment_ids_partition_spec = (("data", "fsdp"), None)
-
-    match self.config.attention_kernel:
-      case "splash_attention":
-        self.sa_config = SplashAttentionConfig(
-          mesh=str(xs.get_global_mesh()),
-          qkv_partition_spec=self.partition_spec,
-          segment_ids_partition_spec=segment_ids_partition_spec,
-        )
-        if kernel_config is not None:
-          for key, value in kernel_config.items():
-            if hasattr(self.sa_config, key):
-              setattr(self.sa_config, key, value)
-      case "flash_attention":
-        default_block_sizes = {
-          "block_q": 2048,
-          "block_k_major": 512,
-          "block_k": 512,
-          "block_b": 2,
-          "block_q_major_dkv": 2048,
-          "block_k_major_dkv": 512,
-          "block_q_dkv": 2048,
-          "block_k_dkv": 512,
-          "block_q_dq": 2048,
-          "block_k_dq": 256,
-          "block_k_major_dq": 512,
-        }
-        if kernel_config is not None:
-          default_block_sizes.update(kernel_config)
-        FlashAttention.DEFAULT_BLOCK_SIZES = default_block_sizes
+    self.kernel_config = kernel_config
 
   @xp.trace_me("AttentionModule")
   def forward(
@@ -81,18 +47,51 @@ class AttentionModule(nn.Module):
 
     bsz, q_len, num_heads, head_dim = query_states.size()
 
+    # Non FA path doesn't deal with 2D sharding.
+    self.partition_spec = None
+    segment_ids_partition_spec = None
+    if xs.get_global_mesh() is not None:
+      self.partition_spec = (("data", "fsdp"), "tensor", None, None)
+      segment_ids_partition_spec = (("data", "fsdp"), None)
+
     match self.config.attention_kernel:
       case "splash_attention":
         # Integrated with PyTorch/XLA Pallas Splash Attention:
         assert (
           xs.get_global_mesh() is not None
         ), "Global mesh is required for Splash Attention"
+        sa_config = SplashAttentionConfig(
+          mesh=str(xs.get_global_mesh()),
+          qkv_partition_spec=self.partition_spec,
+          segment_ids_partition_spec=segment_ids_partition_spec,
+        )
+        if self.kernel_config is not None:
+          for key, value in self.kernel_config.items():
+            if hasattr(sa_config, key):
+              setattr(sa_config, key, value)
         query_states /= math.sqrt(head_dim)
         attn_output = splash_attention(
-          query_states, key_states, value_states, self.sa_config.to_json()
+          query_states, key_states, value_states, sa_config.to_json()
         )
       case "flash_attention":
         # Integrated with PyTorch/XLA Pallas Flash Attention:
+        default_block_sizes = {
+          "block_q": 2048,
+          "block_k_major": 512,
+          "block_k": 512,
+          "block_b": 2,
+          "block_q_major_dkv": 2048,
+          "block_k_major_dkv": 512,
+          "block_q_dkv": 2048,
+          "block_k_dkv": 512,
+          "block_q_dq": 2048,
+          "block_k_dq": 256,
+          "block_k_major_dq": 512,
+        }
+        if self.kernel_config is not None:
+          default_block_sizes.update(self.kernel_config)
+        FlashAttention.DEFAULT_BLOCK_SIZES = default_block_sizes
+
         query_states /= math.sqrt(head_dim)
         attn_output = flash_attention(
           query_states,
