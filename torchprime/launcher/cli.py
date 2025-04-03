@@ -277,9 +277,19 @@ def docker_run(args, use_hf: bool):
   is_flag=True,
   help="Use local torch and torch_xla wheels under folder local_dist/",
 )
+@click.option(
+  "--use-local-libtpu",
+  is_flag=True,
+  help="Use local libtpu.so under folder local_dist/ instead of the one in the docker image.",
+)
 @interactive
 def run(
-  args, name: str | None, num_slices: int | None, use_hf: bool, use_local_wheel: bool
+  args,
+  name: str | None,
+  num_slices: int | None,
+  use_hf: bool,
+  use_local_wheel: bool,
+  use_local_libtpu: bool,
 ):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
@@ -294,6 +304,8 @@ def run(
     build_arg.append("USE_TRANSFORMERS=true")
   if use_local_wheel:
     build_arg.append("USE_LOCAL_WHEEL=true")
+  if use_local_libtpu:
+    build_arg.append("USE_LOCAL_LIBTPU=true")
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project
@@ -310,13 +322,11 @@ def run(
   if not (
     re.match(r"[a-z]([-a-z0-9]*[a-z0-9])?", workload_name) and len(workload_name) < 40
   ):
-    raise RuntimeError(
-      f"""
+    raise RuntimeError(f"""
       Workload name: {workload_name} not valid. Workload name must match
       [a-z]([-a-z0-9]*[a-z0-9])? and be less than 40 characters long. Consider
       using "--name" flag to set correct name
-      """
-    )
+      """)
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 

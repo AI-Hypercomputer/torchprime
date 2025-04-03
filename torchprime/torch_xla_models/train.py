@@ -2,9 +2,13 @@
 import importlib
 import logging
 import math
+import os
+import random
 import sys
+import time
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 from timeit import default_timer as timer
 
 # Third-party library imports
@@ -289,6 +293,7 @@ class Trainer:
       if step % self.config.logging_steps == 0:
 
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
+          loss = loss.detach().item()
           logger.info(
             f"Epoch: {epoch}, step: {step}, loss: {loss:0.4f}, "
             f"trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms"
@@ -365,6 +370,29 @@ def set_default_dtype(dtype):
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
+  if "TORCHPRIME_ARTIFACT_DIR" in os.environ:
+    gcs_mount = "/tmp/gcs-mount"
+    worker_id = int(os.getenv("TPU_WORKER_ID", "0"))
+    slice_id = int(os.getenv("MEGASCALE_SLICE_ID", "0"))
+    cache_name = "compile-cache"
+    gcs_artifact_dir = os.environ["TORCHPRIME_ARTIFACT_DIR"]
+    gcs_artifact_dir = gcs_artifact_dir.removeprefix("gs://")
+    gcs_bucket, *gcs_artifact_subdir = gcs_artifact_dir.split("/")
+    mounted_artifact_dir = Path(gcs_mount)
+    for s in gcs_artifact_subdir:
+      mounted_artifact_dir = mounted_artifact_dir / s
+    graph_cache_path = mounted_artifact_dir / cache_name
+    # Ensure dir exists
+    try:
+      os.makedirs(graph_cache_path, exist_ok=True)
+    except:
+      pass
+    readonly = True
+    if worker_id == 0 and slice_id == 0:
+      # Only first worker can write to cache
+      readonly = False
+    xr.initialize_cache(str(graph_cache_path), readonly=readonly)
+
   # Configure logging
   print(OmegaConf.to_yaml(config))  # Print the config for debugging
   log_level = logging.INFO
@@ -382,7 +410,25 @@ def main(config: DictConfig):
 
   # TODO: Add tokenizer models to torchprime
   tokenizer_name = config.model.tokenizer_name
-  tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+
+  retry_count = 10
+  retry_delay = 3
+  tokenizer = None
+  for attempt in range(retry_count):
+    try:
+      tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+      break  # Success, exit the retry loop
+    except Exception as e:
+      if attempt < retry_count - 1:
+        logger.warning(
+          f"Error: {e}. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{retry_count})"
+        )
+        time.sleep(retry_delay + random.random() * 5)
+      else:
+        logger.error(
+          f"Failed to load tokenizer after {retry_count} attempts due to ReadTimeoutError: {e}"
+        )
+        raise  # Re-raise the exception after exhausting retries
 
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
@@ -393,12 +439,30 @@ def main(config: DictConfig):
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
-  # Downloading and loading a dataset from the hub.
-  data = load_dataset(
-    config.dataset_name,
-    config.dataset_config_name,
-    cache_dir=config.cache_dir,
-  )["train"]
+  # Downloading and loading a dataset from the hub with retry logic.
+  retry_count = 10
+  retry_delay = 3
+  data = None
+  for attempt in range(retry_count):
+    try:
+      data = load_dataset(
+        config.dataset_name,
+        config.dataset_config_name,
+        cache_dir=config.cache_dir,
+      )["train"]
+      break  # Success, exit the retry loop
+    except Exception as e:
+      if attempt < retry_count - 1:
+        logger.warning(
+          f"Error: {e}. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{retry_count})"
+        )
+        time.sleep(retry_delay + random.random() * 5)
+      else:
+        logger.error(
+          f"Failed to load dataset after {retry_count} attempts due to ReadTimeoutError: {e}"
+        )
+        raise  # Re-raise the exception after exhausting retries
+
   column_names = list(data.features)
   data = data.map(
     lambda samples: tokenizer(samples["text"]),

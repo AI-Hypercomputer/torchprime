@@ -4,6 +4,7 @@ FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpu
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
+ARG USE_LOCAL_LIBTPU=false
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y curl gnupg
@@ -58,6 +59,14 @@ RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
         fi; \
     fi
 
+RUN if [ "$USE_LOCAL_LIBTPU" = "true" ]; then \
+        if [ -d "local_dist" ]; then \
+            cp local_dist/_libtpu.so /workspaces/torchprime/; \
+        else \
+            echo "libtpu wheel not found in local_libtpu directory"; \
+        fi; \
+    fi
+
 # This should not install any packages. Only symlink the source code.
 RUN pip install --no-deps -e .
 
@@ -74,3 +83,4 @@ RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
     fi
 
 ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
+ENV TPU_LIBRARY_PATH "/workspaces/torchprime/_libtpu.so"
