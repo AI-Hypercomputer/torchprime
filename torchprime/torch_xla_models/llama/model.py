@@ -18,7 +18,6 @@
 # limitations under the License.
 """PyTorch LLaMA model."""
 
-
 import torch
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
