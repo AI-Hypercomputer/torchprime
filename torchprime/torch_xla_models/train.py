@@ -94,9 +94,9 @@ class Trainer:
     # Annotate model weights and activations with sharding constraints to distribute
     # the training across devices following the SPMD paradigm.
     sharding_config = OmegaConf.to_container(self.config.model.sharding, resolve=True)
-    assert isinstance(
-      sharding_config, dict
-    ), f"Sharding config {sharding_config} must be a dict"
+    assert isinstance(sharding_config, dict), (
+      f"Sharding config {sharding_config} must be a dict"
+    )
     model = shard_torch_xla_model_from_config(model, config=sharding_config)
 
     # Rematerialize forward computation during the backward pass if requested.

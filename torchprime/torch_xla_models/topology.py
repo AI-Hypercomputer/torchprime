@@ -31,9 +31,9 @@ def get_num_slices():
   slice_indices = []
   for d in device_attributes:
     index = d.get("slice_index", 0)
-    assert isinstance(
-      index, int
-    ), f"Expected slice_index to be an int, got {type(index)} {index}"
+    assert isinstance(index, int), (
+      f"Expected slice_index to be an int, got {type(index)} {index}"
+    )
     slice_indices.append(index)
   num_slices = max(slice_indices) + 1
   return num_slices
@@ -59,12 +59,12 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
 
   if num_devices is None:
     num_devices = xr.global_runtime_device_count()
-  assert (
-    num_devices
-    == math.prod(list(config.ici_mesh.values()))
-    * math.prod(list(config.dcn_mesh.values()))
-  ), f"Mesh is not using all the available devices. The environment has {num_devices} devices. \
+  assert num_devices == math.prod(list(config.ici_mesh.values())) * math.prod(
+    list(config.dcn_mesh.values())
+  ), (
+    f"Mesh is not using all the available devices. The environment has {num_devices} devices. \
     Mesh requested: ICI={config.ici_mesh}, DCN={config.dcn_mesh}"
+  )
 
   ici_mesh_shape = (
     config.ici_mesh.data,
@@ -101,9 +101,9 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
     )
   else:
     for k, v in config.dcn_mesh.items():
-      assert (
-        v == 1
-      ), f"DCN mesh dim `{k}` must be 1 in single slice environments, got {v}"
+      assert v == 1, (
+        f"DCN mesh dim `{k}` must be 1 in single slice environments, got {v}"
+      )
     mesh_shape = (
       config.ici_mesh.data,
       config.ici_mesh.fsdp,

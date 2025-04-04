@@ -40,9 +40,9 @@ def tpu_splash_attention(
 
   def wrap_flash_attention(query, key, value, decoder_segment_ids):
     if decoder_segment_ids is not None:
-      assert (
-        query.shape[2] == decoder_segment_ids.q.shape[1]
-      ), "Sharding along sequence dimension not allowed in tpu kernel attention"
+      assert query.shape[2] == decoder_segment_ids.q.shape[1], (
+        "Sharding along sequence dimension not allowed in tpu kernel attention"
+      )
     block_sizes = splash_attention_kernel.BlockSizes(
       block_q=min(global_block_q, query.shape[2]),
       block_kv=min(global_block_kv, key.shape[2]),

@@ -151,9 +151,9 @@ def splash_attention_jax_wrapper(
   )
   def wrap_flash_attention(query, key, value, decoder_segment_ids):
     if decoder_segment_ids is not None:
-      assert (
-        query.shape[2] == decoder_segment_ids.q.shape[1]
-      ), "Sharding along sequence dimension not allowed in tpu kernel attention"
+      assert query.shape[2] == decoder_segment_ids.q.shape[1], (
+        "Sharding along sequence dimension not allowed in tpu kernel attention"
+      )
     block_sizes = splash_attention_kernel.BlockSizes(
       block_q=min(global_block_q, query.shape[2]),
       block_kv=min(global_block_kv, key.shape[2]),
@@ -201,9 +201,7 @@ def splash_attention_jax_wrapper(
     return jax.vmap(splash_kernel)(query, key, value, segment_ids=decoder_segment_ids)
 
   devices_in_data_fsdp = mesh.shape["data"] * mesh.shape["fsdp"]
-  assert (
-    query.shape[0] / devices_in_data_fsdp
-  ).is_integer(), (
+  assert (query.shape[0] / devices_in_data_fsdp).is_integer(), (
     "Batch dimension should be shardable among the devices in data and fsdp axis"
   )
   x = wrap_flash_attention(query, key, value, decoder_segment_ids)

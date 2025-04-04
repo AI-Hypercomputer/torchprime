@@ -267,9 +267,9 @@ def _process_tail_index_syntax(
         if isinstance(outputs, list):
           return out_list
         else:
-          assert isinstance(
-            outputs, tuple
-          ), f"outputs must be a list or tuple, got {type(outputs)}"
+          assert isinstance(outputs, tuple), (
+            f"outputs must be a list or tuple, got {type(outputs)}"
+          )
           return tuple(out_list)
 
       return shard_output_fn

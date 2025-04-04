@@ -128,8 +128,8 @@ def calculate_tflops_training_per_device(config: Config, log=True):
     print(
       "Per train step:\n",
       f"Total TFLOPs: {total_tflops:.2f} \n",
-      f"split as {100 * learnable_weight_tflops/total_tflops:.2f}% learnable weight flops",
-      f"and {100 * attention_tflops/total_tflops:.2f}% attention flops",
+      f"split as {100 * learnable_weight_tflops / total_tflops:.2f}% learnable weight flops",
+      f"and {100 * attention_tflops / total_tflops:.2f}% attention flops",
     )
   return total_tflops
 

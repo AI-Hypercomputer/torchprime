@@ -300,7 +300,7 @@ def test_shard_model_from_config_torch_xla():
   # Check the sharding of weights.
   state_dict = model.state_dict()
   none_fsdp_sharded = (
-    f'{{devices=[1,{num_devices}]{",".join(str(v) for v in range(num_devices))}}}'
+    f"{{devices=[1,{num_devices}]{','.join(str(v) for v in range(num_devices))}}}"
   )
   none_sharded = "{replicated}"
   expected_sharding = {
@@ -326,7 +326,7 @@ def test_shard_model_from_config_torch_xla():
   torch_xla.sync()
   assert isinstance(output, torch.Tensor)
   fsdp_none_sharded = (
-    f'{{devices=[{num_devices},1]{",".join(str(v) for v in range(num_devices))}}}'
+    f"{{devices=[{num_devices},1]{','.join(str(v) for v in range(num_devices))}}}"
   )
   sharding_spec = torch_xla._XLAC._get_xla_sharding_spec(output)
   assert sharding_spec == fsdp_none_sharded

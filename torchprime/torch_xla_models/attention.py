@@ -67,9 +67,9 @@ class AttentionModule(nn.Module):
     match self.config.attention_kernel:
       case "splash_attention":
         # Integrated with PyTorch/XLA Pallas Splash Attention:
-        assert (
-          xs.get_global_mesh() is not None
-        ), "Global mesh is required for Splash Attention"
+        assert xs.get_global_mesh() is not None, (
+          "Global mesh is required for Splash Attention"
+        )
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
           qkv_partition_spec=self.partition_spec,
