@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_cxx11_20250313
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250402
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
