@@ -1,6 +1,6 @@
 <div align="center">
 
-# torchtitan
+# torchprime
 
 #### High-performance training for PyTorch on Cloud TPU
 
