@@ -1,17 +1,19 @@
-# TorchPrime
+<div align="center">
 
-**Note: this repository is under experimental status. We don't yet have correctness
-guarantees for the model implementations.**
+# torchtitan
 
-TorchPrime is a reference model implementation for PyTorch on TPU/GPU using
-`torch_xla` and `torchax`. It is designed to showcase best practices for
-high-performance model training with these frameworks.
+#### High-performance training for PyTorch on Cloud TPU
+
+</div>
+
+torchprime is a reference implementation for training PyTorch models on TPU. It is designed to showcase best practices for large-scale, high-performance model training using `torch_xla` ([project])(https://github.com/pytorch/xla), with minimal changes to model code. It aims to demystify training on XLA-based accelerators, providing clear patterns and best practices to help the PyTorch community unlock top performance and efficiency on Google Cloud TPUs.
+
+torchprime is under active development, and we're eager for feedback and input from the PyTorch community.
 
 ## Examples
 
 Here is a simple example of training on a single TPU VM. It assumes that you
-have already installed torch_xla [1] and torchax [2] following their respective
-project READMEs.
+have already installed [torch_xla](https://github.com/pytorch/xla) following their respective project READMEs.
 
 Install `torchprime`:
 
@@ -30,25 +32,14 @@ export HF_TOKEN='...your huggingface token...'
 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 ```
 
-Train Llama 3 8B using torchax:
-
-```sh
-python3 torchprime/experimental/torchax_models/run.py global_batch_size=16
-```
-
-Refer to `README.md` in `torchprime/torch_xla_models` and
-`torchprime/experimental/torchax_models` for more details.
+Refer to `README.md` in `torchprime/torch_xla_models` for more details.
 
 ### Configuring training
 
 torchprime uses [hydra][hydra] to read configurations (e.g. model name,
 batch size) from the command line and `.yaml` files.
 
-In both `torch_xla_models` and `torchax_models` directories, you'll find
-a `configs/default.yaml`. That specifies the default configuration for the
-trainer. You may override configs on the command line with a `key=value`
-syntax. For example, the following command will train Mixtral 8x7B with a
-global batch size of 256, and set the FSDP SPMD ICI mesh axis length to 64:
+In the `torch_xla_models` directory, you'll find a `configs/default.yaml`. That specifies the default configuration for the trainer. You may override configs on the command line with a `key=value` syntax. For example, the following command will train Mixtral 8x7B with a global batch size of 256, and set the FSDP SPMD ICI mesh axis length to 64:
 
 ```sh
 python3 torchprime/torch_xla_models/train.py \
@@ -81,20 +72,12 @@ tp use \
 Then prepend `tp run` to a particular Python file you would like to
 run remotely, including arguments, e.g.
 
-`torch_xla` example:
-
 ```sh
 # Train Llama 3.0 8B on 256 chips
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3-8b \
     global_batch_size=256 \
     ici_mesh.fsdp=256
-```
-
-`torchax` example:
-
-```sh
-tp run torchprime/experimental/torchax_models/run.py global_batch_size=256
 ```
 
 `tp run` will broadcast the specified command to all VMs in the XPK cluster,
@@ -118,18 +101,18 @@ Besides forwarding your command line arguments, `tp run` will add:
 - `profile_dir=[...]`: path to a [profile][torch_xla_profile] directory
   accessible by the workload
 
-## Model status
+## Supported Models
 
-Here are the status of various models. In general, there are five stages for
+Below are the status of various models. There are five stages for
 each model:
 
-- **TODO**: We need to implement the model.
-- **Implemented**: The model runs either a training or an inference step.
-- **Optimized**: We found the best scaling configuration for the model on one or
+1. **TODO**: We need to implement the model.
+1. **Implemented**: The model runs either a training or an inference step.
+1. **Optimized**: We found the best scaling configuration for the model on one or
   more hardware. One-off performance data is available.
-- **Convergence**: We tested that the training loss converges to a reasonable
+1. **Convergence**: We tested that the training loss converges to a reasonable
   value, or that the loss curve tracks an existing reference if exists.
-- **Production**: Not only is the model optimized and converges, its performance
+1. **Production**: Not only is the model optimized and converges, its performance
   is also continuously monitored. This is a good state for using the model in
   production.
 
@@ -137,7 +120,7 @@ All implemented models will at least have unit tests to verify basic numerical
 correctness, and the convergence verification stage serves as an additional
 correctness guarantee.
 
-If a model is at least implemented, you'll also find a training recipe linked
+If a model is implemented, you'll also find a training recipe linked
 from the checkmark emoji in the table. If a model is optimized, you'll also find
 MFU numbers linked from the table. Note that a model may continue to receive
 ongoing optimization thereafter.
@@ -174,7 +157,7 @@ will be provided for ease of reproducibility.
 
 Finally, each model may also provide a GPU "original" version that illustrates
 and attributes where this model code came from, if any. This also helps to
-show case what changes we have done to make it performant on TPU. The original
+showcase what changes we have done to make it performant on TPU. The original
 version is not expected to be run.
 
 ## Contributing
@@ -221,7 +204,7 @@ XPK approach, improving the hermeticity and reliability.
 tp docker-run torchprime/torch_xla_models/train.py
 ```
 
-This will run the TorchPrime docker image locally. You can also add `--use-hf`
+This will run the torchprime docker image locally. You can also add `--use-hf`
 to run HuggingFace model locally.
 
 ```sh
@@ -251,8 +234,6 @@ file for details.
 For more information on PyTorch/XLA, visit the
 [official documentation](https://github.com/pytorch/xla).
 
-[1]: https://github.com/pytorch/xla
-[2]: https://github.com/pytorch/xla/tree/master/torchax
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
 [torch_xla_profile]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#performance-profiling
