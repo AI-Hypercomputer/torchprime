@@ -213,7 +213,7 @@ tp docker-run --use-hf torchprime/hf_models/train.py
 
 ## Run distributed training with local torch/torch_xla wheel
 
-Torchprime supports running with user specified torch and torch_xla wheels placed
+torchprime supports running with user specified torch and torch_xla wheels placed
 under `local_dist/` directory. The wheel will be automatically installed in the
 docker image when use `tp run` command. To use the wheel, add flag
 `--use-local-wheel` to `tp run` command:
