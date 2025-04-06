@@ -1,4 +1,3 @@
-# Standard library imports
 import importlib
 import logging
 import math
@@ -7,12 +6,9 @@ from contextlib import contextmanager
 from functools import partial
 from timeit import default_timer as timer
 
-# Third-party library imports
 import datasets
 import hydra
 import torch
-
-# PyTorch XLA imports
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
@@ -27,8 +23,6 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla._internal.jax_workarounds import jax_env_context
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
-
-# Transformers imports
 from transformers import (
   AutoTokenizer,
   default_data_collator,
