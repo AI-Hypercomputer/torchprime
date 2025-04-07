@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250402
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250406
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
@@ -39,6 +39,9 @@ RUN pip install -e .
 WORKDIR /workspaces/torchprime
 COPY pyproject.toml /workspaces/torchprime/
 RUN pip install -e .
+
+# HACK: install newer jax and libtpu
+RUN pip install -U --pre jax jaxlib libtpu requests -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
 # Now copy the rest of the repo
 COPY . /workspaces/torchprime
@@ -83,4 +86,3 @@ RUN if [ "$USE_TRANSFORMERS" = "true" ]; then \
     fi
 
 ENV LIBTPU_INIT_ARGS "--xla_tpu_scoped_vmem_limit_kib=98304 --xla_enable_async_all_gather=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true"
-ENV TPU_LIBRARY_PATH "/workspaces/torchprime/_libtpu.so"
