@@ -20,8 +20,8 @@ from the PyTorch community.
 ## Examples
 
 Here is a simple example of training on a single TPU VM. It assumes that you
-have already installed [torch_xla][torch_xla] following
-their respective project READMEs.
+have already installed [torch_xla][torch_xla] following its respective project
+README.
 
 Install `torchprime`:
 
