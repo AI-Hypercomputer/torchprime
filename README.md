@@ -7,14 +7,21 @@
 </div>
 <br /><br />
 
-torchprime is a reference implementation for training PyTorch models on TPU. It is designed to showcase best practices for large-scale, high-performance model training using `torch_xla` ([project])(https://github.com/pytorch/xla), with minimal changes to model code. It aims to demystify training on XLA-based accelerators, providing clear patterns and best practices to help the PyTorch community unlock top performance and efficiency on Google Cloud TPUs.
+torchprime is a reference implementation for training PyTorch models on TPU. It
+is designed to showcase best practices for large-scale, high-performance model
+training using `torch_xla` ([project][torch_xla]), with
+minimal changes to model code. It aims to demystify training on XLA-based
+accelerators, providing clear patterns and best practices to help the PyTorch
+community unlock top performance and efficiency on Google Cloud TPUs.
 
-torchprime is under active development, and we're eager for feedback and input from the PyTorch community.
+torchprime is under active development, and we're eager for feedback and input
+from the PyTorch community.
 
 ## Examples
 
 Here is a simple example of training on a single TPU VM. It assumes that you
-have already installed [torch_xla](https://github.com/pytorch/xla) following their respective project READMEs.
+have already installed [torch_xla][torch_xla] following
+their respective project READMEs.
 
 Install `torchprime`:
 
@@ -37,10 +44,14 @@ Refer to `README.md` in `torchprime/torch_xla_models` for more details.
 
 ### Configuring training
 
-torchprime uses [hydra][hydra] to read configurations (e.g. model name,
-batch size) from the command line and `.yaml` files.
+torchprime uses [hydra][hydra] to read configurations (e.g. model name, batch
+size) from the command line and `.yaml` files.
 
-In the `torch_xla_models` directory, you'll find a `configs/default.yaml`. That specifies the default configuration for the trainer. You may override configs on the command line with a `key=value` syntax. For example, the following command will train Mixtral 8x7B with a global batch size of 256, and set the FSDP SPMD ICI mesh axis length to 64:
+In the `torch_xla_models` directory, you'll find a `configs/default.yaml`. That
+specifies the default configuration for the trainer. You may override configs on
+the command line with a `key=value` syntax. For example, the following command
+will train Mixtral 8x7B with a global batch size of 256, and set the FSDP SPMD
+ICI mesh axis length to 64:
 
 ```sh
 python3 torchprime/torch_xla_models/train.py \
@@ -53,12 +64,12 @@ You may refer to the hydra docs for other ways to specify configs.
 
 ### Distributed training
 
-torchprime uses [xpk][xpk] as the standard path for iterating on
-distributed training code.
+torchprime uses [xpk][xpk] as the standard path for iterating on distributed
+training code.
 
-First teach torchprime about the XPK cluster it is using, the artifact
-storage location, etc. You only need to do this on first clone or when
-switching to a different topology or cluster. Example:
+First teach torchprime about the XPK cluster it is using, the artifact storage
+location, etc. You only need to do this on first clone or when switching to a
+different topology or cluster. Example:
 
 ```sh
 tp use \
@@ -70,8 +81,8 @@ tp use \
     --artifact-dir gs://bucket/dir
 ```
 
-Then prepend `tp run` to a particular Python file you would like to
-run remotely, including arguments, e.g.
+Then prepend `tp run` to a particular Python file you would like to run
+remotely, including arguments, e.g.
 
 ```sh
 # Train Llama 3.0 8B on 256 chips
@@ -82,13 +93,13 @@ tp run torchprime/torch_xla_models/train.py \
 ```
 
 `tp run` will broadcast the specified command to all VMs in the XPK cluster,
-which is the convention for running SPMD distributed workloads.
-See `tp run --help` for more advanced features.
+which is the convention for running SPMD distributed workloads. See `tp run
+--help` for more advanced features.
 
 #### Env vars passed to the workload
 
-`tp run` will pick up these environment variables locally and proxy them
-to the distributed workload, if found:
+`tp run` will pick up these environment variables locally and proxy them to the
+distributed workload, if found:
 
 - `HF_TOKEN`: HuggingFace token
 - `XLA_IR_DEBUG`: [torch_xla debugging flag][torch_xla_debug_env]
@@ -104,27 +115,26 @@ Besides forwarding your command line arguments, `tp run` will add:
 
 ## Supported Models
 
-Below are the status of various models. There are five stages for
-each model:
+Below are the status of various models. There are five stages for each model:
 
 1. **TODO**: We need to implement the model.
 1. **Implemented**: The model runs either a training or an inference step.
-1. **Optimized**: We found the best scaling configuration for the model on one or
-  more hardware. One-off performance data is available.
+1. **Optimized**: We found the best scaling configuration for the model on one
+  or more hardware. One-off performance data is available.
 1. **Convergence**: We tested that the training loss converges to a reasonable
   value, or that the loss curve tracks an existing reference if exists.
-1. **Production**: Not only is the model optimized and converges, its performance
-  is also continuously monitored. This is a good state for using the model in
-  production.
+1. **Production**: Not only is the model optimized and converges, its
+  performance is also continuously monitored. This is a good state for using the
+  model in production.
 
 All implemented models will at least have unit tests to verify basic numerical
 correctness, and the convergence verification stage serves as an additional
 correctness guarantee.
 
-If a model is implemented, you'll also find a training recipe linked
-from the checkmark emoji in the table. If a model is optimized, you'll also find
-MFU numbers linked from the table. Note that a model may continue to receive
-ongoing optimization thereafter.
+If a model is implemented, you'll also find a training recipe linked from the
+checkmark emoji in the table. If a model is optimized, you'll also find MFU
+numbers linked from the table. Note that a model may continue to receive ongoing
+optimization thereafter.
 
 | **Model**            | **Implemented**                                                        | **Optimized**                                                      | **Converges** |
 | -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- |
@@ -140,10 +150,10 @@ ongoing optimization thereafter.
 
 ## Structure
 
-This repo will contain a set of reference models that we have optimized and
-runs well on TPU. The best performing scaling configuration
-(parallelism techniques, checkpointing, etc.) for a model on various hardwares
-will be provided for ease of reproducibility.
+This repo will contain a set of reference models that we have optimized and runs
+well on TPU. The best performing scaling configuration (parallelism techniques,
+checkpointing, etc.) for a model on various hardwares will be provided for ease
+of reproducibility.
 
 `docs` contains guides for optimizing performance and debugging issues.
 
@@ -192,8 +202,8 @@ ruff format
 ruff check [--fix]
 ```
 
-You can install a Ruff VSCode plugin to check errors and format files from
-the editor.
+You can install a Ruff VSCode plugin to check errors and format files from the
+editor.
 
 ### How to run inside the docker container locally
 
@@ -214,29 +224,33 @@ tp docker-run --use-hf torchprime/hf_models/train.py
 
 ## Run distributed training with local torch/torch_xla wheel
 
-torchprime supports running with user specified torch and torch_xla wheels placed
-under `local_dist/` directory. The wheel will be automatically installed in the
-docker image when use `tp run` command. To use the wheel, add flag
+torchprime supports running with user specified torch and torch_xla wheels
+placed under `local_dist/` directory. The wheel will be automatically installed
+in the docker image when use `tp run` command. To use the wheel, add flag
 `--use-local-wheel` to `tp run` command:
 
 ```sh
 tp run --use-local-wheel torchprime/hf_models/train.py
 ```
 
-The wheels should be built inside a
-[PyTorch/XLA development docker image][torch_xla_dev_docker] or the PyTorch/XLA
-VSCode Dev Container to minimize compatibility issues.
+The wheels should be built inside a [PyTorch/XLA development docker
+image][torch_xla_dev_docker] or the PyTorch/XLA VSCode Dev Container to minimize
+compatibility issues.
 
 ## License
 
 This project is licensed under the New BSD License - see the [LICENSE](LICENSE)
 file for details.
 
-For more information on PyTorch/XLA, visit the
-[official documentation](https://github.com/pytorch/xla).
+For more information on PyTorch/XLA, visit the [official
+documentation](https://github.com/pytorch/xla).
 
+[torch_xla]: https://github.com/pytorch/xla
 [xpk]: https://github.com/AI-Hypercomputer/xpk
-[torch_xla_debug_env]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
-[torch_xla_profile]: https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#performance-profiling
+[torch_xla_debug_env]:
+    https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
+[torch_xla_profile]:
+    https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#performance-profiling
 [hydra]: https://hydra.cc/docs/intro/
-[torch_xla_dev_docker]: https://github.com/pytorch/xla/blob/master/CONTRIBUTING.md#manually-build-in-docker-container
+[torch_xla_dev_docker]:
+    https://github.com/pytorch/xla/blob/master/CONTRIBUTING.md#manually-build-in-docker-container
