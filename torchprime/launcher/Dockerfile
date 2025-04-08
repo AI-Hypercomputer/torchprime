@@ -41,7 +41,7 @@ COPY pyproject.toml /workspaces/torchprime/
 RUN pip install -e .
 
 # HACK: install newer jax and libtpu
-RUN pip install -U --pre jax jaxlib libtpu requests -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+RUN pip install -U --pre jax==0.5.4.dev20250407 jaxlib==0.5.4.dev20250407 libtpu==0.0.13.dev20250407+nightly -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
 # Now copy the rest of the repo
 COPY . /workspaces/torchprime
