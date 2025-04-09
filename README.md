@@ -17,11 +17,10 @@ community unlock top performance and efficiency on Google Cloud TPUs.
 torchprime is under active development, and we're eager for feedback and input
 from the PyTorch community.
 
-## Examples
+## Installation
 
-Here is a simple example of training on a single TPU VM. It assumes that you
-have already installed [torch_xla][torch_xla] following its respective project
-README.
+Before installing torchprime, you will need to first install
+[torch_xla][torch_xla] following its respective project README.
 
 Install `torchprime`:
 
@@ -31,9 +30,12 @@ cd torchprime
 pip install -e '.[dev]'
 ```
 
+## Examples
+
 ### Local training
 
-Train Llama 3 8B using torch_xla:
+Here is a simple example of training on a single TPU VM. Train Llama 3 8B using
+torch_xla:
 
 ```sh
 export HF_TOKEN='...your huggingface token...'
@@ -136,14 +138,15 @@ checkmark emoji in the table. If a model is optimized, you'll also find MFU
 numbers linked from the table. Note that a model may continue to receive ongoing
 optimization thereafter.
 
-| **Model**            | **Implemented**                                                        | **Optimized**                                                      | **Converges** |
-| -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- |
-| Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256) | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
-| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/133)  | TODO |
-| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)       | TODO                                                               | TODO |
-| Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/milestone/2) | TODO |
-| Llama 4              | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/198)      | TODO | TODO |
-| Mixtral 8x7B         | [✅](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)    | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/44)   | TODO |
+| **Model**            | **Implemented**                                                        | **Optimized**                                                        | **Converges** |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
+| Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
+| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/133)    | TODO |
+| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)       | TODO                                                                 | TODO |
+| Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256) | TODO |
+| Llama 4 Scout        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/198)      | TODO | TODO |
+| Llama 4 Maverick     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/200)      | TODO | TODO |
+| Mixtral 8x7B         | [✅](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)    | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/44)     | TODO |
 | Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)       | TODO | TODO |
 | DeepSeek V3/R1       | TODO                                                                   | TODO | TODO |
 | Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)       | TODO | TODO |

@@ -24,6 +24,7 @@ from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch_xla._internal.jax_workarounds import jax_env_context
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
 
@@ -289,6 +290,7 @@ class Trainer:
       if step % self.config.logging_steps == 0:
 
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
+          loss = loss.detach().item()
           logger.info(
             f"Epoch: {epoch}, step: {step}, loss: {loss:0.4f}, "
             f"trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms"
@@ -434,7 +436,9 @@ def main(config: DictConfig):
     train_dataset=data,
   )
 
-  trainer.train_loop()
+  # TODO(https://github.com/pytorch/xla/issues/8954): Remove `jax_env_context`.
+  with jax_env_context():
+    trainer.train_loop()
 
 
 if __name__ == "__main__":

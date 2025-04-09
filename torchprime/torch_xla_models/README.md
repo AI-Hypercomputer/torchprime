@@ -79,40 +79,47 @@ tp run torchprime/torch_xla_models/train.py \
 
 ### Llama 3.1 405B on v6e-256
 
-Recipe for global batch size 64, sequence length 8192.
-Expected step duration: 19.642s. MFU: 29.91%.
+Recipe for global batch size 256, sequence length 8192. We need to use a larger
+dataset.
+
+Expected step duration: 67.212s. MFU: 34.96%.
 
 ```sh
-export LIBTPU_INIT_ARGS='--xla_tpu_enable_flash_attention=false --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_overlap_compute_collective_tc=true --xla_enable_async_all_gather=true --xla_tpu_scoped_vmem_limit_kib=98304'
+export LIBTPU_INIT_ARGS='--xla_tpu_enable_flash_attention=false --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_overlap_compute_collective_tc=true --xla_enable_async_all_gather=true --xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_enable_all_experimental_scheduler_features=true --xla_tpu_enable_scheduler_memory_pressure_tracking=true --xla_tpu_host_transfer_overlap_limit=24 --xla_tpu_aggressive_opt_barrier_removal=ENABLED --xla_lhs_prioritize_async_depth_over_stall=ENABLED --xla_tpu_enable_ag_backward_pipelining=true --xla_should_allow_loop_variant_parameter_in_chain=ENABLED --xla_should_add_loop_invariant_op_in_chain=ENABLED --xla_max_concurrent_host_send_recv=100 --xla_tpu_scheduler_percent_shared_memory_limit=100 --xla_latency_hiding_scheduler_rerun=2 --xla_tpu_spmd_rng_bit_generator_unsafe=true'
 
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3.1-405b \
-    global_batch_size=64 \
+    global_batch_size=256 \
     block_size=8192 \
-    profile_step=5 \
     ici_mesh.fsdp=64 \
-    ici_mesh.tensor=4
+    ici_mesh.tensor=4 \
+    profile_step=5 \
+    profile_duration=240000 \
+    dataset_config_name=wikitext-103-raw-v1 \
+    max_steps=50 \
+    logging_steps=10
 ```
 
 ### Llama 3.1 405B on 2 pods of v6e-256
 
-Recipe for global batch size 128, sequence length 8192. We need to use a larger
+<!-- TODO(b/408348551): Add back profile_step after fixing MegaScale hang. -->
+
+Recipe for global batch size 512, sequence length 8192. We need to use a larger
 dataset and profile later for longer for the DCN performance to stabilize.
 
-Expected step duration: 30.933s. MFU: 18.99%.
+Expected step duration: 69.081s. MFU: 34.01%.
 
 ```sh
-export LIBTPU_INIT_ARGS='--xla_enable_async_all_gather=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_decompose_all_gather_einsum=true --xla_tpu_decompose_einsum_reduce_scatter=true --xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_spmd_rng_bit_generator_unsafe=true --xla_tpu_overlap_compute_collective_tc=true --xla_tpu_use_enhanced_launch_barrier=true'
+export LIBTPU_INIT_ARGS='--xla_tpu_enable_flash_attention=false --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true --xla_tpu_overlap_compute_collective_tc=true --xla_enable_async_all_gather=true --xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_enable_all_experimental_scheduler_features=true --xla_tpu_enable_scheduler_memory_pressure_tracking=true --xla_tpu_host_transfer_overlap_limit=24 --xla_tpu_aggressive_opt_barrier_removal=ENABLED --xla_lhs_prioritize_async_depth_over_stall=ENABLED --xla_tpu_enable_ag_backward_pipelining=true --xla_should_allow_loop_variant_parameter_in_chain=ENABLED --xla_should_add_loop_invariant_op_in_chain=ENABLED --xla_max_concurrent_host_send_recv=100 --xla_tpu_scheduler_percent_shared_memory_limit=100 --xla_latency_hiding_scheduler_rerun=2 --xla_tpu_spmd_rng_bit_generator_unsafe=true'
 
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3.1-405b \
-    global_batch_size=128 \
+    global_batch_size=512 \
+    block_size=8192 \
     dcn_mesh.fsdp=2 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
     dataset_config_name=wikitext-103-raw-v1 \
-    profile_step=15 \
-    profile_duration=240000 \
     max_steps=50 \
     logging_steps=10
 ```

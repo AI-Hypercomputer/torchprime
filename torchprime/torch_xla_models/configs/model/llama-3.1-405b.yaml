@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - sharding: llama-fsdp-tp
-  - remat: llama
+  - remat: llama-scan-offload
 
 model_class: llama.LlamaForCausalLM
 vocab_size: 128256
