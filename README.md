@@ -83,8 +83,14 @@ tp use \
     --artifact-dir gs://bucket/dir
 ```
 
-Then prepend `tp run` to a particular Python file you would like to run
-remotely, including arguments, e.g.
+torchprime natively supports [multi-slice or multi-pod][multi-slice] training.
+`--num-slices` specifies the number of [slices][tpu-slice] used by the workload.
+`--tpu-type` specifies the [accelerator type][accelerator-type] in each slice.
+To do multi-pod training, simply specify a `--tpu-type` that is as big as a
+[pod][tpu-pod].
+
+After configuring the cluster, prepend `tp run` to a particular Python file you
+would like to run remotely, including arguments, e.g.
 
 ```sh
 # Train Llama 3.0 8B on 256 chips
@@ -258,3 +264,7 @@ documentation](https://github.com/pytorch/xla).
 [hydra]: https://hydra.cc/docs/intro/
 [torch_xla_dev_docker]:
     https://github.com/pytorch/xla/blob/master/CONTRIBUTING.md#manually-build-in-docker-container
+[tpu-pod]: https://cloud.google.com/tpu/docs/system-architecture-tpu-vm#tpu-pod
+[tpu-slice]: https://cloud.google.com/tpu/docs/system-architecture-tpu-vm#slices
+[accelerator-type]: https://cloud.google.com/tpu/docs/multislice-introduction#concepts
+[multi-slice]: https://cloud.google.com/tpu/docs/multislice-introduction
