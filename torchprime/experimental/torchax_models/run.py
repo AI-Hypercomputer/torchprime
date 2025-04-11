@@ -358,8 +358,12 @@ def main(config: DictConfig):
     partition = P(None, "tp", "fsdp", None)
   else:
     partition = P("fsdp", "tp", None, None)
+  
+  attention_raw = splash_attn.tpu_splash_attention
+  if config.shard_seqlen:
+    attention_raw = splash_attn.ring_attention
   attention = functools.partial(
-    splash_attn.tpu_splash_attention,
+    attention_raw,
     mesh,
     partition,
     (config.model_impl != "scan_manual"),

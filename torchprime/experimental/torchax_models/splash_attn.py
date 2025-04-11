@@ -95,3 +95,56 @@ def tpu_splash_attention(
 
   x = wrap_flash_attention(query, key, value, decoder_segment_ids)
   return x
+
+
+from ringattention import ringattention
+
+def ring_attention(
+  mesh,
+  q_sharding,
+  # Input should be of shape (batch, length, heads, kv_dim)
+  apply_shard_map,
+  query: jax.Array,
+  key: jax.Array,
+  value: jax.Array,
+  decoder_segment_ids: jax.Array | None,
+  attn_logits_soft_cap: float | None = None,
+) -> jax.Array:
+
+  # https://github.com/haoliuhl/ringattention
+  def wrap_ring_attention(q, k, v, decoder_segment_ids):
+    q, k, v = map(lambda x: x.swapaxes(1, 2), [q, k, v])
+    return ringattention(
+      q, k, v, None,  None,
+      axis_name="fsdp",
+      float32_logits=True,
+      cache_idx=None,
+      blockwise_kwargs=dict(
+          causal_block_size=1,
+          deterministic=True,
+          dropout_rng=None,
+          attn_pdrop=0.0,
+          query_chunk_size=512,
+          key_chunk_size=512,
+          policy=jax.checkpoint_policies.everything_saveable,
+          dtype=jax.numpy.bfloat16,
+          precision=None,
+          prevent_cse=True,
+      )
+    )
+
+  if apply_shard_map:
+    wrap_ring_attention = shard_map(
+      wrap_ring_attention,
+      mesh=mesh,
+      in_specs=(
+        q_sharding,
+        q_sharding,
+        q_sharding,
+        None,
+      ),
+      out_specs=q_sharding,
+      check_rep=False,
+    )
+  o = wrap_ring_attention(query, key, value, None).swapaxes(1, 2)
+  return o
