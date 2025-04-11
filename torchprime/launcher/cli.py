@@ -215,23 +215,14 @@ def docker_run(args, use_hf: bool):
   """
   Runs the provided training command locally for quick testing.
   """
-  run_with_tp_config = True
-  try:
-    config = read_config()
-  except RuntimeError:
-    run_with_tp_config = False
-    click.echo("No config found. Unable to push docker image to GCP project.")
-
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
   build_arg = "USE_TRANSFORMERS=true" if use_hf else None
-  docker_project = ""
-  if run_with_tp_config:
-    docker_project = config.docker_project
-    if docker_project is None:
-      docker_project = config.project
-  docker_url = buildpush(docker_project, push_docker=False, build_arg=build_arg)
+  placeholder_url = "torchprime-dev:local"
+  docker_url = buildpush(
+    push_docker=False, placeholder_url=placeholder_url, build_arg=build_arg
+  )
   # Forward a bunch of important env vars.
   env_forwarding = [
     arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
