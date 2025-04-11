@@ -24,14 +24,6 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python
 
 WORKDIR /workspaces
 
-# Install torchax
-RUN git clone --depth 1 https://github.com/pytorch/xla.git
-WORKDIR /workspaces/xla/torchax
-RUN pip install torch_xla[pallas] \
-    -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \
-    -f https://storage.googleapis.com/jax-releases/jaxlib_nightly_releases.html
-RUN pip install -e .
-
 # Install torchprime
 # Optimization: we rerun `pip install -e .` only if `pyproject.toml` changes.
 # Copy only the installation-related files first to make Docker cache them separately.

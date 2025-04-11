@@ -215,15 +215,22 @@ def docker_run(args, use_hf: bool):
   """
   Runs the provided training command locally for quick testing.
   """
-  config = read_config()
+  run_with_tp_config = True
+  try:
+    config = read_config()
+  except RuntimeError:
+    run_with_tp_config = False
+    click.echo("No config found. Unable to push docker image to GCP project.")
 
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
   build_arg = "USE_TRANSFORMERS=true" if use_hf else None
-  docker_project = config.docker_project
-  if docker_project is None:
-    docker_project = config.project
+  docker_project = ""
+  if run_with_tp_config:
+    docker_project = config.docker_project
+    if docker_project is None:
+      docker_project = config.project
   docker_url = buildpush(docker_project, push_docker=False, build_arg=build_arg)
   # Forward a bunch of important env vars.
   env_forwarding = [
