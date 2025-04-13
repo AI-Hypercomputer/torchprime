@@ -2,6 +2,8 @@
 import re
 import sys
 
+FINISHED_MARKER = r"Finished training run"
+
 
 def check_logs(file_path):
   try:
@@ -12,16 +14,11 @@ def check_logs(file_path):
     return 1
 
   # Validate that the log contains the expected patterns.
-  if not re.search(r"Finished training run", log_data):
-    print("Error: 'Finished training run' not found in logs")
+  if not re.search(FINISHED_MARKER, log_data):
+    print(f"Error: '{FINISHED_MARKER}' not found in logs")
     return 1
+  print(f"Found '{FINISHED_MARKER}' in logs")
 
-  step_duration = re.search(r"Step duration:.*s", log_data)
-  if not step_duration:
-    print("Error: 'Step duration' not found in logs")
-    return 1
-
-  print(step_duration.group())
   print("Logs check passed.")
   return 0
 

@@ -4,6 +4,7 @@ import math
 import sys
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 from timeit import default_timer as timer
 
 import datasets
@@ -34,6 +35,7 @@ from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
 from torchprime.layers.sequential import HomogeneousSequential
+from torchprime.metrics.metrics import MetricsLogger
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
@@ -263,6 +265,7 @@ class Trainer:
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
+    metrics_logger = MetricsLogger()
     logger.info("Starting training")
     logger.info(f"    Max step: {max_step}")
     logger.info(f"    Global batch size: {self.global_batch_size}")
@@ -316,7 +319,12 @@ class Trainer:
     # Analyze the step duration from the latest profile
     if self.config.profile_step >= 0:
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
-      logger.info(f"Step duration: {step_duration:.3f} s")
+      metrics_logger.log_step_execution_time(step_duration)
+
+    # Print and save metrics
+    metrics = metrics_logger.finalize()
+    logger.info("***** train metrics *****\n%s", metrics)
+    metrics.save(Path(self.config.output_dir) / "train_metrics.json")
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
@@ -376,7 +384,7 @@ def main(config: DictConfig):
   server = xp.start_server(9012)
   logger.info(f"Profiling server started: {str(server)}")
 
-  # TODO: Add tokenizer models to torchprime
+  # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Add tokenizers to torchprime.
   tokenizer_name = config.model.tokenizer_name
   tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 

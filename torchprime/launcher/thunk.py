@@ -53,7 +53,17 @@ print(f"Dumping XLA compiler outputs to {xla_dump_path}", flush=True)
 profile_dir = mounted_artifact_dir / jobset_name / "profile" / host_name
 print(f"Profile output directory: {profile_dir}", flush=True)
 
+output_dir = mounted_artifact_dir / jobset_name / "outputs" / host_name
+print("Artifact output directory:", output_dir, flush=True)
+
 # Exec into the training script.
-args = [sys.executable] + sys.argv[1:] + [f"profile_dir={str(profile_dir)}"]
+args = (
+  [sys.executable]
+  + sys.argv[1:]
+  + [
+    f"profile_dir={str(profile_dir)}",
+    f"output_dir={str(output_dir)}",
+  ]
+)
 env = os.environ.copy()
 os.execve(sys.executable, args, env)

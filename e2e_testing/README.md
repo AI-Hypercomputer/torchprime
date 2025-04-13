@@ -20,6 +20,7 @@ model, and runs a few checks. This is implemented in
 - Check workload exit code.
 - Check for specific log strings that indicate training success.
 - Check that there is a profile `.pb` file.
+- Check that the step time is within a reasonable range.
 
 ## v6e XPK cluster
 

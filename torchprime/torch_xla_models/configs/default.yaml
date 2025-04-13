@@ -20,6 +20,10 @@ profile_step: -1
 # This might be overwritten when using tp run to launch the run using XPK
 profile_dir: profile
 profile_duration: 100000
+
+# This might be overwritten when using tp run to launch the run using XPK
+output_dir: outputs
+
 optimizer:
   learning_rate: 5.e-5
 lr_scheduler:

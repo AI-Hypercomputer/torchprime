@@ -12,7 +12,7 @@ ShardWeightFn optionally transforms a weight tensor based on its name.
 Args:
 
   weight (torch.Tensor): The weight tensor to be transformed.
-  
+
   name (str): The name of the weight tensor as it appears in the state dict.
 
 Returns:
@@ -156,7 +156,7 @@ def shard_model_from_config(
   assert (
     seen_names == want_names
   ), f"""Requested to shard these names: {want_names}, but only sharded these: {seen_names}.
-  
+
 These names were not found in the model:
 {diff}
 """

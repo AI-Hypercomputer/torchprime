@@ -52,3 +52,7 @@ jobs:
         run: |
           profile_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/profile/0-0"
           e2e_testing/check_profile.py "$profile_dir"
+      - name: Validate step time
+        run: |
+          output_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/outputs/0-0"
+          e2e_testing/check_step_time.py "$output_dir" 2.0 3.0  # TODO: configure
