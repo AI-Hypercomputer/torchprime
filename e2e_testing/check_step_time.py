@@ -54,18 +54,18 @@ def check_step_time(output_dir: str, lower_bound: float, upper_bound: float):
     return 1
 
   time_seconds = step_execution_time.total_seconds()
-  print(f"Step execution time: {time_seconds:.3f} seconds")
+  print(f"Step execution time: {time_seconds:.4f} seconds")
 
   if time_seconds < lower_bound:
     print(
-      f"Error: step_execution_time {time_seconds:.2f} seconds is below the lower bound {lower_bound:.2f} seconds.",
+      f"Error: step_execution_time {time_seconds:.4f} seconds is below the lower bound {lower_bound:.4f} seconds.",
       file=sys.stderr,
     )
     return 1
 
   if time_seconds > upper_bound:
     print(
-      f"Error: step_execution_time {time_seconds:.2f} seconds exceeds the upper bound {upper_bound:.2f} seconds.",
+      f"Error: step_execution_time {time_seconds:.4f} seconds exceeds the upper bound {upper_bound:.4f} seconds.",
       file=sys.stderr,
     )
     return 1
