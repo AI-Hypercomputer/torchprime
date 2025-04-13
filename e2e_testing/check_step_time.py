@@ -54,7 +54,7 @@ def check_step_time(output_dir: str, lower_bound: float, upper_bound: float):
     return 1
 
   time_seconds = step_execution_time.total_seconds()
-  print(f"Step execution time: {time_seconds:.2f} seconds")
+  print(f"Step execution time: {time_seconds:.3f} seconds")
 
   if time_seconds < lower_bound:
     print(
