@@ -196,9 +196,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-sa-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.06316
-      step_time_lower_bound: 2.39
-      step_time_upper_bound: 2.51632
+      # Confidence interval: 0.10384
+      step_time_lower_bound: 2.34932
+      step_time_upper_bound: 2.557
     secrets: inherit
 
   llama-3_1-8b-scan-offload:
@@ -208,9 +208,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-scan-offload-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.02969
-      step_time_lower_bound: 2.79142
-      step_time_upper_bound: 2.8508
+      # Confidence interval: 0.03089
+      step_time_lower_bound: 2.79022
+      step_time_upper_bound: 2.852
     secrets: inherit
 
   llama-3-8b-2d:
@@ -232,9 +232,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2-slice-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 15.23185
-      step_time_lower_bound: 4.73207
-      step_time_upper_bound: 35.19577
+      # Confidence interval: 15.71092
+      step_time_lower_bound: 4.253
+      step_time_upper_bound: 35.67484
     secrets: inherit
 
   mixtral-8x7b:
