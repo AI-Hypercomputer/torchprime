@@ -120,6 +120,8 @@ Besides forwarding your command line arguments, `tp run` will add:
 
 - `profile_dir=[...]`: path to a [profile][torch_xla_profile] directory
   accessible by the workload
+- `output_dir=[...]` path to a directory where the workload may store output
+  artifacts such as metrics and checkpoints
 
 ## Supported Models
 
