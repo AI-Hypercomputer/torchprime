@@ -23,7 +23,7 @@ def check_step_time(output_dir: str, lower_bound: float, upper_bound: float):
   count = len(files)
   if count != 1:
     print(
-      f"Error: Expected train_metrics.json file in {output_dir}, found {count}.",
+      f"Error: Expected one train_metrics.json file in {output_dir}, found {count}.",
       file=sys.stderr,
     )
     return 1
@@ -58,14 +58,28 @@ def check_step_time(output_dir: str, lower_bound: float, upper_bound: float):
 
   if time_seconds < lower_bound:
     print(
-      f"Error: step_execution_time {time_seconds:.4f} seconds is below the lower bound {lower_bound:.4f} seconds.",
+      f"""
+Error: step time too fast!
+
+step_execution_time {time_seconds:.4f} seconds is below the lower bound {lower_bound:.4f} seconds.
+
+Refer to https://github.com/AI-Hypercomputer/torchprime/blob/main/e2e_testing/README.md#what-to-do-when-step-time-is-out-of-range
+for more information.
+""",
       file=sys.stderr,
     )
     return 1
 
   if time_seconds > upper_bound:
     print(
-      f"Error: step_execution_time {time_seconds:.4f} seconds exceeds the upper bound {upper_bound:.4f} seconds.",
+      f"""
+Error: step time too slow!
+
+step_execution_time {time_seconds:.4f} seconds exceeds the upper bound {upper_bound:.4f} seconds.
+
+Refer to https://github.com/AI-Hypercomputer/torchprime/blob/main/e2e_testing/README.md#what-to-do-when-step-time-is-out-of-range
+for more information.
+""",
       file=sys.stderr,
     )
     return 1

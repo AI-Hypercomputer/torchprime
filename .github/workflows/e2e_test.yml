@@ -173,6 +173,9 @@ jobs:
   #
   # The initial bounds and confidence interval comes from a one-time analysis in Apr 2025:
   # https://docs.google.com/spreadsheets/d/1VS_0tkmmUwT22F2eeqqIOuExiBwIIbqn58MXw3RMe7M/edit?usp=sharing
+  #
+  # Note that we use the convention of
+  # `step_time_upper_bound - step_time_lower_bound = confidence_interval * 2`.
 
   llama-3-8b:
     name: Llama 3.0 8B
@@ -181,9 +184,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.02771
-      step_time_lower_bound: 2.742915
-      step_time_upper_bound: 2.798335
+      # Confidence interval: 0.02772
+      step_time_lower_bound: 2.74449
+      step_time_upper_bound: 2.79993
     secrets: inherit
 
   llama-3_1-8b-sa:
@@ -193,9 +196,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-sa-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.08771
-      step_time_lower_bound: 2.369365
-      step_time_upper_bound: 2.544785
+      # Confidence interval: 0.06316
+      step_time_lower_bound: 2.39
+      step_time_upper_bound: 2.51632
     secrets: inherit
 
   llama-3_1-8b-scan-offload:
@@ -205,9 +208,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-scan-offload-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.04178
-      step_time_lower_bound: 2.777545
-      step_time_upper_bound: 2.861105
+      # Confidence interval: 0.02969
+      step_time_lower_bound: 2.79142
+      step_time_upper_bound: 2.8508
     secrets: inherit
 
   llama-3-8b-2d:
@@ -218,8 +221,8 @@ jobs:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2d-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       # Confidence interval: 0.03373
-      step_time_lower_bound: 3.33927
-      step_time_upper_bound: 3.40673
+      step_time_lower_bound: 3.33923
+      step_time_upper_bound: 3.40669
     secrets: inherit
 
   llama-3-8b-2-slice:
@@ -229,9 +232,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2-slice-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 17.43862
-      step_time_lower_bound: 3.38148
-      step_time_upper_bound: 38.25872
+      # Confidence interval: 15.23185
+      step_time_lower_bound: 4.73207
+      step_time_upper_bound: 35.19577
     secrets: inherit
 
   mixtral-8x7b:
@@ -242,6 +245,6 @@ jobs:
       jobset_name: ${{ needs.tp-run.outputs.mixtral-8x7b-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       # Confidence interval: 0.03168
-      step_time_lower_bound: 3.1360325
-      step_time_upper_bound: 3.1993925
+      step_time_lower_bound: 3.13649
+      step_time_upper_bound: 3.19985
     secrets: inherit

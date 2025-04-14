@@ -22,17 +22,40 @@ model, and runs a few checks. This is implemented in
 - Check that there is a profile `.pb` file.
 - Check that the step time is within a reasonable range.
 
+## What to do when step time is out of range
+
+As of https://github.com/AI-Hypercomputer/torchprime/pull/208, we'll start
+checking that the step time of model training E2E tests falls within
+experimentally derived bounds.
+
+### If the step time falls below the lower bound
+
+If this is the result of an optimization/updated deps, you may re-center the
+bounds to the latest step time, keeping the confidence intervals unchanged.
+
+If there were no code changes and the step time is still below the lower bound,
+consider growing the confidence interval.
+
+### If the step time goes above the upper bound
+
+If this is the result of a code change, you may have introduced a regression.
+Investigate the root cause and avoid the slow down before landing the PR.
+
+If there were no code changes and the step time is still above the upper bound,
+we'll need to discuss with the hardware teams because it may be the result of
+hardware changes.
+
 ## v6e XPK cluster
 
 E2E tests are launched onto an XPK cluster named `tpu-v6e-ci`.
 
-To heal or re-create the cluster, use the following:
+(Googlers only) To heal or re-create the cluster, use the following:
 
 ```sh
 xpk cluster create \
     --tpu-type v6e-4 \
     --cluster tpu-v6e-ci \
-    --num-slices 48 \
+    --num-slices 64 \
     --on-demand \
     --zone us-central2-b \
     --project tpu-pytorch \
