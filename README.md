@@ -187,39 +187,7 @@ version is not expected to be run.
 
 Contributions are welcome! Please feel free to submit a pull request.
 
-Refer to the [contributor guide](./docs/contributor/README.md).
-
-### How to run inside the docker container locally
-
-You can also run locally without XPK with docker. When running inside the docker
-container, it will use the same dependencies and build process as used in the
-XPK approach, improving the hermeticity and reliability.
-
-```sh
-tp docker-run torchprime/torch_xla_models/train.py
-```
-
-This will run the torchprime docker image locally. You can also add `--use-hf`
-to run HuggingFace model locally.
-
-```sh
-tp docker-run --use-hf torchprime/hf_models/train.py
-```
-
-## Run distributed training with local torch/torch_xla wheel
-
-torchprime supports running with user specified torch and torch_xla wheels
-placed under `local_dist/` directory. The wheel will be automatically installed
-in the docker image when use `tp run` command. To use the wheel, add flag
-`--use-local-wheel` to `tp run` command:
-
-```sh
-tp run --use-local-wheel torchprime/hf_models/train.py
-```
-
-The wheels should be built inside a [PyTorch/XLA development docker
-image][torch_xla_dev_docker] or the PyTorch/XLA VSCode Dev Container to minimize
-compatibility issues.
+Refer to the [contributor guide](./docs/contributor/README.md) to get started.
 
 ## License
 
