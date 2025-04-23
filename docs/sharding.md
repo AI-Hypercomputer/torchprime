@@ -51,6 +51,9 @@ for uniformly sharding all layers in a `nn.ModuleList`:
 model.layers.*.self_attn.q_proj.weight: [fsdp, null]
 ```
 
+`null` is interpreted to be `None` in Python and means to replicate that
+tensor dimension across all devices.
+
 Internally, this is implemented as a call to
 `xs.mark_sharding(weight, mesh, partition_spec)`. See
 [`shard_torch_xla_model_from_config`][shard_torch_xla_model_from_config].
