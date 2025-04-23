@@ -211,16 +211,11 @@ def shard_torch_xla_model_from_config(
   If `mesh` is not given, there must be a registered global mesh.
   """
   import torch_xla.distributed.spmd as xs
-  from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 
   def shard_activation(tensor, spec: tuple[str, ...]):
     the_mesh = mesh if mesh is not None else xs.get_global_mesh()
     assert the_mesh is not None, "No mesh found"
-    # TODO(https://github.com/pytorch/xla/issues/8678): Replace with the simpler
-    # `mark_sharding_and_gradients`.
-    out = MarkShardingFunction.apply(tensor, the_mesh, spec)
-    assert isinstance(out, torch.Tensor)
-    return out
+    return xs.mark_sharding_with_gradients(tensor, the_mesh, spec)
 
   # TODO(https://github.com/pytorch/xla/issues/8809): If we shard parameters with
   # `MarkShardingFunction.apply`, that causes Mixtral to OOM. Gradient HLO arrays end up
