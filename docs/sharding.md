@@ -124,5 +124,5 @@ as needed.
 [fsdp]: https://pytorch.org/tutorials/intermediate/FSDP_tutorial.html
 [state-dict]: https://pytorch.org/tutorials/recipes/recipes/what_is_state_dict.html
 [partition-spec]: https://pytorch.org/xla/master/perf/spmd_basic.html#partition-spec
-[shard_torch_xla_model_from_config]: https://github.com/AI-Hypercomputer/torchprime/blob/b123c0cc157c28f32a0f6588f19e2d352d2a3617/torchprime/sharding/shard_model.py#L201
+[shard_torch_xla_model_from_config]: https://github.com/AI-Hypercomputer/torchprime/tree/master/torchprime/sharding/shard_model.py#L201
 [GSPMD]: https://arxiv.org/pdf/2105.04663
