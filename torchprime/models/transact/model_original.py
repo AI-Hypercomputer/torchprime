@@ -1,10 +1,12 @@
 # Verbatim copy from https://github.com/pinterest/transformer_user_action/blob/main/transact_code/transact.py
 
+import logging
+import random
+from typing import Any, Final
+
 import torch
 import torch.nn as nn
-import logging
-from typing import Dict, List, Final, Any, Tuple
-import random
+
 from .transact_config import TransActConfig
 
 
@@ -58,7 +60,7 @@ class TransAct(nn.Module):
         i = 0
         for id in sorted(self.action_vocab):
             t[id + 1] = i
-            i += 1
+            i += 1  # noqa: SIM113
         return t
 
     def forward(
@@ -147,7 +149,7 @@ class TransAct(nn.Module):
         new_attn_mask.masked_fill_(mask, float("-inf"))
         return new_attn_mask
 
-    def get_sample_inputs(self, batch_size: int) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    def get_sample_inputs(self, batch_size: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
       """returns the args and kwargs required to run this model.
       
       i.e.

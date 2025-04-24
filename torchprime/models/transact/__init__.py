@@ -5,7 +5,6 @@ from .transact_config import TransActConfig
 def get_model():
   action_vocab = list(range(0, 20))
   full_seq_len = 100
-  test_batch_size = 8
   action_emb_dim = 32
   item_emb_dim = 32
   time_window_ms = 1000 * 60 * 60 * 1  # 1 hr
