@@ -38,44 +38,62 @@ launch it on XPK.
 
 ### Llama 3.0 8B on v6e-256
 
-Recipe for global batch size 256, sequence length 8192.
-Expected step duration: 1.625s. MFU: 33.53%.
+Recipe for global batch size 1024, sequence length 8192. We need splash attention kernel.
+Expected step duration: 4.823s. MFU: 45.20%.
 
 ```sh
+export LIBTPU_INIT_ARGS='--xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_use_minor_sharding_for_major_trivial_input=true --xla_tpu_relayout_group_size_threshold_for_reduce_scatter=1 --xla_tpu_assign_all_reduce_scatter_layout=true --xla_tpu_enable_data_parallel_all_reduce_opt=true --xla_tpu_data_parallel_opt_different_sized_ops=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true  --xla_tpu_overlap_compute_collective_tc=true  --xla_enable_async_all_gather=true --xla_tpu_enable_async_collective_fusion_fuse_all_reduce=false  --xla_tpu_enable_sparse_core_collective_offload_all_reduce=true --xla_tpu_use_tc_device_shape_on_sc=true  --xla_sc_enable_instruction_fusion=false  --xla_sc_disjoint_spmem=false  --xla_sc_disable_megacore_partitioning=true  --2a886c8_chip_config_name=megachip_tccontrol'
+
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3-8b \
-    global_batch_size=256 \
-    block_size=8192 \
+    dataset_config_name=wikitext-103-raw-v1 \
+    global_batch_size=1024 \
     profile_step=5 \
-    ici_mesh.fsdp=256
-```
-
-Recipe for global batch size 512, sequence length 8192.
-Expected step duration: 2.991s. MFU: 36.43%.
-
-```sh
-tp run torchprime/torch_xla_models/train.py \
-    model=llama-3-8b \
-    global_batch_size=512 \
-    block_size=8192 \
-    profile_step=5 \
-    ici_mesh.fsdp=256
+    ici_mesh.fsdp=256 \
+    model/remat=llama-scan-offload \
+    model.attention_kernel=splash_attention
 ```
 
 ### Llama 3.1 8B on v6e-256
 
-<!-- TODO(https://github.com/AI-Hypercomputer/torchprime/issues/135): publish perf data. -->
+Recipe for global batch size 1024, sequence length 8192. We need splash attention kernel.
 
-Recipe for global batch size 512, sequence length 8192:
+Expected step duration: 4.819s, MFU: 45.23%.
 
 ```sh
+export LIBTPU_INIT_ARGS='--xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_use_minor_sharding_for_major_trivial_input=true --xla_tpu_relayout_group_size_threshold_for_reduce_scatter=1 --xla_tpu_assign_all_reduce_scatter_layout=true --xla_tpu_enable_data_parallel_all_reduce_opt=true --xla_tpu_data_parallel_opt_different_sized_ops=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true  --xla_tpu_overlap_compute_collective_tc=true  --xla_enable_async_all_gather=true --xla_tpu_enable_async_collective_fusion_fuse_all_reduce=false  --xla_tpu_enable_sparse_core_collective_offload_all_reduce=true --xla_tpu_use_tc_device_shape_on_sc=true  --xla_sc_enable_instruction_fusion=false  --xla_sc_disjoint_spmem=false  --xla_sc_disable_megacore_partitioning=true  --2a886c8_chip_config_name=megachip_tccontrol'
+
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3.1-8b \
-    global_batch_size=512 \
-    block_size=8192 \
-    profile_step=5 \
-    ici_mesh.fsdp=256
+    dataset_config_name=wikitext-103-raw-v1 \
+    global_batch_size=1024 \
+    profile_step=6 \
+    profile_duration=20000 \
+    ici_mesh.fsdp=256 \
+    model/remat=llama-scan-offload \
+    model.attention_kernel=splash_attention
 ```
+
+### Llama 3.1 70B on v6e-256
+
+Recipe for global batch size 512, sequence length 8192. We need splash attention kernel.
+
+Expected step duration: 19.277s, MFU: 45.16%.
+
+```sh
+export LIBTPU_INIT_ARGS='--xla_tpu_scoped_vmem_limit_kib=98304 --xla_tpu_use_minor_sharding_for_major_trivial_input=true --xla_tpu_relayout_group_size_threshold_for_reduce_scatter=1 --xla_tpu_assign_all_reduce_scatter_layout=true --xla_tpu_enable_data_parallel_all_reduce_opt=true --xla_tpu_data_parallel_opt_different_sized_ops=true --xla_tpu_enable_async_collective_fusion=true --xla_tpu_enable_async_collective_fusion_fuse_all_gather=true --xla_tpu_enable_async_collective_fusion_multiple_steps=true  --xla_tpu_overlap_compute_collective_tc=true  --xla_enable_async_all_gather=true --xla_tpu_enable_async_collective_fusion_fuse_all_reduce=false  --xla_tpu_enable_sparse_core_collective_offload_all_reduce=true --xla_tpu_use_tc_device_shape_on_sc=true  --xla_sc_enable_instruction_fusion=false  --xla_sc_disjoint_spmem=false  --xla_sc_disable_megacore_partitioning=true  --2a886c8_chip_config_name=megachip_tccontrol'
+
+tp run torchprime/torch_xla_models/train.py \
+    model=llama-3.1-70b \
+    dataset_config_name=wikitext-103-raw-v1 \
+    global_batch_size=512 \
+    profile_step=5 \
+    profile_duration=250000  \
+    ici_mesh.fsdp=256 \
+    model/remat=llama-scan-offload \
+    model.attention_kernel=splash_attention
+```
+
 
 ### Llama 3.1 405B on v6e-256
 

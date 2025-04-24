@@ -149,8 +149,8 @@ optimization thereafter.
 | **Model**            | **Implemented**                                                        | **Optimized**                                                        | **Converges** |
 | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
 | Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
-| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/133)    | TODO |
-| Llama 3.1 70B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/17)       | TODO                                                                 | TODO |
+| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)    | TODO |
+| Llama 3.1 70B        | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)    | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)   | TODO |
 | Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256) | TODO |
 | Llama 4 Scout        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/198)      | TODO | TODO |
 | Llama 4 Maverick     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/200)      | TODO | TODO |
