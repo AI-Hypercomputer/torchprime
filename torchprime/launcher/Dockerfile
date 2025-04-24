@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # Use torch_xla Python 3.10 as the base image
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250410
+FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:r2.7.0_3.10_tpuvm
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false
@@ -23,6 +23,15 @@ RUN apt-get update && apt-get install -y google-cloud-sdk git fuse gcsfuse && gc
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python3.10 1
 
 WORKDIR /workspaces
+
+# Install torchax
+RUN git clone --depth 1 https://github.com/pytorch/xla.git
+WORKDIR /workspaces/xla/torchax
+RUN pip install torch_xla[pallas] \
+    -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html \
+    -f https://storage.googleapis.com/jax-releases/jaxlib_nightly_releases.html
+RUN pip install -e .
+
 
 # Install torchprime
 # Optimization: we rerun `pip install -e .` only if `pyproject.toml` changes.
