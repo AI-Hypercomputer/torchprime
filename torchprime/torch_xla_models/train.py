@@ -47,7 +47,7 @@ from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
 if version.parse(torch_xla.__version__.split("+")[0]) >= version.parse("2.8.0"):
   from torch_xla._internal.jax_workarounds import jax_env_context
 else:
-  from torch_xla.experimental.custom_kernel import jax_env_context
+  from torch_xla.experimental.custom_kernel import _jax_env_context as jax_env_context
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
