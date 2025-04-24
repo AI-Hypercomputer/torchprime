@@ -67,9 +67,9 @@ def create_custom_64x4_device_mesh(
 
   from jax.experimental import mesh_utils
 
-  assert (
-    len(devices) % 256 == 0
-  ), f"This custom mesh is not valid for {len(devices)} devices"
+  assert len(devices) % 256 == 0, (
+    f"This custom mesh is not valid for {len(devices)} devices"
+  )
   attr = "slice_index"
   if not hasattr(devices[0], attr):
     raise ValueError(

@@ -14,9 +14,9 @@ os.environ["LIBTPU_INIT_ARGS"] = xla_flags
 
 # Get the artifact dir from env var.
 gcs_artifact_dir = os.environ["TORCHPRIME_ARTIFACT_DIR"]
-assert gcs_artifact_dir.startswith(
-  "gs://"
-), f"{gcs_artifact_dir} must be in a GCS bucket (start with gs://)"
+assert gcs_artifact_dir.startswith("gs://"), (
+  f"{gcs_artifact_dir} must be in a GCS bucket (start with gs://)"
+)
 gcs_artifact_dir = gcs_artifact_dir.removeprefix("gs://")
 gcs_bucket, *gcs_artifact_subdir = gcs_artifact_dir.split("/")
 
