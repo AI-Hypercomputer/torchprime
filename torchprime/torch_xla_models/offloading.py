@@ -44,7 +44,7 @@ def remat_all_and_offload_these_inputs(
   *,
   num_fwd_outputs,
   names_to_offload: Sequence[str],
-  static_lifetime_input_indices=None,
+  # static_lifetime_input_indices=None,
 ):
   """Partition the graph to rematerialize forward activations and offload
   forward inputs to host.
@@ -72,7 +72,7 @@ def remat_all_and_offload_these_inputs(
     joint_module,
     _joint_inputs,
     num_fwd_outputs=num_fwd_outputs,
-    static_lifetime_input_indices=static_lifetime_input_indices,
+    # static_lifetime_input_indices=static_lifetime_input_indices,
   )
   with torch.device(input_device):
     fw_example_args = _make_arguments(fwd)

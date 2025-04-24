@@ -9,7 +9,7 @@ def remat_all_partition_fn(
   _joint_inputs,
   *,
   num_fwd_outputs,
-  static_lifetime_input_indices=None,
+  # static_lifetime_input_indices=None,
 ):
   """
   remat_all_partition_fn is a graph partition function that closely matches the
@@ -30,7 +30,7 @@ def remat_all_partition_fn(
     joint_module,
     _joint_inputs,
     num_fwd_outputs=num_fwd_outputs,
-    static_lifetime_input_indices=static_lifetime_input_indices,
+    # static_lifetime_input_indices=static_lifetime_input_indices,
   )
 
 
