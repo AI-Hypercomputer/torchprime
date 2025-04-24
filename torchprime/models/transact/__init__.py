@@ -11,12 +11,12 @@ def get_model():
   latest_n_emb = 10
 
   transact_config = TransActConfig(
-      action_vocab=action_vocab,
-      seq_len=full_seq_len,
-      action_emb_dim=action_emb_dim,
-      item_emb_dim=item_emb_dim,
-      time_window_ms=time_window_ms,
-      latest_n_emb=latest_n_emb,
+    action_vocab=action_vocab,
+    seq_len=full_seq_len,
+    action_emb_dim=action_emb_dim,
+    item_emb_dim=item_emb_dim,
+    time_window_ms=time_window_ms,
+    latest_n_emb=latest_n_emb,
   )
 
   return TransAct(transact_config)
