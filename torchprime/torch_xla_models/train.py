@@ -1,7 +1,6 @@
 import importlib
 import logging
 import math
-import os
 import random
 import sys
 import time
@@ -372,29 +371,6 @@ def set_default_dtype(dtype):
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
-  if "TORCHPRIME_ARTIFACT_DIR" in os.environ:
-    gcs_mount = "/tmp/gcs-mount"
-    worker_id = int(os.getenv("TPU_WORKER_ID", "0"))
-    slice_id = int(os.getenv("MEGASCALE_SLICE_ID", "0"))
-    cache_name = "compile-cache"
-    gcs_artifact_dir = os.environ["TORCHPRIME_ARTIFACT_DIR"]
-    gcs_artifact_dir = gcs_artifact_dir.removeprefix("gs://")
-    gcs_bucket, *gcs_artifact_subdir = gcs_artifact_dir.split("/")
-    mounted_artifact_dir = Path(gcs_mount)
-    for s in gcs_artifact_subdir:
-      mounted_artifact_dir = mounted_artifact_dir / s
-    graph_cache_path = mounted_artifact_dir / cache_name
-    # Ensure dir exists
-    try:
-      os.makedirs(graph_cache_path, exist_ok=True)
-    except:
-      pass
-    readonly = True
-    if worker_id == 0 and slice_id == 0:
-      # Only first worker can write to cache
-      readonly = False
-    xr.initialize_cache(str(graph_cache_path), readonly=readonly)
-
   # Configure logging
   print(OmegaConf.to_yaml(config))  # Print the config for debugging
   log_level = logging.INFO
