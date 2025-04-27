@@ -104,6 +104,8 @@ tp run torchprime/torch_xla_models/train.py \
 which is the convention for running SPMD distributed workloads. See `tp run
 --help` for more advanced features.
 
+The version of `torch_xla` used by `tp run` is specified in `pyproject.toml`.
+
 #### Env vars passed to the workload
 
 `tp run` will pick up these environment variables locally and proxy them to the

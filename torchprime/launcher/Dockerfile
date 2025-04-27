@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:experimental
-# Use torch_xla Python 3.10 as the base image
-FROM us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_20250410
+# When using `tp run`, the base image is specified in `pyproject.toml`.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
 
 ARG USE_TRANSFORMERS=false
 ARG USE_LOCAL_WHEEL=false

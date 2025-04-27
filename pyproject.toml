@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "torchprime"
 version = "0.1.0"
-description = "TorchPrime, reference model implementations for PyTorch on TPU/GPU using torch_xla and torchax"
+description = "torchprime, reference model implementations for PyTorch on TPU/GPU using torch_xla and torchax"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -36,11 +36,15 @@ dev = [
     "dataclasses-json~=0.6.7",
     "watchdog~=6.0.0",
     "pathspec~=0.12.1",
+    "tomli~=2.2.1",
     "xpk@git+https://github.com/AI-Hypercomputer/xpk@e52a5f4cd56ad50aeab06d55100cf4d3abc4c2c8"
 ]
 
 [project.scripts]
 tp = "torchprime.launcher.cli:cli"
+
+[tool.torchprime]
+torch_xla_version = "20250426"
 
 [tool.setuptools.packages.find]
 where = [""]

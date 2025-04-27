@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 import click
+import tomli
 
 
 def buildpush(
@@ -64,11 +65,17 @@ def buildpush(
     f" --network=host --progress=auto -t {docker_tag} {context_dir} -f {docker_file}"
   )
 
+  # Provide the base image
+  pyproject_file = context_dir / "pyproject.toml"
+  base_image = tomli.loads(pyproject_file.read_text())["tool"]["torchprime"][
+    "torch_xla_version"
+  ]
+  # Use torch_xla Python 3.10 as the base image
+  build_cmd += f" --build-arg BASE_IMAGE=us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_{base_image}"
+
   # Build, tag, and push Docker image
   try:
-    _run(
-      build_cmd,
-    )
+    _run(build_cmd)
     _run(
       f"{sudo_cmd} docker tag {docker_tag} {docker_url}",
     )

@@ -6,8 +6,7 @@ import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
 from torch import nn
 from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
-
-from torchprime.torch_xla_models.experimental.custom_kernel import (
+from torch_xla.experimental.splash_attention import (
   SplashAttentionConfig,
   splash_attention,
 )
