@@ -33,13 +33,9 @@ from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
-<<<<<<< HEAD
+from torchprime.data.dataset import make_huggingface_dataset
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.metrics.metrics import MetricsLogger
-||||||| parent of 230e (Move dataset to data module)
-=======
-from torchprime.data.dataset import make_huggingface_dataset
->>>>>>> 230e (Move dataset to data module)
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
@@ -47,6 +43,7 @@ from torchprime.sharding.shard_model import (
 )
 from torchprime.torch_xla_models import offloading, remat_all, scan_layers
 from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
+from torchprime.utils.retry import retry
 
 check_min_version("4.39.3")
 logger = logging.getLogger(__name__)
@@ -390,7 +387,7 @@ def main(config: DictConfig):
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Add tokenizers to torchprime.
   tokenizer_name = config.model.tokenizer_name
-  tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+  tokenizer = retry(lambda: AutoTokenizer.from_pretrained(tokenizer_name))
 
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
@@ -401,18 +398,16 @@ def main(config: DictConfig):
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
-  # Set the model dtype to bfloat16
-  model = model.to(torch.bfloat16)
-  model = model.to("xla")
-
   # Downloading and loading a dataset from the hub.
-  data = make_huggingface_dataset(
-    name=config.dataset_name,
-    config_name=config.dataset_config_name,
-    split="train",
-    cache_dir=config.cache_dir,
-    tokenizer=tokenizer,
-    block_size=config.block_size,
+  data = retry(
+    lambda: make_huggingface_dataset(
+      name=config.dataset_name,
+      config_name=config.dataset_config_name,
+      split="train",
+      cache_dir=config.cache_dir,
+      tokenizer=tokenizer,
+      block_size=config.block_size,
+    )
   )
   trainer = Trainer(
     model=model,
