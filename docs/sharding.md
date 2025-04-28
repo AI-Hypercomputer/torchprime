@@ -1,15 +1,16 @@
 # How to configure model sharding
 
-Here is guide for how to shard models (i.e. apply N-dimensional parallelism)
-in torchprime.
+This guide demonstrates how to shard models in torchprime. Sharding is the task
+of taking a large model and distributing the weights, activations, and compute
+across multiple devices. It is also known as multi-dimensional parallelism.
 
-Since torchprime uses the SPMD paradigm, we recommend familiarizing with the
+Since torchprime uses the SPMD paradigm, consider familiarizing yourself with the
 [PyTorch/XLA SPMD user guide][spmd-guide] first.
 
 ## Single device model + sharding configs
 
 Going from single device training to distributed training usually doesn't require
-changes to model code. For example, if we take a look at the [Llama][llama]
+changes to model code. For example, if you take a look at the [Llama][llama]
 model, it doesn't call any sharding/parallelism APIs in the code. This makes for
 a familiar experience for eager mode GPU users and is generally good software
 engineering practice.
@@ -60,28 +61,28 @@ Internally, this is implemented as a call to
 
 ## How to shard activations
 
-Besides sharding weights, we can also shard module outputs, also called
+Besides sharding weights, you can also shard module outputs, also called
 _activations_. To shard the output of a particular module, simply spell out its
 name as it appears in the module tree. For example, the Llama dense model class
 `LlamaForCausalLM` has two submodules: `model` and `lm_head`. The `model`
 submodule has a nested submodule called `layers`, containing the sequence of
-decoder layers. We can shard their outputs this way:
+decoder layers. You can shard their outputs this way:
 
 ```yaml
-# Shard the batch dimension of each decoder layer outputs along `fsdp` mesh axis.
-model.layers.*: [fsdp, null, null]
-
 # Shard the batch dimension of the language modeling head output along `fsdp` mesh axis.
 lm_head: [fsdp, null, null]
+
+# Shard the batch dimension of each decoder layer outputs along `fsdp` mesh axis.
+model.layers.*: [fsdp, null, null]
 ```
 
 Internally, this is implemented as a call to
 `xs.mark_sharding_with_gradients(output, mesh, partition_spec)`. See
 [`shard_torch_xla_model_from_config`][shard_torch_xla_model_from_config].
 
-In FSDP (ZeRO-3), one must shard the batch dimension of all module outputs
+In FSDP (ZeRO-3), you must shard the batch dimension of all module outputs
 uniformly. However, thanks to the SPMD sharding propagation pass in the XLA
-compiler, we don't have to exhaustively list out every single module in the
+compiler, you don't have to exhaustively list out every single module in the
 configuration file.
 
 The detailed propagation rules are spelled out in the [GSPMD][GSPMD] paper.
@@ -93,9 +94,9 @@ dimension.
 ### Indexing syntax
 
 Sometimes the output of a module is a `list` or `tuple`. In order to identify
-which tensor element to shard, you could add a `[i]` suffix to the name where
-`i` is an integer that indexes into the module output. For example, we'll find
-the following configuration in the FSDP sharding config for Mixtral because the
+which tensor element to shard, add a `[i]` suffix to the name where `i` is an
+integer that indexes into the module output. For example, you'll find the
+following configuration in the FSDP sharding config for Mixtral because the
 Mixtral decoder layer returns both the embedding and also a load balancing loss.
 
 ```yaml
@@ -105,7 +106,7 @@ model.layers.*[0]: [fsdp, null, null]
 
 ## Conclusion
 
-Thanks to the GSPMD feature in the PyTorch/XLA framework, we can flexibly
+Thanks to the SPMD feature in the PyTorch/XLA framework, you can flexibly
 implement multi-dimensional parallelism purely from configuration without
 modifying the modeling code. The examples in this guide demonstrates 1D FSDP
 but you may read on to [`llama-fsdp-tp.yaml`][llama-fsdp-tp] for combined
