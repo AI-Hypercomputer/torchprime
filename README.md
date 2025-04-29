@@ -42,6 +42,20 @@ export HF_TOKEN='...your huggingface token...'
 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 ```
 
+The first two training steps will take a while to compile. After that, the graphs
+will hit the compilation cache and you should see something like this:
+
+```
+...
+[2025-04-29 06:58:36,445][__main__][INFO] - Num replicas: 1
+[2025-04-29 06:58:36,447][__main__][INFO] - Starting training
+[2025-04-29 06:58:36,448][__main__][INFO] -     Max step: 15
+[2025-04-29 06:58:36,448][__main__][INFO] -     Global batch size: 4
+[2025-04-29 07:01:16,240][__main__][INFO] - Epoch: 0, step: 0, loss: 12.5574, trace time: 155003.85 ms
+[2025-04-29 07:04:24,182][__main__][INFO] - Epoch: 0, step: 10, loss: 9.7555, trace time: 1564.54 ms
+...
+```
+
 Refer to `README.md` in `torchprime/torch_xla_models` for more details.
 
 ### Configuring training
