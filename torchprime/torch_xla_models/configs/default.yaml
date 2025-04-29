@@ -9,7 +9,7 @@ defaults:
 
 dataset_name: wikitext
 dataset_config_name: wikitext-2-raw-v1
-global_batch_size: 8
+global_batch_size: 4
 logging_steps: 10
 max_steps: 15
 block_size: 8192
