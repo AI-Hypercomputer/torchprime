@@ -19,14 +19,14 @@ from the PyTorch community.
 
 ## Environment setup
 
-For development and debugging puroposes it is useful to be able to run `torchprime`
-locally on a TPU VM. For this you can create a single-host TPU VM using
+For development and debugging purposes it is useful to run `torchprime`
+locally on a TPU VM. You can create a single-host TPU VM using
 this guide: https://cloud.google.com/tpu/docs/managing-tpus-tpu-vm
-Or you can create TPU VM from Pantheon UI for your cloud project.
+Or you can create TPU VM from the Google Cloud Console for your cloud project.
 Spot quota is available for v5e and v6e chips in multiple regions:
 https://cloud.google.com/tpu/docs/regions-zones
 
-Make sure that you are using correct runtime when creating
+Make sure that you are using the correct runtime when creating
 your VM: https://cloud.google.com/tpu/docs/runtimes#pytorch_and_jax
 
 For example:
@@ -39,26 +39,21 @@ gcloud compute tpus tpu-vm create <tpu-name> \
   --spot
 ```
 
-Once VM is created you can `ssh` into it:
+Once the VM is created you can `ssh` into it:
 https://cloud.google.com/tpu/docs/managing-tpus-tpu-vm#tpu-connect
 
 ```
 gcloud compute tpus tpu-vm ssh <tpu-name> --zone=<zone>
 ```
 
-## Installation
-
-Before installing torchprime, you will need to first install
-[torch_xla][torch_xla] following its respective project README.
-
 ### Install `torch_xla`
 
 Before installing torchprime, you will need to first install
 [torch_xla][torch_xla] following its respective project README.
-Note that for development you need to install nightly version of
+You need to install nightly version of
 PyTorch/XLA.
 
-Test that environment is correctly installed and configured.
+Test that the environment is correctly installed and configured.
 Start `python` interpreter and run following:
 
 ```python
