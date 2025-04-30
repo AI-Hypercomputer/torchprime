@@ -40,7 +40,7 @@ launch it on XPK.
 
 ### Llama 3.0 8B on v6e-256
 
-Recipe for global batch size 1024, sequence length 8192. We need splash attention kernel.
+Recipe for global batch size 1024, sequence length 8192.
 Expected step duration: 4.741s. MFU: 45.98%.
 
 ```sh
@@ -59,7 +59,7 @@ tp run torchprime/torch_xla_models/train.py \
 
 ### Llama 3.1 8B on v6e-256
 
-Recipe for global batch size 1024, sequence length 8192. We need splash attention kernel.
+Recipe for global batch size 1024, sequence length 8192.
 
 Expected step duration: 4.764s, MFU: 45.75%.
 
