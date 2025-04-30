@@ -17,12 +17,64 @@ community unlock top performance and efficiency on Google Cloud TPUs.
 torchprime is under active development, and we're eager for feedback and input
 from the PyTorch community.
 
+## Environment setup
+
+For development and debugging puroposes it is useful to be able to run `torchprime`
+locally on a TPU VM. For this you can create a single-host TPU VM using
+this guide: https://cloud.google.com/tpu/docs/managing-tpus-tpu-vm
+Or you can create TPU VM from Pantheon UI for your cloud project.
+Spot quota is available for v5e and v6e chips in multiple regions:
+https://cloud.google.com/tpu/docs/regions-zones
+
+Make sure that you are using correct runtime when creating
+your VM: https://cloud.google.com/tpu/docs/runtimes#pytorch_and_jax
+
+For example:
+
+```sh
+gcloud compute tpus tpu-vm create <tpu-name> \
+  --zone=us-central1-a \
+  --accelerator-type=v6e-4 \
+  --version=v2-alpha-tpuv6e \
+  --spot
+```
+
+Once VM is created you can `ssh` into it:
+https://cloud.google.com/tpu/docs/managing-tpus-tpu-vm#tpu-connect
+
+```
+gcloud compute tpus tpu-vm ssh <tpu-name> --zone=<zone>
+```
+
 ## Installation
 
 Before installing torchprime, you will need to first install
 [torch_xla][torch_xla] following its respective project README.
 
-Install `torchprime`:
+### Install `torch_xla`
+
+Before installing torchprime, you will need to first install
+[torch_xla][torch_xla] following its respective project README.
+Note that for development you need to install nightly version of
+PyTorch/XLA.
+
+Test that environment is correctly installed and configured.
+Start `python` interpreter and run following:
+
+```python
+import torch_xla.core.xla_model as xm
+print("XLA devices:", xm.get_xla_supported_devices())
+print("Default XLA device type:", xm.xla_device_hw(xm.xla_device()))
+```
+
+### Install `torchprime`
+
+Make sure that `pip` and `setuptools` are up-to-date:
+
+```sh
+python -m pip install --upgrade pip
+python -m pip install --upgrade setuptools==69.5.1
+```
 
 ```sh
 git clone https://github.com/AI-Hypercomputer/torchprime.git
