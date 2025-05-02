@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla._internal.jax_workarounds import jax_env_context
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
+from torch_xla.experimental.assume_pure import assume_pure
 from transformers import (
   AutoTokenizer,
   default_data_collator,
@@ -84,11 +85,6 @@ class Trainer:
       mesh, (("data", "fsdp"), None), minibatch=minibatch
     )
 
-    # Recursively replace `nn.Linear` layers with einsum operations in the model.
-    # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
-    # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
-    model = apply_xla_patch_to_nn_linear(model)
-
     # Annotate model weights and activations with sharding constraints to distribute
     # the training across devices following the SPMD paradigm.
     sharding_config = OmegaConf.to_container(self.config.model.sharding, resolve=True)
@@ -122,6 +118,8 @@ class Trainer:
 
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
+
+    self.cached_forward = assume_pure(partial(self.pure_forward, self.model))
 
   def _prime_optimizer(self):
     for group in self.optimizer.param_groups:
@@ -237,9 +235,10 @@ class Trainer:
 
     def maybe_add_barrier(mod, _name):
       if isinstance(mod, tuple(classes)):
+        # TODO: intercept this in torchax
         # Register a backward hook to place optimization barrier to prevent
         # gigantic fusions on syncing the gradients.
-        xs.apply_backward_optimization_barrier(mod)
+        # xs.apply_backward_optimization_barrier(mod)
         return mod
       return mod
 
@@ -329,12 +328,19 @@ class Trainer:
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
-    _logits, loss = self.model(**batch)
+    params = dict(self.model.named_parameters())
+    buffers = dict(self.model.named_buffers())
+    cached_forward = self.cached_forward
+    _logits, loss = cached_forward(params, buffers, batch)
     loss.backward()
     self.optimizer.step()
     self.lr_scheduler.step()
     self.model.zero_grad()
     return loss
+
+  @staticmethod
+  def pure_forward(model, params, buffers, batch):
+    return torch.func.functional_call(model, (params, buffers), kwargs=batch)
 
 
 def initialize_model_class(model_config):

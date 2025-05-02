@@ -77,13 +77,14 @@ class LlamaRotaryEmbedding(nn.Module):
     device_type = (
       device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
     )
-    with torch.autocast(device_type=device_type, enabled=False):
-      freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(
-        1, 2
-      )
-      emb = torch.cat((freqs, freqs), dim=-1)
-      cos = emb.cos()
-      sin = emb.sin()
+    # TODO: torchax is missing feature:
+    # AssertionError: Tried to use AMP with the `jax` backend, but the backend has not registered a module or  the module miss some necessary funcs. The backend should register a module by `torch._register_device_module`, and the module must have these funcs:
+    # `get_amp_supported_dtype() -> List[torch.dtype]`. But the func `get_amp_supported_dtype` is missing.
+    # with torch.autocast(device_type=device_type, enabled=False):
+    freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+    emb = torch.cat((freqs, freqs), dim=-1)
+    cos = emb.cos()
+    sin = emb.sin()
     return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -134,7 +135,13 @@ class LlamaMLP(nn.Module):
 
   @xp.trace_me("LlamaMLP")
   def forward(self, x):
-    down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    with xp.Trace("gate_proj"):
+      g = self.gate_proj(x)
+      g = self.act_fn(g)
+    with xp.Trace("up_proj"):
+      u = self.up_proj(x)
+    with xp.Trace("down_proj"):
+      down_proj = self.down_proj(g * u)
     return down_proj
 
 
@@ -219,19 +226,21 @@ class LlamaAttention(nn.Module):
   ) -> torch.FloatTensor:
     bsz, q_len, _ = hidden_states.size()
 
-    query_states = self.q_proj(hidden_states)
-    key_states = self.k_proj(hidden_states)
-    value_states = self.v_proj(hidden_states)
-
-    query_states = query_states.view(
-      bsz, q_len, self.num_heads, self.head_dim
-    ).transpose(1, 2)
-    key_states = key_states.view(
-      bsz, q_len, self.num_key_value_heads, self.head_dim
-    ).transpose(1, 2)
-    value_states = value_states.view(
-      bsz, q_len, self.num_key_value_heads, self.head_dim
-    ).transpose(1, 2)
+    with xp.Trace("q_proj"):
+      query_states = self.q_proj(hidden_states)
+      query_states = query_states.view(
+        bsz, q_len, self.num_heads, self.head_dim
+      ).transpose(1, 2)
+    with xp.Trace("k_proj"):
+      key_states = self.k_proj(hidden_states)
+      key_states = key_states.view(
+        bsz, q_len, self.num_key_value_heads, self.head_dim
+      ).transpose(1, 2)
+    with xp.Trace("v_proj"):
+      value_states = self.v_proj(hidden_states)
+      value_states = value_states.view(
+        bsz, q_len, self.num_key_value_heads, self.head_dim
+      ).transpose(1, 2)
 
     cos, sin = self.rotary_emb(value_states, position_ids)
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -239,9 +248,10 @@ class LlamaAttention(nn.Module):
     attn_output = self.attention_block(
       query_states, key_states, value_states, attention_mask
     )
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-    attn_output = self.o_proj(attn_output)
+    with xp.Trace("o_proj"):
+      attn_output = attn_output.transpose(1, 2).contiguous()
+      attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+      attn_output = self.o_proj(attn_output)
     return attn_output
 
 
@@ -272,12 +282,6 @@ class LlamaDecoderLayer(nn.Module):
             attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
             query_sequence_length, key_sequence_length)` if default attention is used.
     """
-    # This gives the `hidden_states` tensor a name so that we can layer specify
-    # to offload this tensor to host RAM to save memory. This is not a standard
-    # torch API because there is no such feature in PyTorch. Instead, the name
-    # becomes node metadata during FX graph capture.
-    hidden_states = offloading.offload_name(hidden_states, "decoder_input")
-
     residual = hidden_states
 
     hidden_states = self.input_layernorm(hidden_states)
