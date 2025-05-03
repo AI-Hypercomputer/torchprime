@@ -123,8 +123,6 @@ tp run torchprime/torch_xla_models/train.py \
 
 ### Llama 3.1 405B on 2 pods of v6e-256
 
-<!-- TODO(b/408348551): Add back profile_step after fixing MegaScale hang. -->
-
 Recipe for global batch size 512, sequence length 8192. We need to use a larger
 dataset and profile later for longer for the DCN performance to stabilize.
 
@@ -140,6 +138,8 @@ tp run torchprime/torch_xla_models/train.py \
     dcn_mesh.fsdp=2 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
+    profile_step=15 \
+    profile_duration=240000 \
     dataset_config_name=wikitext-103-raw-v1 \
     max_steps=50 \
     logging_steps=10
