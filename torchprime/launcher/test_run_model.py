@@ -1,6 +1,6 @@
-from torchprime.launcher import run_model
-
 import torch
+
+from torchprime.launcher import run_model
 
 
 class SimpleModel(torch.nn.Module):
