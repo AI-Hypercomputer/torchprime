@@ -24,6 +24,7 @@ dependencies = [
     "tf_keras==2.19.0",
     "protobuf==4.25.5",
     "dataclasses-json==0.6.7",
+    "benchmark-db-writer@git+https://github.com/AI-Hypercomputer/benchmark-db-writer.git@6e2009a675fe454253f12a6023c0b1ea37ca6fc4",
 ]
 
 [project.optional-dependencies]
