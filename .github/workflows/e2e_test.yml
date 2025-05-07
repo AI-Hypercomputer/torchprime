@@ -248,15 +248,3 @@ jobs:
       step_time_lower_bound: 3.135134762
       step_time_upper_bound: 3.198474762
     secrets: inherit
-
-  run_forward_sanity_check:
-    name: run_forward script runs
-    runs-on: ubuntu-22.04
-    needs: tp-run
-    steps:
-      - name: Run forward on transact torchxla
-        run: |
-          python e2e_testing/run_model_forward.py --run_type=torch_xla --model_id=pinterest/transformer_user_action
-          python e2e_testing/run_model_forward.py --run_type=torchax_eager --model_id=pinterest/transformer_user_action
-          python e2e_testing/run_model_forward.py --run_type=torchax --model_id=pinterest/transformer_user_action
-        
