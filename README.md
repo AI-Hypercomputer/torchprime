@@ -81,13 +81,16 @@ pip install -e '.[dev]'
 
 ### Local training
 
-Here is a simple example of training on a single TPU VM. Train Llama 3 8B using
-torch_xla:
+Here is a simple example of training on a single TPU VM with 4 TPU chips.
+Train Llama 3 8B using `torch_xla`:
 
 ```sh
 export HF_TOKEN='...your huggingface token...'
 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 ```
+
+By default, this will distribute the model over 4 TPU chips attached to the VM
+using the [FSDP parallelism strategy][fsdp].
 
 The first two training steps will take a while to compile. After that, the graphs
 will hit the compilation cache and you should see something like this:
@@ -125,10 +128,10 @@ python3 torchprime/torch_xla_models/train.py \
 
 You may refer to the hydra docs for other ways to specify configs.
 
-### Distributed training
+### Multi-VM distributed training
 
 torchprime uses [xpk][xpk] as the standard path for iterating on distributed
-training code.
+training code that needs to run on muliple VMs.
 
 First teach torchprime about the XPK cluster it is using, the artifact storage
 location, etc. You only need to do this on first clone or when switching to a
@@ -261,6 +264,7 @@ For more information on PyTorch/XLA, visit the [official
 documentation](https://github.com/pytorch/xla).
 
 [torch_xla]: https://github.com/pytorch/xla
+[fsdp]: https://jax-ml.github.io/scaling-book/training/#fully-sharded-data-parallelism-fsdp
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]:
     https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
