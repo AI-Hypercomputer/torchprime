@@ -15,7 +15,7 @@ max_steps: 15
 block_size: 8192
 cache_dir: /tmp/
 seed: 42
-profile_step: -1
+profile_step: 2
 
 # This might be overwritten when using tp run to launch the run using XPK
 profile_dir: profile
