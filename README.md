@@ -7,14 +7,14 @@
 </div>
 <br /><br />
 
-torchprime is a reference implementation for training PyTorch models on TPU. It
+`torchprime` is a reference implementation for training PyTorch models on TPU. It
 is designed to showcase best practices for large-scale, high-performance model
 training using `torch_xla` ([project][torch_xla]), with
 minimal changes to model code. It aims to demystify training on XLA-based
 accelerators, providing clear patterns and best practices to help the PyTorch
 community unlock top performance and efficiency on Google Cloud TPUs.
 
-torchprime is under active development, and we're eager for feedback and input
+`torchprime` is under active development, and we're eager for feedback and input
 from the PyTorch community.
 
 ## Environment setup
@@ -48,7 +48,7 @@ gcloud compute tpus tpu-vm ssh <tpu-name> --zone=<zone>
 
 ### Install `torch_xla`
 
-Before installing torchprime, you will need to first install
+Before installing `torchprime`, you will need to first install
 [torch_xla][torch_xla] following its respective project README.
 You need to install nightly version of
 PyTorch/XLA.
@@ -110,7 +110,7 @@ Refer to `README.md` in `torchprime/torch_xla_models` for more details.
 
 ### Configuring training
 
-torchprime uses [hydra][hydra] to read configurations (e.g. model name, batch
+`torchprime` uses [hydra][hydra] to read configurations (e.g. model name, batch
 size) from the command line and `.yaml` files.
 
 In the `torch_xla_models` directory, you'll find a `configs/default.yaml`. That
@@ -130,10 +130,10 @@ You may refer to the hydra docs for other ways to specify configs.
 
 ### Multi-VM distributed training
 
-torchprime uses [xpk][xpk] as the standard path for iterating on distributed
+`torchprime` uses [xpk][xpk] as the standard path for iterating on distributed
 training code that needs to run on muliple VMs.
 
-First teach torchprime about the XPK cluster it is using, the artifact storage
+First teach `torchprime` about the XPK cluster it is using, the artifact storage
 location, etc. You only need to do this on first clone or when switching to a
 different topology or cluster. Example:
 
@@ -147,7 +147,7 @@ tp use \
     --artifact-dir gs://bucket/dir
 ```
 
-torchprime natively supports [multi-slice or multi-pod][multi-slice] training.
+`torchprime` natively supports [multi-slice or multi-pod][multi-slice] training.
 `--num-slices` specifies the number of [slices][tpu-slice] used by the workload.
 `--tpu-type` specifies the [accelerator type][accelerator-type] in each slice.
 To do multi-pod training, simply specify a `--tpu-type` that is as big as a
