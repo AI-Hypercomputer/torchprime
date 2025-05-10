@@ -4,6 +4,7 @@ defaults:
   - remat: llama  # refers to remat/llama.yaml
 
 model_class: llama.LlamaForCausalLM  # Used to import the model from this class
+pretrained_path: torchprime/torch_xla_models/llama/llama3_8b
 vocab_size: 128256
 hidden_size: 4096
 intermediate_size: 14336

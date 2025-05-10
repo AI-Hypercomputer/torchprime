@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from timeit import default_timer as timer
+import os
 
 import datasets
 import hydra
@@ -327,6 +328,10 @@ class Trainer:
     logger.info("***** train metrics *****\n%s", metrics)
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
 
+    # Save the final checkpoint
+    # if xm.is_master_ordinal():
+    #   self.save_checkpoint(self.config.output_dir, step=max_step)
+
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
     _logits, loss = self.model(**batch)
@@ -335,7 +340,32 @@ class Trainer:
     self.lr_scheduler.step()
     self.model.zero_grad()
     return loss
+  
+  def save_checkpoint(self, output_dir, step, max_params_per_shard=100):
+    if not xm.is_master_ordinal():
+      return
+    
+    logger.info(f"Saving checkpoint to {output_dir} at step {step}")
 
+    save_path = os.path.join(output_dir, "checkpoints", f"{step:08d}")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    ckpt = {
+        "model": self.model.state_dict(),
+        "optimizer": self.optimizer.state_dict(),
+        "step": step,  # if you're tracking training steps
+        # optionally add scheduler, rng, config, etc.
+    }
+
+    state_dict = self.model.state_dict()
+    keys = list(state_dict.keys())
+
+    for i in range(0, len(keys), max_params_per_shard):
+        shard_keys = keys[i:i + max_params_per_shard]
+        shard = {k: state_dict[k].to("cpu") for k in shard_keys}
+        torch.save(shard, os.path.join(save_path, f"ckpt_{i//max_params_per_shard:04d}.pt"))
+
+    xm.rendezvous("sharded_model_saved")
 
 def initialize_model_class(model_config):
   """Import and initialize model_class specified by the config."""
@@ -351,7 +381,11 @@ def initialize_model_class(model_config):
   else:
     print(f"Error: Function '{model_class_name}' not found in module '{module_name}'")
     sys.exit(1)
-  model = model_class(model_config)
+
+  if model_config.get("pretrained_path", "") and os.path.exists(model_config.pretrained_path):
+    model = model_class.from_pretrained(model_config)
+  else:
+    model = model_class(model_config)
   return model
 
 
@@ -392,8 +426,10 @@ def main(config: DictConfig):
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
   # sharding annotations to the weights later, and run the constructor on the XLA device.
-  with set_default_dtype(torch.bfloat16), torch_xla.device():
-    model = initialize_model_class(config.model)
+
+  # with set_default_dtype(torch.bfloat16), torch_xla.device(): # this does not work for pre-trained weights
+  model = initialize_model_class(config.model)
+  model = model.to(xm.xla_device()).bfloat16()
 
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")

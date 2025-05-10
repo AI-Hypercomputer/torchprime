@@ -33,6 +33,30 @@ from torchprime.torch_xla_models.loss import cross_entropy_loss
 
 logger = logging.get_logger(__name__)
 
+from safetensors import safe_open
+import glob, os
+from transformers import LlamaConfig
+
+def load_sharded_safetensors_to_state_dict(model_dir: str) -> dict:
+    state_dict = {}
+    index_file = os.path.join(model_dir, "model.safetensors.index.json")
+    import json
+    with open(index_file, "r") as f:
+        index = json.load(f)
+    
+    weight_map = index["weight_map"]
+    loaded_files = set()
+
+    for weight_name, filename in weight_map.items():
+        full_path = os.path.join(model_dir, filename)
+        if full_path in loaded_files:
+            continue
+        with safe_open(full_path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                state_dict[key] = f.get_tensor(key)
+        loaded_files.add(full_path)
+
+    return state_dict
 
 class LlamaRMSNorm(nn.Module):
   def __init__(self, hidden_size, eps=1e-6):
@@ -394,3 +418,36 @@ class LlamaForCausalLM(nn.Module):
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
     return logits, loss
+
+  @classmethod
+  def from_pretrained(cls, config):
+    print(f"Initializing model from config")
+    model = cls(config)
+    model = model.bfloat16()
+
+    # # Debugging: print model parameters
+    # for name, param in model.state_dict().items():
+    #   print(f"[model]: {name}: {param.shape}")
+
+    model_dir = config.pretrained_path
+    print(f"Loading sharded safetensors from {model_dir}")
+    state_dict = load_sharded_safetensors_to_state_dict(model_dir)
+
+    for key in state_dict:
+      if state_dict[key].dtype == torch.float32 or state_dict[key].dtype == torch.float:
+          state_dict[key] = state_dict[key].to(torch.bfloat16)
+
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=True)
+
+    if missing_keys:
+        print("⚠️ Missing keys:")
+        for k in missing_keys:
+            print(f" - {k}")
+    if unexpected_keys:
+        print("⚠️ Unexpected keys:")
+        for k in unexpected_keys:
+            print(f" - {k}")
+    
+    del state_dict
+
+    return model
