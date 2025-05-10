@@ -228,6 +228,7 @@ def docker_run(args, use_hf: bool):
   env_forwarding = [
     arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
   ]
+  args = list(v for v in args if v != "")
   command = [
     "python",
   ] + list(args)
