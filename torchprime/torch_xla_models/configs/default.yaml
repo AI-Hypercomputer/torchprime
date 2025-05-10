@@ -11,7 +11,7 @@ dataset_name: gsm8k
 dataset_config_name: main
 global_batch_size: 4
 logging_steps: 1
-max_steps: 2
+max_steps: 5
 block_size: 1024
 cache_dir: /tmp/
 seed: 42

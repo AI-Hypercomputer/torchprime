@@ -329,8 +329,8 @@ class Trainer:
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
 
     # Save the final checkpoint
-    # if xm.is_master_ordinal():
-    #   self.save_checkpoint(self.config.output_dir, step=max_step)
+    if xm.is_master_ordinal():
+      self.save_checkpoint(self.config.output_dir, step=max_step)
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
@@ -348,7 +348,7 @@ class Trainer:
     logger.info(f"Saving checkpoint to {output_dir} at step {step}")
 
     save_path = os.path.join(output_dir, "checkpoints", f"{step:08d}")
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    os.makedirs(save_path, exist_ok=True)
 
     ckpt = {
         "model": self.model.state_dict(),
@@ -363,7 +363,7 @@ class Trainer:
     for i in range(0, len(keys), max_params_per_shard):
         shard_keys = keys[i:i + max_params_per_shard]
         shard = {k: state_dict[k].to("cpu") for k in shard_keys}
-        torch.save(shard, os.path.join(save_path, f"ckpt_{i//max_params_per_shard:04d}.pt"))
+        torch.save(shard, os.path.join(save_path, f"shard_{i//max_params_per_shard:04d}.pt"))
 
     xm.rendezvous("sharded_model_saved")
 
