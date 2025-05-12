@@ -45,6 +45,30 @@ If there were no code changes and the step time is still above the upper bound,
 we'll need to discuss with the hardware teams because it may be the result of
 hardware changes.
 
+### Formula for computing the lower and upper bounds
+
+Let $X = \{x_1, x_2, \ldots, x_n\}$ be the observed step time for a workload.
+Let $n$ be the number of observations (e.g. training runs).
+Let $\bar{x} = \frac{1}{n} \sum_{i=1}^{n} x_i$ denote the sample mean.
+Let $\min(X)$ be the minimum value in the dataset.
+Let $\max(X)$ be the maximum value in the dataset.
+
+Let $C_L$ be the desired confidence level, $0.999$.
+Let $\alpha = 1 - C_L$ be the significance level.
+Let $t_{\alpha/2, n-1}$ denote the critical value from the Student's
+t-distribution for $n-1$ degrees of freedom and a two-tailed test.
+
+The half-width of the confidence interval, $H$, is calculated as:
+
+$$H = \max\left(t_{\alpha/2, n-1}, \quad 0.015 \cdot \bar{x}, \quad \max(X) - \bar{x}, \quad \bar{x} - \min(X) \right)$$
+
+We estimate the bounds via Student's t-distribution, clamped to be not smaller
+than 1.5% of the step time and not rule out any past results, to avoid flakes.
+
+The final lower and upper bounds of the step time are:
+
+$$\text{Interval} = [ \bar{x} - H, \quad \bar{x} + H ]$$
+
 ## v6e XPK cluster
 
 E2E tests are launched onto an XPK cluster named `tpu-v6e-ci`.
@@ -61,6 +85,22 @@ xpk cluster create \
     --project tpu-pytorch \
     --default-pool-cpu-machine-type=n2-standard-32
 ```
+
+### Secret management
+
+In order for GitHub to launch workloads in the `tpu-v6e-ci` XPK cluster, the
+workflow uses a `${{ secrets.GCP_SA_KEY }}` service account key. This key will
+expire every 3 months and need to be manually rotated.
+
+(Googlers only) When GitHub Actions fail with this error:
+
+```
+ERROR: (gcloud.auth.activate-service-account) There was a problem refreshing auth tokens for account [...]: ('invalid_grant: Invalid JWT Signature.', ***'error': 'invalid_grant', 'error_description': 'Invalid JWT Signature.'***)
+```
+
+Visit http://shortn/_uWi00zol5Q to mint a new key, and manually enter that into
+the `GCP_SA_KEY` secrets field in the "Secrets and variables > Actions" field of
+`torchprime` repository settings.
 
 [e2e-test]: /.github/workflows/e2e_test.yml
 [e2e-check]: /.github/workflows/reusable_e2e_check.yml
