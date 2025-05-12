@@ -350,21 +350,10 @@ class Trainer:
     save_path = os.path.join(output_dir, "checkpoints", f"{step:08d}")
     os.makedirs(save_path, exist_ok=True)
 
-    ckpt = {
-        "model": self.model.state_dict(),
-        "optimizer": self.optimizer.state_dict(),
-        "step": step,  # if you're tracking training steps
-        # optionally add scheduler, rng, config, etc.
-    }
-
-    state_dict = self.model.state_dict()
-    keys = list(state_dict.keys())
-
-    for i in range(0, len(keys), max_params_per_shard):
-        shard_keys = keys[i:i + max_params_per_shard]
-        shard = {k: state_dict[k].to("cpu") for k in shard_keys}
-        torch.save(shard, os.path.join(save_path, f"shard_{i//max_params_per_shard:04d}.pt"))
-
+    self.model.save_checkpoint(
+      save_path,
+      step=step,
+    )
     xm.rendezvous("sharded_model_saved")
 
 def initialize_model_class(model_config):

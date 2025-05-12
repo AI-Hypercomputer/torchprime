@@ -9,17 +9,17 @@ defaults:
 
 dataset_name: gsm8k
 dataset_config_name: main
-global_batch_size: 4
+global_batch_size: 16
 logging_steps: 1
-max_steps: 5
-block_size: 1024
+max_steps: 8
+block_size: 8192
 cache_dir: /tmp/
 seed: 42
 profile_step: -1
 
 # This might be overwritten when using tp run to launch the run using XPK
 profile_dir: profile
-profile_duration: 100000
+profile_duration: 300000
 
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
