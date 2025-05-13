@@ -7,6 +7,7 @@ on:
   pull_request:
   schedule:
     - cron: "0 8 * * *"  # Run daily at 12AM PST (adjusted for UTC)
+  workflow_dispatch:
 
 jobs:
   tp-run:
