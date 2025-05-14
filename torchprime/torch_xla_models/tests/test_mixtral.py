@@ -25,18 +25,19 @@ def get_mixtral_8x7b() -> MixtralFixture:
   vocab_size = 128
   config = AutoConfig.from_pretrained(
     "mistralai/Mixtral-8x7B-v0.1",
+    head_dim=64,
     num_hidden_layers=1,
     num_attention_heads=8,
-    hidden_size=8,
-    intermediate_size=16,
+    hidden_size=512,
+    intermediate_size=64,
     vocab_size=vocab_size,
   )
   config.flash_attention = False
   torchprime_config = OmegaConf.create(
     {
       "vocab_size": vocab_size,
-      "hidden_size": 8,
-      "intermediate_size": 16,
+      "hidden_size": 512,
+      "intermediate_size": 64,
       "num_hidden_layers": 1,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
