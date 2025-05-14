@@ -18,9 +18,6 @@ Modelled after:
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama4/modeling_llama4.py
 """
 
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
-
 import torch
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
@@ -217,7 +214,7 @@ def apply_rotary_emb(
   xq: torch.Tensor,
   xk: torch.Tensor,
   freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
   xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
   xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
   xq_out = torch.view_as_real(xq_ * freqs_cis[:, :, None, :]).flatten(3)
@@ -304,7 +301,7 @@ class Llama4TextAttention(nn.Module):
   def forward(
     self,
     hidden_states: torch.Tensor,
-    position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.LongTensor | None = None,
   ) -> torch.FloatTensor:
@@ -385,7 +382,7 @@ class Llama4TextDecoderLayer(nn.Module):
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.Tensor | None = None,
-    position_embeddings: Tuple[torch.Tensor, torch.Tensor]
+    position_embeddings: tuple[torch.Tensor, torch.Tensor]
     | None = None,  # necessary, but kept here for BC
   ) -> torch.Tensor:
     """
@@ -426,7 +423,8 @@ class Llama4TextDecoderLayer(nn.Module):
     if self.is_moe_layer:
       hidden_states, router_logits = hidden_states
     else:
-      router_logits = None
+      pass
+      # router_logits = None
     hidden_states = residual + hidden_states.view(residual.shape)
 
     return hidden_states

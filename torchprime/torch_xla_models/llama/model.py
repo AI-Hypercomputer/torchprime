@@ -18,8 +18,6 @@
 # limitations under the License.
 """PyTorch LLaMA model."""
 
-from typing import Tuple
-
 import torch
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
@@ -207,7 +205,7 @@ class LlamaAttention(nn.Module):
   def forward(
     self,
     hidden_states: torch.Tensor,
-    position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.LongTensor | None = None,
   ) -> torch.FloatTensor:
@@ -258,7 +256,7 @@ class LlamaDecoderLayer(nn.Module):
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.Tensor | None = None,
-    position_embeddings: Tuple[torch.Tensor, torch.Tensor]
+    position_embeddings: tuple[torch.Tensor, torch.Tensor]
     | None = None,  # necessary, but kept here for BC
   ) -> torch.Tensor:
     """
