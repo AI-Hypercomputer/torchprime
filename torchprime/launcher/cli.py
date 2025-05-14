@@ -219,7 +219,7 @@ def docker_run(args, use_hf: bool):
   click.echo(get_project_dir().absolute())
 
   # Build docker image.
-  build_arg = "USE_TRANSFORMERS=true" if use_hf else None
+  build_arg = ["USE_TRANSFORMERS=true"] if use_hf else None
   placeholder_url = "torchprime-dev:local"
   docker_url = buildpush(
     push_docker=False, placeholder_url=placeholder_url, build_arg=build_arg
@@ -263,6 +263,13 @@ def docker_run(args, use_hf: bool):
   default=None,
 )
 @click.option(
+  "--base-docker-url",
+  required=False,
+  help="If specified, `tp run` will use this PyTorch/XLA base docker image instead of "
+  "the one pinned inside `pyproject.toml`",
+  default=None,
+)
+@click.option(
   "--num-slices",
   required=False,
   type=int,
@@ -278,7 +285,12 @@ def docker_run(args, use_hf: bool):
 )
 @interactive
 def run(
-  args, name: str | None, num_slices: int | None, use_hf: bool, use_local_wheel: bool
+  args,
+  name: str | None,
+  base_docker_url: str | None,
+  num_slices: int | None,
+  use_hf: bool,
+  use_local_wheel: bool,
 ):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
@@ -296,7 +308,11 @@ def run(
   docker_project = config.docker_project
   if docker_project is None:
     docker_project = config.project
-  docker_url = buildpush(docker_project, build_arg=build_arg)
+  docker_url = buildpush(
+    torchprime_project_id=docker_project,
+    build_arg=build_arg,
+    base_docker_url=base_docker_url,
+  )
 
   # Submit xpk workload
   workload_name = name
