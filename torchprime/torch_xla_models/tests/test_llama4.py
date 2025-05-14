@@ -35,8 +35,6 @@ def get_llama_4_text_dummy_model() -> LlamaFixture:
   config.text_config.intermediate_size = 64
   config.text_config.pad_token_id = 127
   config.text_config.use_cache = False
-  config.text_config.torch_dtype = "bfloat16"
-  config.torch_dtype = "bfloat16"
   config.flash_attention = False
 
   torchprime_config = OmegaConf.create(config.to_dict())
