@@ -105,15 +105,15 @@ def get_llama_3_1_405b() -> LlamaFixture:
     # Assert that the `inv_freq` values are the same
     assert isinstance(model.model.layers[0].self_attn, nn.Module)
     assert isinstance(hf_model.model.layers[0].self_attn, nn.Module)
-    assert isinstance(model.model.layers[0].self_attn.rotary_emb, nn.Module)
+    assert isinstance(model.model.rotary_emb, nn.Module)
     assert isinstance(hf_model.model.rotary_emb, nn.Module)
     torch.testing.assert_close(
-      model.model.layers[0].self_attn.rotary_emb.inv_freq,
+      model.model.rotary_emb.inv_freq,
       hf_model.model.rotary_emb.inv_freq,
     )
     # In this simplified model architecture, hidden_size 512 / num_attention_heads 8 = 64 head dim,
     # and the inv_freq size is half of the head dim.
-    assert model.model.layers[0].self_attn.rotary_emb.inv_freq.shape == (32,)
+    assert model.model.rotary_emb.inv_freq.shape == (32,)
     model.load_state_dict(hf_model.state_dict())
   return LlamaFixture(vocab_size, hf_model, model)
 
