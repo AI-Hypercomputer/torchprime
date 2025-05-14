@@ -26,18 +26,19 @@ def get_llama_3_8b() -> LlamaFixture:
   vocab_size = 128
   config = AutoConfig.from_pretrained(
     "meta-llama/Meta-Llama-3-8B",
+    head_dim=64,
     num_hidden_layers=1,
     num_attention_heads=8,
-    hidden_size=64,
-    intermediate_size=16,
+    hidden_size=512,
+    intermediate_size=64,
     vocab_size=vocab_size,
   )
   config.flash_attention = False
   torchprime_config = OmegaConf.create(
     {
       "vocab_size": 128,
-      "hidden_size": 64,
-      "intermediate_size": 16,
+      "hidden_size": 512,
+      "intermediate_size": 64,
       "num_hidden_layers": 1,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
@@ -65,18 +66,19 @@ def get_llama_3_1_405b() -> LlamaFixture:
   vocab_size = 256
   config = AutoConfig.from_pretrained(
     "meta-llama/Meta-Llama-3.1-405B",
+    head_dim=64,
     num_hidden_layers=2,
     num_attention_heads=8,
-    hidden_size=64,
-    intermediate_size=32,
+    hidden_size=512,
+    intermediate_size=64,
     vocab_size=vocab_size,
   )
   config.flash_attention = False
   torchprime_config = OmegaConf.create(
     {
       "vocab_size": 256,
-      "hidden_size": 64,
-      "intermediate_size": 32,
+      "hidden_size": 512,
+      "intermediate_size": 64,
       "num_hidden_layers": 2,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
@@ -104,14 +106,14 @@ def get_llama_3_1_405b() -> LlamaFixture:
     assert isinstance(model.model.layers[0].self_attn, nn.Module)
     assert isinstance(hf_model.model.layers[0].self_attn, nn.Module)
     assert isinstance(model.model.layers[0].self_attn.rotary_emb, nn.Module)
-    assert isinstance(hf_model.model.layers[0].self_attn.rotary_emb, nn.Module)
+    assert isinstance(hf_model.model.rotary_emb, nn.Module)
     torch.testing.assert_close(
       model.model.layers[0].self_attn.rotary_emb.inv_freq,
-      hf_model.model.layers[0].self_attn.rotary_emb.inv_freq,
+      hf_model.model.rotary_emb.inv_freq,
     )
-    # In this simplified model architecture, hidden_size 64 / num_attention_heads 8 = 8 head dim,
+    # In this simplified model architecture, hidden_size 512 / num_attention_heads 8 = 64 head dim,
     # and the inv_freq size is half of the head dim.
-    assert model.model.layers[0].self_attn.rotary_emb.inv_freq.shape == (4,)
+    assert model.model.layers[0].self_attn.rotary_emb.inv_freq.shape == (32,)
     model.load_state_dict(hf_model.state_dict())
   return LlamaFixture(vocab_size, hf_model, model)
 
