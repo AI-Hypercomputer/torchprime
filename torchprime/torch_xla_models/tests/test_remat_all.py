@@ -147,8 +147,10 @@ def test_remat_all_llama3():
   fixture = get_llama_3_8b()
   decoder_layer = fixture.model.model.layers[0]
   input_size = 32
-  in_embedding = torch.randn((2, input_size // 2, fixture.model.config.hidden_size))
+  seq_len = input_size // 2
+  in_embedding = torch.randn((2, seq_len, fixture.model.config.hidden_size))
   position_ids = torch.arange(in_embedding.shape[1]).unsqueeze(0)
+  position_embeddings = fixture.model.model.rotary_emb(in_embedding, position_ids)
 
   fw_compiler, get_fwd = _make_get_graph_compiler()
   bw_compiler, get_bwd = _make_get_graph_compiler()
@@ -159,9 +161,16 @@ def test_remat_all_llama3():
     bw_compiler=bw_compiler,
     partition_fn=remat_all_partition_fn,
   )
+
+  # causal_mask dimentsions:
+  # bz 1 seq_len seq_len
+  causal_mask = torch.ones((2, 1, seq_len, seq_len))
+
   out_embedding = decoder_layer_compiled(
     in_embedding,
+    attention_mask=causal_mask,
     position_ids=position_ids,
+    position_embeddings=position_embeddings,
   )
   out_embedding.sum().backward()
 
@@ -171,19 +180,23 @@ def test_remat_all_llama3():
   num_params_buffers = len(list(decoder_layer.parameters())) + len(
     list(decoder_layer.buffers())
   )
+
   compiled_out_embedding, *residuals = fw_graph(
     *[
       *decoder_layer.parameters(),
       *decoder_layer.buffers(),
     ],
     in_embedding,
+    causal_mask,
     position_ids,
+    *position_embeddings,
   )
   torch.testing.assert_close(out_embedding, compiled_out_embedding)
 
   # Verify that there are no intermediate activations in the residuals. In other words,
-  # the residuals consist of weights/buffers plus the two inputs (in_embedding, position_ids).
-  assert len(residuals) == num_params_buffers + 2
+  # the residuals consist of weights/buffers plus the 4 inputs:
+  # (in_embedding, position_ids, position_embeddings[0], position_embeddings[1]).
+  assert len(residuals) == num_params_buffers + 4
 
   # We can also run the backward graph.
   _ = bw_graph(*residuals, torch.ones_like(out_embedding))
