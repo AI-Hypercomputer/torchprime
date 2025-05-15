@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "transformers==4.51.3",
     "transformers[torch]==4.51.3",
+    "fire==0.7.0",
     "datasets==3.0.0",
     "hydra-core==1.3.0",
     "optax==0.2.4",
