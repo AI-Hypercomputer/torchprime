@@ -55,7 +55,7 @@ def llama3_rope_frequencies(
   high_freq_wavelen = scaling.original_context_len / scaling.high_freq_factor
 
   assert low_freq_wavelen >= high_freq_wavelen, (
-    f"low_freq_wavelen {low_freq_wavelen} must be greater than "
+    f"low_freq_wavelen {low_freq_wavelen} must be greater or equal to "
     f"high_freq_wavelen {high_freq_wavelen}"
   )
 

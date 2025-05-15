@@ -135,6 +135,7 @@ def scan_decoders(mod):
 )
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
 def test_forward_our_model_against_hf_model(fixture, transform):
+  # Arrange
   fixture = fixture()
   device = torch_xla.device()
   model_xla = copy.deepcopy(fixture.model).to(device)
@@ -144,11 +145,13 @@ def test_forward_our_model_against_hf_model(fixture, transform):
   input_sizes = [8, 128, 256]
   for input_size in input_sizes:
     input = torch.randint(fixture.vocab_size, ((2, input_size // 2))).to(device)
+    # Act
     hf_output = hf_model_xla(input, labels=input, attention_mask=torch.ones_like(input))
     llama_xla_logits, llama_xla_loss = model_xla(
       input, labels=input, attention_mask=torch.ones_like(input)
     )
     torch_xla.sync()
+    # Assert
     torch.testing.assert_close(
       hf_output.logits,
       llama_xla_logits,
@@ -167,10 +170,12 @@ def test_forward_our_model_against_hf_model(fixture, transform):
   ids=["Llama 3.0 8B", "Llama 3.1 405B"],
 )
 def test_forward_torch_xla_against_native(fixture):
+  # Arrange
   fixture = fixture()
   input_size = 8
   device = torch.device("cpu")
   input = torch.randint(fixture.vocab_size, ((2, input_size // 2)))
+  # Act
   llama_native_logits, llama_native_loss = fixture.model(
     input, labels=input, attention_mask=torch.ones_like(input)
   )
@@ -184,6 +189,7 @@ def test_forward_torch_xla_against_native(fixture):
     input, labels=input, attention_mask=torch.ones_like(input)
   )
   torch_xla.sync()
+  # Assert
   torch.testing.assert_close(
     llama_native_logits,
     llama_xla_logits.to("cpu"),
