@@ -47,4 +47,3 @@ def run_model_xla(model, batch_size, number_of_runs):
     end = time.perf_counter()
     times.append(end - start)
   return times
-

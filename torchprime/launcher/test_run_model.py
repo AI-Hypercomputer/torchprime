@@ -4,12 +4,11 @@ from torchprime.launcher import run_model
 
 
 class SimpleModel(torch.nn.Module):
-
   def forward(self, x):
     return x + 100
 
   def get_sample_inputs(self, batch_size):
-    return (torch.randn(batch_size, 10), ), {}
+    return (torch.randn(batch_size, 10),), {}
 
 
 def test_run_model():

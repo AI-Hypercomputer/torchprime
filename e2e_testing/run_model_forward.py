@@ -1,5 +1,3 @@
-
-
 from torchprime import models
 from torchprime.launcher import run_model
 
