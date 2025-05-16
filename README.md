@@ -191,40 +191,16 @@ Besides forwarding your command line arguments, `tp run` will add:
 
 ## Supported Models
 
-Below are the status of various models. There are five stages for each model:
+torchprime has implementations for the following models:
 
-1. **TODO**: We need to implement the model.
-1. **Implemented**: The model runs either a training or an inference step.
-1. **Optimized**: We found the best scaling configuration for the model on one
-  or more hardware. One-off performance data is available.
-1. **Convergence**: We tested that the training loss converges to a reasonable
-  value, or that the loss curve tracks an existing reference if exists.
-1. **Production**: Not only is the model optimized and converges, its
-  performance is also continuously monitored. This is a good state for using the
-  model in production.
+- [Llama 3.0 8B](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)
+- [Llama 3.1 70B](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)
+- [Llama 3.1 405B](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)
+- [Mixtral 8x7B](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)
 
-All implemented models will at least have unit tests to verify basic numerical
-correctness, and the convergence verification stage serves as an additional
-correctness guarantee.
+All implemented models will have a training recipe, and are backed by unit tests.
 
-If a model is implemented, you'll also find a training recipe linked from the
-checkmark emoji in the table. If a model is optimized, you'll also find MFU
-numbers linked from the table. Note that a model may continue to receive ongoing
-optimization thereafter.
-
-| **Model**            | **Implemented**                                                        | **Optimized**                                                        | **Converges** |
-| -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
-| Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
-| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)    | TODO |
-| Llama 3.1 70B        | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)    | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)   | TODO |
-| Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256) | TODO |
-| Llama 4 Scout        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/198)      | TODO | TODO |
-| Llama 4 Maverick     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/200)      | TODO | TODO |
-| Mixtral 8x7B         | [✅](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)    | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/44)     | TODO |
-| Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)       | TODO | TODO |
-| DeepSeek V3/R1       | TODO                                                                   | TODO | TODO |
-| Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)       | TODO | TODO |
-| Stable Diffusion 2.1 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/88)       | TODO | TODO |
+Interested in another model? File an [issue](https://github.com/AI-Hypercomputer/torchprime/issues).
 
 ## Structure
 
@@ -241,8 +217,7 @@ of reproducibility.
 
 `torchprime/torch_xla_models` contains model implementations using `torch_xla`.
 
-`torchprime/experimental/torchax_models` contains model implementations using
-`torchax`.
+`torchprime/experimental` contains experimental model implementations
 
 Finally, each model may also provide a GPU "original" version that illustrates
 and attributes where this model code came from, if any. This also helps to
