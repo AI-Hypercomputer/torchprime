@@ -194,6 +194,7 @@ Besides forwarding your command line arguments, `tp run` will add:
 torchprime has implementations for the following models:
 
 - [Llama 3.0 8B](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)
+- [Llama 3.1 8B](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)
 - [Llama 3.1 70B](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)
 - [Llama 3.1 405B](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)
 - [Mixtral 8x7B](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)
