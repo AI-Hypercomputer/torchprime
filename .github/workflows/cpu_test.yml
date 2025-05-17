@@ -55,4 +55,4 @@ jobs:
       run: |
         export PJRT_DEVICE=CPU
         export JAX_PLATFORMS=cpu
-        python e2e_testing/run_module_forward.py --model=pinterest/transformer_user_action --run_type=torch_xla
+        python e2e_testing/run_model_forward.py pinterest/transformer_user_action --run_type=torch_xla
