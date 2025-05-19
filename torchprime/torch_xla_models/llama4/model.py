@@ -194,32 +194,72 @@ class Llama4TextRotaryEmbedding(nn.Module):
     )
     position_ids_expanded = position_ids[:, None, :].float()
 
-    device_type = (
-      x.device.type
-      if isinstance(x.device.type, str) and x.device.type != "mps"
-      else "cpu"
-    )
-    with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-      freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
-      freqs_cis = torch.polar(
-        torch.ones_like(freqs), freqs
-      )  # Convert to complex representation
-      # self.attention_scaling is 1 for Llama3 and Llama4 rope
-      freqs_cis = freqs_cis
+    with torch.autocast(device_type=x.device.type, enabled=False):
+      freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(
+        1, 2
+      )
+      emb = torch.cat((freqs, freqs), dim=-1)
+      cos = emb.cos()
+      sin = emb.sin()
+    return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    return freqs_cis
+
+def interleave_concat(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+  """
+  Interleaves tensors a and b along the last dimension using stack and reshape.
+  Input shape: [B, S, N, D/2]
+  Output shape: [B, S, N, D]
+  """
+  stacked = torch.stack([a, b], dim=-1)  # Shape: [B, S, N, D/2, 2]
+  return stacked.reshape(stacked.shape[:-2] + (-1,))  # Shape: [B, S, N, D]
 
 
 def apply_rotary_emb(
-  xq: torch.Tensor,
-  xk: torch.Tensor,
-  freqs_cis: torch.Tensor,
+  q: torch.Tensor,
+  k: torch.Tensor,
+  freqs_cos_sin: tuple[torch.Tensor, torch.Tensor],
+  unsqueeze_dim: int = 2,  # Based on q/k shape [B, S, N, D] and cos/sin shape [B, S, D]
 ) -> tuple[torch.Tensor, torch.Tensor]:
-  xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-  xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-  xq_out = torch.view_as_real(xq_ * freqs_cis[:, :, None, :]).flatten(3)
-  xk_out = torch.view_as_real(xk_ * freqs_cis[:, :, None, :]).flatten(3)
-  return xq_out.type_as(xq), xk_out.type_as(xk)
+  # Currently PyTorch/XLA doesn't support torch.polar:
+  # https://github.com/pytorch/xla/blob/master/codegen/xla_native_functions.yaml
+  # We need to reimplement logic in terms of sin/cos math. See
+  # https://discuss.huggingface.co/t/is-llama-rotary-embedding-implementation-correct/44509
+  # for background on the logic here.
+  # TODO: figure out if we can optimize this or add proper torch.polar support to PyTorch/XLA.
+  cos_full, sin_full = freqs_cos_sin
+  head_dim = q.size(-1)
+
+  # Unsqueeze cos and sin for broadcasting over the num_heads dimension
+  # Input cos_full/sin_full: [B, S, D]
+  # After unsqueeze: [B, S, 1, D]
+  cos_expanded = cos_full.unsqueeze(unsqueeze_dim)
+  sin_expanded = sin_full.unsqueeze(unsqueeze_dim)
+
+  # Extract D/2 unique cosine and sine values
+  # Shape: [B, S, 1, D/2]
+  cos_freq = cos_expanded[..., : head_dim // 2]
+  sin_freq = sin_expanded[..., : head_dim // 2]
+
+  # Split q and k into even and odd indexed components
+  # Shape: [B, S, N, D/2]
+  q_x = q[..., ::2]  # Even indices
+  q_y = q[..., 1::2]  # Odd indices
+  k_x = k[..., ::2]
+  k_y = k[..., 1::2]
+
+  # Apply rotation
+  # Shape: [B, S, N, D/2]
+  q_x_out = q_x * cos_freq - q_y * sin_freq
+  q_y_out = q_y * cos_freq + q_x * sin_freq
+  k_x_out = k_x * cos_freq - k_y * sin_freq
+  k_y_out = k_y * cos_freq + k_x * sin_freq
+
+  # Interleave results using interleave_concat
+  q_out = interleave_concat(q_x_out, q_y_out)  # Shape: [B, S, N, D]
+  k_out = interleave_concat(k_x_out, k_y_out)  # Shape: [B, S, N, D]
+
+  # Ensure output dtype matches input dtype
+  return q_out.type_as(q), k_out.type_as(k)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
