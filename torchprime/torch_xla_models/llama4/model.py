@@ -356,7 +356,7 @@ class Llama4TextAttention(nn.Module):
 
     if self.use_rope:  # the 16E model skips rope for long context on certain layers
       query_states, key_states = apply_rotary_emb(
-        query_states, key_states, position_embeddings.to(query_states.device)
+        query_states, key_states, position_embeddings
       )
 
     if hasattr(self, "qk_norm"):  # the 128E model does not use qk_norm
