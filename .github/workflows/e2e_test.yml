@@ -184,9 +184,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.04774
-      step_time_lower_bound: 2.736323636
-      step_time_upper_bound: 2.831803636
+      # Confidence interval: 0.05506
+      step_time_lower_bound: 2.72650087
+      step_time_upper_bound: 2.83662087
     secrets: inherit
 
   llama-3_1-8b-sa:
