@@ -19,10 +19,12 @@ import torch_xla.runtime as xr
 import transformers
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
+import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch_xla._internal.jax_workarounds import jax_env_context
 from torch_xla.distributed.fsdp import checkpoint_module
 from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
+
 from transformers import (
   AutoTokenizer,
   default_data_collator,
@@ -50,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 xr.use_spmd()
 assert xr.is_spmd() is True
+
+from torch_xla.experimental.distributed_checkpoint import CheckpointManager, prime_optimizer
 
 
 class Trainer:
@@ -257,7 +261,27 @@ class Trainer:
         classes_to_checkpoint.add(cls)
     return tuple(classes_to_checkpoint)
 
+  def _load_checkpoint(self):
+    tracked_steps = chkpt_mgr.all_steps()
+    if tracked_steps:
+      # Choose the highest step
+      best_step = max(tracked_steps)
+      # Before restoring the checkpoint, the optimizer state must be primed
+      # to allow state to be loaded into it.
+      self._prime_optimizer()
+      state_dict = {'model': self.model.state_dict(), 'optim': self.optimizer.state_dict()}
+      breakpoint()
+      chkpt_mgr.restore(best_step, state_dict)
+      self.model.load_state_dict(state_dict['model'])
+      self.optimizer.load_state_dict(state_dict['optim'])
+
   def train_loop(self):
+    # Check if the checkpoint manager has any checkpoints to restore
+    # and restore the latest checkpoint if available.
+    self._load_checkpoint()
+    state_dict = {'model': self.model.state_dict(), 'optim': self.optimizer.state_dict()}
+
+
     self.model.train()
     self.model.zero_grad()
 
@@ -273,6 +297,13 @@ class Trainer:
 
     epoch = 0
     for step in range(max_step):
+      # asynchronous checkpointing:
+      # if chkpt_mgr.save_async(step, state_dict):
+      #   logger.info(f'Checkpoint taken at step {step}')
+      # synchronous checkpointing:
+      if step == 4: # checkpoint every 4 steps
+        chkpt_mgr.save(step, state_dict, force=True)
+        logger.info(f'Checkpoint taken at step {step}')
       try:
         batch = next(train_iterator)
       except StopIteration:
@@ -421,6 +452,8 @@ def main(config: DictConfig):
 
 
 if __name__ == "__main__":
+  dist.init_process_group('gloo', init_method='xla://')
+  chkpt_mgr = CheckpointManager('gs://torchprime/piz/ckp', 10)
   logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     datefmt="%m/%d/%Y %H:%M:%S",
