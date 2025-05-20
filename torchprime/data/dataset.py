@@ -33,16 +33,16 @@ def make_huggingface_dataset(
       input_ids = full_enc["input_ids"]
       attention_mask = full_enc["attention_mask"]
       label_ids = input_ids.copy()
-      label_ids[:len(prompt_ids)] = [-100] * len(prompt_ids)
+      label_ids[: len(prompt_ids)] = [-100] * len(prompt_ids)
 
       inputs.append(input_ids)
       labels.append(label_ids)
       attention_masks.append(attention_mask)
 
     return {
-        "input_ids": inputs,
-        "labels": labels,
-        "attention_mask": attention_masks,
+      "input_ids": inputs,
+      "labels": labels,
+      "attention_mask": attention_masks,
     }
 
   data = data.map(preprocess_batch, batched=True, remove_columns=data.column_names)

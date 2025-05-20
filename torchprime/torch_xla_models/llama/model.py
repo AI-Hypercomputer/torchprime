@@ -37,106 +37,110 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 import glob, os, json
 
+
 def load_sharded_safetensors_to_state_dict(model_dir: str) -> dict:
-    state_dict = {}
-    index_file = os.path.join(model_dir, "model.safetensors.index.json")
-    
-    with open(index_file, "r") as f:
-        index = json.load(f)
-    
-    weight_map = index["weight_map"]
-    loaded_files = set()
+  state_dict = {}
+  index_file = os.path.join(model_dir, "model.safetensors.index.json")
 
-    for weight_name, filename in weight_map.items():
-        full_path = os.path.join(model_dir, filename)
-        if full_path in loaded_files:
-            continue
-        with safe_open(full_path, framework="pt", device="cpu") as f:
-            for key in f.keys():
-                state_dict[key] = f.get_tensor(key)
-        loaded_files.add(full_path)
+  with open(index_file, "r") as f:
+    index = json.load(f)
 
-    return state_dict
+  weight_map = index["weight_map"]
+  loaded_files = set()
+
+  for weight_name, filename in weight_map.items():
+    full_path = os.path.join(model_dir, filename)
+    if full_path in loaded_files:
+      continue
+    with safe_open(full_path, framework="pt", device="cpu") as f:
+      for key in f.keys():
+        state_dict[key] = f.get_tensor(key)
+    loaded_files.add(full_path)
+
+  return state_dict
+
 
 def save_sharded_safetensors_by_layer(
-    state_dict: dict, 
-    save_dir: str,
-    layer_keys: list = None  # List of layer prefixes to group by
+  state_dict: dict,
+  save_dir: str,
+  layer_keys: list = None,  # List of layer prefixes to group by
 ) -> None:
-    """
-    Shards a state dictionary by model layers and saves using safetensors format.
-    
-    Args:
-        state_dict: The model state dictionary to save
-        save_dir: Directory to save the sharded weights
-        layer_keys: List of layer prefixes to use for grouping (e.g., ['model.layers.0', 'model.layers.1'])
-                   If None, will attempt to automatically identify layers
-    """
-    
-    import os
-    
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # If layer_keys not provided, try to identify common layer patterns
-    if layer_keys is None:
-        # Auto-detect layer patterns (common in transformer models)
-        prefixes = set()
-        for key in state_dict.keys():
-            parts = key.split('.')
-            if len(parts) >= 3 and parts[1] == 'layers' and parts[2].isdigit():
-                prefixes.add(f"{parts[0]}.{parts[1]}.{parts[2]}")
-        
-        layer_keys = sorted(list(prefixes))
-        
-        # Add embeddings and output layer groups
-        layer_keys = ['model.embed', 'model.norm'] + layer_keys + ['lm_head']
-    
-    
-    # Group weights by layer
-    grouped_weights = {}
+  """
+  Shards a state dictionary by model layers and saves using safetensors format.
+
+  Args:
+      state_dict: The model state dictionary to save
+      save_dir: Directory to save the sharded weights
+      layer_keys: List of layer prefixes to use for grouping (e.g., ['model.layers.0', 'model.layers.1'])
+                 If None, will attempt to automatically identify layers
+  """
+
+  import os
+
+  os.makedirs(save_dir, exist_ok=True)
+
+  # If layer_keys not provided, try to identify common layer patterns
+  if layer_keys is None:
+    # Auto-detect layer patterns (common in transformer models)
+    prefixes = set()
+    for key in state_dict.keys():
+      parts = key.split(".")
+      if len(parts) >= 3 and parts[1] == "layers" and parts[2].isdigit():
+        prefixes.add(f"{parts[0]}.{parts[1]}.{parts[2]}")
+
+    layer_keys = sorted(list(prefixes))
+
+    # Add embeddings and output layer groups
+    layer_keys = ["model.embed", "model.norm"] + layer_keys + ["lm_head"]
+
+  # Group weights by layer
+  grouped_weights = {}
+  for layer_prefix in layer_keys:
+    grouped_weights[layer_prefix] = {}
+  # Add a miscellaneous group for weights that don't match any layer
+  grouped_weights["misc"] = {}
+
+  # Assign each weight to its layer group
+  for k, v in state_dict.items():
+    assigned = False
     for layer_prefix in layer_keys:
-        grouped_weights[layer_prefix] = {}
-    # Add a miscellaneous group for weights that don't match any layer
-    grouped_weights['misc'] = {}
-    
-    # Assign each weight to its layer group
-    for k, v in state_dict.items():
-        assigned = False
-        for layer_prefix in layer_keys:
-            if k.startswith(layer_prefix + '.'):
-                grouped_weights[layer_prefix][k] = v
-                assigned = True
-                break
-        
-        if not assigned:
-            grouped_weights['misc'][k] = v
-    
-    # Create weight map for the index
-    weight_map = {}
-    
-    # Save each group as a separate shard
-    for group_name, weights in grouped_weights.items():
-        if not weights:  # Skip empty groups
-            continue
-        
-        # Create a sanitized filename from the group name
-        safe_name = group_name.replace('.', '_').replace('/', '_')
-        shard_file = f"{safe_name}.safetensors"
-        shard_path = os.path.join(save_dir, shard_file)
-        
-        # Save the shard
-        save_file(weights, shard_path)
-        
-        # Update the weight map
-        for k in weights.keys():
-            weight_map[k] = shard_file
-    
-    # Create and save the index file
-    index = {"weight_map": weight_map}
-    with open(os.path.join(save_dir, "model.safetensors.index.json"), "w") as f:
-        json.dump(index, f, indent=2)
-    
-    logger.info(f"Model saved in {len([g for g in grouped_weights.values() if g])} shards by layer groups")
+      if k.startswith(layer_prefix + "."):
+        grouped_weights[layer_prefix][k] = v
+        assigned = True
+        break
+
+    if not assigned:
+      grouped_weights["misc"][k] = v
+
+  # Create weight map for the index
+  weight_map = {}
+
+  # Save each group as a separate shard
+  for group_name, weights in grouped_weights.items():
+    if not weights:  # Skip empty groups
+      continue
+
+    # Create a sanitized filename from the group name
+    safe_name = group_name.replace(".", "_").replace("/", "_")
+    shard_file = f"{safe_name}.safetensors"
+    shard_path = os.path.join(save_dir, shard_file)
+
+    # Save the shard
+    save_file(weights, shard_path)
+
+    # Update the weight map
+    for k in weights.keys():
+      weight_map[k] = shard_file
+
+  # Create and save the index file
+  index = {"weight_map": weight_map}
+  with open(os.path.join(save_dir, "model.safetensors.index.json"), "w") as f:
+    json.dump(index, f, indent=2)
+
+  logger.info(
+    f"Model saved in {len([g for g in grouped_weights.values() if g])} shards by layer groups"
+  )
+
 
 class LlamaRMSNorm(nn.Module):
   def __init__(self, hidden_size, eps=1e-6):
@@ -515,27 +519,29 @@ class LlamaForCausalLM(nn.Module):
 
     for key in state_dict:
       if state_dict[key].dtype == torch.float32 or state_dict[key].dtype == torch.float:
-          state_dict[key] = state_dict[key].to(torch.bfloat16)
+        state_dict[key] = state_dict[key].to(torch.bfloat16)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=True)
 
     if missing_keys:
-        logger.warning("⚠️ Missing keys:")
-        for k in missing_keys:
-            logger.warning(f" - {k}")
+      logger.warning("⚠️ Missing keys:")
+      for k in missing_keys:
+        logger.warning(f" - {k}")
     if unexpected_keys:
-        logger.warning("⚠️ Unexpected keys:")
-        for k in unexpected_keys:
-            logger.warning(f" - {k}")
-    
+      logger.warning("⚠️ Unexpected keys:")
+      for k in unexpected_keys:
+        logger.warning(f" - {k}")
+
     del state_dict
 
     return model
-  
-  def save_checkpoint(self, save_dir, optimizer=None, scheduler=None, step=None, extras=None):
+
+  def save_checkpoint(
+    self, save_dir, optimizer=None, scheduler=None, step=None, extras=None
+  ):
     """
     Save model checkpoint using sharded safetensors format.
-    
+
     Args:
         save_dir: Directory to save the checkpoint
         optimizer: Optional optimizer to save state
@@ -543,51 +549,59 @@ class LlamaForCausalLM(nn.Module):
         step: Current training step
         extras: Dictionary of any additional info to save
     """
-    
+
     os.makedirs(save_dir, exist_ok=True)
-    
+
     # Get model state dict
     model_state_dict = self.state_dict()
-    
+
     # Create a CPU copy of the state dict for XLA tensors
     cpu_state_dict = {}
     for k, v in model_state_dict.items():
-        # Check if tensor is on XLA device and copy to CPU if needed
-        if hasattr(v, 'device') and str(v.device).startswith('xla'):
-            cpu_state_dict[k] = v.cpu().detach()
-        else:
-            cpu_state_dict[k] = v
-    
+      # Check if tensor is on XLA device and copy to CPU if needed
+      if hasattr(v, "device") and str(v.device).startswith("xla"):
+        cpu_state_dict[k] = v.cpu().detach()
+      else:
+        cpu_state_dict[k] = v
+
     # Save model weights using sharded safetensors
     save_sharded_safetensors_by_layer(cpu_state_dict, save_dir)
-    
+
     # Save training state (optimizer, scheduler, etc.) using regular PyTorch save
-    if optimizer is not None or scheduler is not None or step is not None or extras is not None:
-        training_state = {}
-        
-        if optimizer is not None:
-            # For XLA optimizers, you may need special handling here
-            training_state['optimizer'] = optimizer.state_dict()
-        
-        if scheduler is not None:
-            training_state['scheduler'] = scheduler.state_dict()
-        
-        if step is not None:
-            training_state['step'] = step
-        
-        if extras is not None:
-            training_state.update(extras)
-        
-        # Save training state
-        torch.save(training_state, os.path.join(save_dir, "training_state.pt"))
-    
+    if (
+      optimizer is not None
+      or scheduler is not None
+      or step is not None
+      or extras is not None
+    ):
+      training_state = {}
+
+      if optimizer is not None:
+        # For XLA optimizers, you may need special handling here
+        training_state["optimizer"] = optimizer.state_dict()
+
+      if scheduler is not None:
+        training_state["scheduler"] = scheduler.state_dict()
+
+      if step is not None:
+        training_state["step"] = step
+
+      if extras is not None:
+        training_state.update(extras)
+
+      # Save training state
+      torch.save(training_state, os.path.join(save_dir, "training_state.pt"))
+
     # Save model config for easy reloading
-    config_dict = {k: v for k, v in vars(self.config).items() 
-                  if not k.startswith('_') and not callable(v)}
-    
+    config_dict = {
+      k: v
+      for k, v in vars(self.config).items()
+      if not k.startswith("_") and not callable(v)
+    }
+
     with open(os.path.join(save_dir, "config.json"), "w") as f:
-        json.dump(config_dict, f, indent=2)
-    
+      json.dump(config_dict, f, indent=2)
+
     logger.info(f"Checkpoint saved to {save_dir}")
-    
+
     return save_dir

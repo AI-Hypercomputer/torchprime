@@ -38,6 +38,7 @@ def get_llama_3_8b() -> LlamaFixture:
       "vocab_size": 128,
       "hidden_size": 64,
       "intermediate_size": 16,
+      "pretrained_path": None,
       "num_hidden_layers": 1,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
@@ -76,6 +77,7 @@ def get_llama_3_1_405b() -> LlamaFixture:
     {
       "vocab_size": 256,
       "hidden_size": 64,
+      "pretrained_path": None,
       "intermediate_size": 32,
       "num_hidden_layers": 2,
       "num_attention_heads": 8,

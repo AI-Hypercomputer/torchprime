@@ -340,11 +340,11 @@ class Trainer:
     self.lr_scheduler.step()
     self.model.zero_grad()
     return loss
-  
+
   def save_checkpoint(self, output_dir, step, max_params_per_shard=100):
     if not xm.is_master_ordinal():
       return
-    
+
     logger.info(f"Saving checkpoint to {output_dir} at step {step}")
 
     save_path = os.path.join(output_dir, "checkpoints", f"{step:08d}")
@@ -355,6 +355,7 @@ class Trainer:
       step=step,
     )
     xm.rendezvous("sharded_model_saved")
+
 
 def initialize_model_class(model_config):
   """Import and initialize model_class specified by the config."""
@@ -371,7 +372,9 @@ def initialize_model_class(model_config):
     print(f"Error: Function '{model_class_name}' not found in module '{module_name}'")
     sys.exit(1)
 
-  if model_config.get("pretrained_path", "") and os.path.exists(model_config.pretrained_path):
+  if model_config.get("pretrained_path", "") and os.path.exists(
+    model_config.pretrained_path
+  ):
     model = model_class.from_pretrained(model_config)
   else:
     model = model_class(model_config)
