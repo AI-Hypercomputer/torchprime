@@ -16,11 +16,12 @@ from torchprime.launcher.util import run_docker
 
 def buildpush(
   torchprime_project_id="",
-  torchprime_docker_url=None,
+  torchprime_docker_url: str | None = None,
+  base_docker_url: str | None = None,
   push_docker=True,
   placeholder_url=None,
   *,
-  build_arg=None,
+  build_arg: list[str] | None = None,
 ) -> str:
   # Determine the path of this script and its directory
   script_path = os.path.realpath(__file__)
@@ -63,11 +64,16 @@ def buildpush(
 
   # Provide the base image
   pyproject_file = context_dir / "pyproject.toml"
-  base_image = tomli.loads(pyproject_file.read_text())["tool"]["torchprime"][
+  torch_xla_version = tomli.loads(pyproject_file.read_text())["tool"]["torchprime"][
     "torch_xla_version"
   ]
-  # Use torch_xla Python 3.10 as the base image
-  build_cmd += f" --build-arg BASE_IMAGE=us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_{base_image}"
+  if base_docker_url:
+    # Use the provided base image
+    base_image = base_docker_url
+  else:
+    # Use torch_xla Python 3.10 as the base image
+    base_image = f"us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_{torch_xla_version}"
+  build_cmd += f" --build-arg BASE_IMAGE={base_image}"
 
   # Build, tag, and push Docker image
   try:
@@ -91,7 +97,7 @@ if __name__ == "__main__":
   push_docker_str = os.getenv("TORCHPRIME_PUSH_DOCKER", "true")
   push_docker = push_docker_str.lower() in ("true", "1", "yes", "y")
   buildpush(
-    torchprime_project_id,
-    torchprime_docker_url,
-    push_docker,
+    torchprime_project_id=torchprime_project_id,
+    torchprime_docker_url=torchprime_docker_url,
+    push_docker=push_docker,
   )

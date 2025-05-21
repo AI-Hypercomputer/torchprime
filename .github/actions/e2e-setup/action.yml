@@ -68,4 +68,6 @@ runs:
         --num-slices 1
         --artifact-dir '${{ inputs.artifact_dir }}'
         --tpu-type '${{ inputs.tpu_type }}'
+        --bq-table 'torchprime-e2e-tests'
+        --upload-metrics
       shell: bash

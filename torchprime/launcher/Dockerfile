@@ -37,7 +37,7 @@ COPY . /workspaces/torchprime
 
 # Install torch and torch_xla from local wheels if USE_LOCAL_WHEEL and exists
 # under local_dist directory. Note that you need to build the torch and
-# torch_xla using the 
+# torch_xla using the development docker image to avoid C++ ABI incompatibilities.
 RUN if [ "$USE_LOCAL_WHEEL" = "true" ]; then \
         if [ -d "local_dist" ] && [ "$(find local_dist -name 'torch-*.whl' | wc -l)" -gt 0 ]; then \
             pip install local_dist/torch-*.whl; \

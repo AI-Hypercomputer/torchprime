@@ -4,6 +4,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import click
+
+from torchprime.launcher import upload_metrics_to_bq
+
 # Workaround for MegaScale crash
 #
 # TODO(https://github.com/pytorch/xla/issues/8683): Remove the
@@ -66,4 +70,21 @@ args = (
   ]
 )
 env = os.environ.copy()
-os.execve(sys.executable, args, env)
+process = subprocess.run(args, env=env)
+
+# Upload result to database
+upload_metrics = os.getenv("TORCHPRIME_UPLOAD_METRICS")
+
+if upload_metrics.lower() == "true" and slice_id == "0" and worker_id == "0":
+  try:
+    click.echo(
+      f"Primary worker ({host_name}) attempting to upload metrics for job '{jobset_name}'...",
+    )
+    upload_metrics_to_bq.collect_and_upload_benchmark_summary(
+      process_returncode=process.returncode,
+      jobset_name=jobset_name,
+      mounted_artifact_path_str=str(mounted_artifact_dir),
+    )
+  except Exception as e:
+    click.echo(f"Error uploading results to BigQuery: {e}", err=True)
+sys.exit(process.returncode)

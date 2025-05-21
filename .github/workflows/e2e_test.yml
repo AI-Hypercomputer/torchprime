@@ -7,6 +7,12 @@ on:
   pull_request:
   schedule:
     - cron: "0 8 * * *"  # Run daily at 12AM PST (adjusted for UTC)
+  workflow_dispatch:
+    inputs:
+      docker_url:
+        description: If specified, use this PyTorch/XLA base docker image URL instead of the pin.
+        required: false
+        type: string
 
 jobs:
   tp-run:
@@ -44,6 +50,16 @@ jobs:
           tpu_type: ${{ vars.TPU_TYPE }}
           artifact_dir: ${{ env.ARTIFACT_DIR }}
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+      - name: Setup Docker URL option
+        id: docker-url-option
+        run: |
+          if [ -n "${{ github.event.inputs.docker_url }}" ]; then
+            echo "value=--base-docker-url ${{ github.event.inputs.docker_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Launch training workloads.
 
       - name: Run Llama 3.0 8B
         id: run-llama-3-8b
@@ -54,7 +70,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -73,7 +89,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -93,7 +109,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -113,7 +129,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2d)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -134,7 +150,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py mixtral-8x7b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=mixtral-8x7b \
@@ -154,7 +170,7 @@ jobs:
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2-slice)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run \
+          tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             --num-slices 2 \
             torchprime/torch_xla_models/train.py \
@@ -184,9 +200,9 @@ jobs:
     with:
       jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-name }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.04774
-      step_time_lower_bound: 2.736323636
-      step_time_upper_bound: 2.831803636
+      # Confidence interval: 0.05506
+      step_time_lower_bound: 2.72650087
+      step_time_upper_bound: 2.83662087
     secrets: inherit
 
   llama-3_1-8b-sa:

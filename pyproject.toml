@@ -26,6 +26,8 @@ dependencies = [
     "protobuf==4.25.5",
     "dataclasses-json==0.6.7",
     "benchmark-db-writer @ git+https://github.com/AI-Hypercomputer/aotc.git@2ff16e670df20b497ddaf1f86920dbb5dd9f0c8f#subdirectory=src/aotc/benchmark_db_writer",
+    "dacite==1.9.2",
+    "click~=8.1.8",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +35,6 @@ dev = [
     "ruff~=0.11.4",
     "pytest~=8.3.4",
     "pytest-forked~=1.6.0",
-    "click~=8.1.8",
     "toml~=0.10.2",
     "dataclasses-json~=0.6.7",
     "watchdog~=6.0.0",

@@ -184,7 +184,30 @@ def compute_mfu(
   dtype = config.get("torch_dtype")
   assert dtype == "bfloat16", f"Unsupported dtype {dtype}"
 
-  # Determine hardware BF16 FLOPs.
+  chip_count_per_slice, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_name)
+
+  chip_count = chip_count_per_slice * num_slices
+  hw_tflops = step_duration * chip_count * tflops_per_chip
+  return MFU(
+    model_tflops=total_tflops,
+    hardware_tflops_per_step=hw_tflops,
+    per_chip_tflops_per_sec=total_tflops / step_duration / chip_count,
+    mfu=total_tflops / hw_tflops,
+  )
+
+
+def get_num_chips_and_tflops_per_chip(tpu_name: str) -> tuple[int, int]:
+  """
+  Determines the number of chips and TFLOPs per chip for a given TPU type.
+
+  Args:
+    tpu_name: The name of the TPU (e.g., "v4-8", "v5p-256").
+
+  Returns:
+    A tuple containing:
+      - chip_count (int): The number of physical TPU chips.
+      - tflops_per_chip (int): The peak TFLOPs (BF16) per chip.
+  """
   version, core_count = parse_tpu_name(tpu_name)
   match version:
     case "v4":
@@ -205,15 +228,7 @@ def compute_mfu(
       tflops_per_chip = 918
     case _:
       raise ValueError(f"Unsupported accelerator type {tpu_name}")
-
-  chip_count = chip_count * num_slices
-  hw_tflops = step_duration * chip_count * tflops_per_chip
-  return MFU(
-    model_tflops=total_tflops,
-    hardware_tflops_per_step=hw_tflops,
-    per_chip_tflops_per_sec=total_tflops / step_duration / chip_count,
-    mfu=total_tflops / hw_tflops,
-  )
+  return chip_count, tflops_per_chip
 
 
 def parse_tpu_name(s) -> tuple[str, int]:

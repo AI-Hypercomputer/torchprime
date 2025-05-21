@@ -1,6 +1,7 @@
 import importlib
 import logging
 import math
+import os
 import sys
 from contextlib import contextmanager
 from functools import partial
@@ -36,13 +37,18 @@ from transformers.utils import check_min_version
 from torchprime.data.dataset import make_huggingface_dataset
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.metrics.metrics import MetricsLogger
+from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.sharding.shard_model import (
   shard_torch_xla_model_from_config,
   wrap_module,
 )
 from torchprime.torch_xla_models import offloading, remat_all, scan_layers
-from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
+from torchprime.torch_xla_models.topology import (
+  get_mesh,
+  get_num_slices,
+  is_1d_sharding,
+)
 from torchprime.utils.retry import retry
 
 check_min_version("4.39.3")
@@ -266,7 +272,7 @@ class Trainer:
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
-    metrics_logger = MetricsLogger()
+    metrics_logger = MetricsLogger(self.config.model)
     logger.info("Starting training")
     logger.info(f"    Max step: {max_step}")
     logger.info(f"    Global batch size: {self.global_batch_size}")
@@ -317,10 +323,29 @@ class Trainer:
     xm.wait_device_ops()
     logger.info("Finished training run")
 
-    # Analyze the step duration from the latest profile
     if self.config.profile_step >= 0:
+      # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)
+
+      tpu_name = os.environ.get("TORCHPRIME_TPU_TYPE", None)
+      if tpu_name:
+        # Add "torch_dtype" in model config
+        model_config_for_mfu = OmegaConf.to_container(self.config.model, resolve=True)
+        model_config_for_mfu["torch_dtype"] = str(
+          get_model_dtype(self.model)
+        ).removeprefix("torch.")
+
+        # Compute MFU
+        mfu = compute_mfu(
+          config=model_config_for_mfu,
+          batch_size=self.config.global_batch_size,
+          step_duration=step_duration,
+          tpu_name=tpu_name,
+          num_slices=get_num_slices(),
+          sequence_length=self.config.block_size,
+        )
+        metrics_logger.log_mfu(mfu.mfu)
 
     # Print and save metrics
     metrics = metrics_logger.finalize()
@@ -366,6 +391,13 @@ def set_default_dtype(dtype):
   finally:
     # Revert to the original default dtype
     torch.set_default_dtype(previous_dtype)
+
+
+def get_model_dtype(module):
+  dtypes = {param.dtype for param in module.parameters()}
+  if len(dtypes) != 1:
+    raise ValueError(f"Inconsistent dtypes found: {dtypes}")
+  return dtypes.pop()
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
