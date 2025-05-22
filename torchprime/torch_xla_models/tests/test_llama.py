@@ -39,7 +39,7 @@ def get_llama_3_8b() -> LlamaFixture:
       "pretrained_path": None,
       "vocab_size": 128,
       "hidden_size": 512,
-      "intermediate_size": 64,=
+      "intermediate_size": 64,
       "num_hidden_layers": 1,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
