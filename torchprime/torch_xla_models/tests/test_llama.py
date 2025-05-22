@@ -26,19 +26,20 @@ def get_llama_3_8b() -> LlamaFixture:
   vocab_size = 128
   config = AutoConfig.from_pretrained(
     "meta-llama/Meta-Llama-3-8B",
+    head_dim=64,
     num_hidden_layers=1,
     num_attention_heads=8,
-    hidden_size=64,
-    intermediate_size=16,
+    hidden_size=512,
+    intermediate_size=64,
     vocab_size=vocab_size,
   )
   config.flash_attention = False
   torchprime_config = OmegaConf.create(
     {
-      "vocab_size": 128,
-      "hidden_size": 64,
-      "intermediate_size": 16,
       "pretrained_path": None,
+      "vocab_size": 128,
+      "hidden_size": 512,
+      "intermediate_size": 64,=
       "num_hidden_layers": 1,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
@@ -66,19 +67,20 @@ def get_llama_3_1_405b() -> LlamaFixture:
   vocab_size = 256
   config = AutoConfig.from_pretrained(
     "meta-llama/Meta-Llama-3.1-405B",
+    head_dim=64,
     num_hidden_layers=2,
     num_attention_heads=8,
-    hidden_size=64,
-    intermediate_size=32,
+    hidden_size=512,
+    intermediate_size=64,
     vocab_size=vocab_size,
   )
   config.flash_attention = False
   torchprime_config = OmegaConf.create(
     {
-      "vocab_size": 256,
-      "hidden_size": 64,
       "pretrained_path": None,
-      "intermediate_size": 32,
+      "vocab_size": 256,
+      "hidden_size": 512,
+      "intermediate_size": 64,
       "num_hidden_layers": 2,
       "num_attention_heads": 8,
       "num_key_value_heads": 8,
@@ -105,15 +107,15 @@ def get_llama_3_1_405b() -> LlamaFixture:
     # Assert that the `inv_freq` values are the same
     assert isinstance(model.model.layers[0].self_attn, nn.Module)
     assert isinstance(hf_model.model.layers[0].self_attn, nn.Module)
-    assert isinstance(model.model.layers[0].self_attn.rotary_emb, nn.Module)
-    assert isinstance(hf_model.model.layers[0].self_attn.rotary_emb, nn.Module)
+    assert isinstance(model.model.rotary_emb, nn.Module)
+    assert isinstance(hf_model.model.rotary_emb, nn.Module)
     torch.testing.assert_close(
-      model.model.layers[0].self_attn.rotary_emb.inv_freq,
-      hf_model.model.layers[0].self_attn.rotary_emb.inv_freq,
+      model.model.rotary_emb.inv_freq,
+      hf_model.model.rotary_emb.inv_freq,
     )
-    # In this simplified model architecture, hidden_size 64 / num_attention_heads 8 = 8 head dim,
+    # In this simplified model architecture, hidden_size 512 / num_attention_heads 8 = 64 head dim,
     # and the inv_freq size is half of the head dim.
-    assert model.model.layers[0].self_attn.rotary_emb.inv_freq.shape == (4,)
+    assert model.model.rotary_emb.inv_freq.shape == (32,)
     model.load_state_dict(hf_model.state_dict())
   return LlamaFixture(vocab_size, hf_model, model)
 
@@ -135,6 +137,7 @@ def scan_decoders(mod):
 )
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
 def test_forward_our_model_against_hf_model(fixture, transform):
+  # Arrange
   fixture = fixture()
   device = torch_xla.device()
   model_xla = copy.deepcopy(fixture.model).to(device)
@@ -144,11 +147,13 @@ def test_forward_our_model_against_hf_model(fixture, transform):
   input_sizes = [8, 128, 256]
   for input_size in input_sizes:
     input = torch.randint(fixture.vocab_size, ((2, input_size // 2))).to(device)
+    # Act
     hf_output = hf_model_xla(input, labels=input, attention_mask=torch.ones_like(input))
     llama_xla_logits, llama_xla_loss = model_xla(
       input, labels=input, attention_mask=torch.ones_like(input)
     )
     torch_xla.sync()
+    # Assert
     torch.testing.assert_close(
       hf_output.logits,
       llama_xla_logits,
@@ -167,10 +172,12 @@ def test_forward_our_model_against_hf_model(fixture, transform):
   ids=["Llama 3.0 8B", "Llama 3.1 405B"],
 )
 def test_forward_torch_xla_against_native(fixture):
+  # Arrange
   fixture = fixture()
   input_size = 8
   device = torch.device("cpu")
   input = torch.randint(fixture.vocab_size, ((2, input_size // 2)))
+  # Act
   llama_native_logits, llama_native_loss = fixture.model(
     input, labels=input, attention_mask=torch.ones_like(input)
   )
@@ -184,6 +191,7 @@ def test_forward_torch_xla_against_native(fixture):
     input, labels=input, attention_mask=torch.ones_like(input)
   )
   torch_xla.sync()
+  # Assert
   torch.testing.assert_close(
     llama_native_logits,
     llama_xla_logits.to("cpu"),

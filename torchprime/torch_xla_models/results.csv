@@ -1,0 +1,6 @@
+Model, Hardware, Batch Size, Sequence Length, Step Time (seconds), Optimizer, MFU (%)
+Llama 3.0 8B, v6e-256, 1024, 8192, 4.741, AdaFactor, 45.98
+Llama 3.1 8B, v6e-256, 1024, 8192, 4.764, AdaFactor, 45.75
+Llama 3.1 70B, v6e-256, 512, 8192, 19.277, AdaFactor, 45.16
+Llama 3.1 405B, v6e-256, 256, 8192, 67.212, AdaFactor, 34.96
+Llama 3.1 405B, v6e-256 x 2, 512, 8192, 69.081, AdaFactor, 34.01

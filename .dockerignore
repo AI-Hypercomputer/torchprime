@@ -54,6 +54,9 @@ htmlcov/
 # Ignore pytest cache
 .pytest_cache/
 
+# Ignore ruff cache
+.ruff_cache/
+
 # Ignore profiler outputs
 /profile/
 

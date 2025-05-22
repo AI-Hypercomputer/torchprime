@@ -308,20 +308,12 @@ class LlamaAttention(nn.Module):
     self.o_proj = nn.Linear(
       self.hidden_size, self.hidden_size, bias=config.attention_bias
     )
-    self._init_rope()
-
-  def _init_rope(self):
-    scaling = self.config.get("rope_scaling", None)
-    if scaling is not None:
-      scaling = RopeScaling(**scaling)
-    self.rotary_emb = LlamaRotaryEmbedding(
-      head_dim=self.head_dim, rope_theta=self.rope_theta, scaling=scaling
-    )
 
   @xp.trace_me("LlamaAttention")
   def forward(
     self,
     hidden_states: torch.Tensor,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.LongTensor | None = None,
   ) -> torch.FloatTensor:
@@ -341,7 +333,7 @@ class LlamaAttention(nn.Module):
       bsz, q_len, self.num_key_value_heads, self.head_dim
     ).transpose(1, 2)
 
-    cos, sin = self.rotary_emb(value_states, position_ids)
+    cos, sin = position_embeddings
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
     attn_output = self.attention_block(
@@ -372,6 +364,8 @@ class LlamaDecoderLayer(nn.Module):
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.Tensor | None = None,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor]
+    | None = None,  # necessary, but kept here for BC
   ) -> torch.Tensor:
     """
     Args:
@@ -395,6 +389,7 @@ class LlamaDecoderLayer(nn.Module):
       hidden_states=hidden_states,
       attention_mask=attention_mask,
       position_ids=position_ids,
+      position_embeddings=position_embeddings,
     )
     hidden_states = residual + hidden_states
 
@@ -430,6 +425,15 @@ class LlamaModel(nn.Module):
     )
     self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    rope_scaling = config.get("rope_scaling", None)
+    head_dim = config.hidden_size // config.num_attention_heads
+    self.rope_theta = config.rope_theta
+    if rope_scaling is not None:
+      rope_scaling = RopeScaling(**rope_scaling)
+    self.rotary_emb = LlamaRotaryEmbedding(
+      head_dim=head_dim, rope_theta=config.rope_theta, scaling=rope_scaling
+    )
+
   @xp.trace_me("LlamaModel")
   def forward(
     self,
@@ -457,9 +461,17 @@ class LlamaModel(nn.Module):
     if attention_mask is not None:
       causal_mask = causal_mask * attention_mask[:, None, None, :]
 
+    hidden_states = inputs_embeds
+
+    # create position embeddings to be shared across the decoder layers
+    position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
     # decoder layers
     hidden_states = self.layers(
-      inputs_embeds, attention_mask=causal_mask, position_ids=position_ids
+      hidden_states,
+      attention_mask=causal_mask,
+      position_ids=position_ids,
+      position_embeddings=position_embeddings,
     )
 
     hidden_states = self.norm(hidden_states)

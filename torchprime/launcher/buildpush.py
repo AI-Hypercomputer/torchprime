@@ -2,7 +2,6 @@
 
 import datetime
 import getpass
-import grp
 import os
 import random
 import re
@@ -10,8 +9,9 @@ import string
 import subprocess
 from pathlib import Path
 
-import click
 import tomli
+
+from torchprime.launcher.util import run_docker
 
 
 def buildpush(
@@ -27,11 +27,7 @@ def buildpush(
   script_dir = Path(os.path.dirname(script_path))
   context_dir = script_dir.parent.parent.relative_to(os.getcwd())
   docker_file = (script_dir / "Dockerfile").relative_to(os.getcwd())
-
-  # Check if the user is in the 'docker' group
   user = getpass.getuser()
-  groups_for_user = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
-  sudo_cmd = "" if "docker" in groups_for_user else "sudo"
 
   # Generate date/time string and 4 random lowercase letters
   datetime_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -57,7 +53,7 @@ def buildpush(
     print(f"Create docker image: {docker_url} and tag locally")
   print()
 
-  build_cmd = f"{sudo_cmd} docker build"
+  build_cmd = "build"
   if build_arg:
     for _arg in build_arg:
       build_cmd += f" --build-arg {_arg}"
@@ -75,26 +71,17 @@ def buildpush(
 
   # Build, tag, and push Docker image
   try:
-    _run(build_cmd)
-    _run(
-      f"{sudo_cmd} docker tag {docker_tag} {docker_url}",
+    run_docker(build_cmd)
+    run_docker(
+      f"tag {docker_tag} {docker_url}",
     )
     if push_docker:
-      _run(f"{sudo_cmd} docker push {docker_url}")
+      run_docker(f"push {docker_url}")
   except subprocess.CalledProcessError as e:
     print(f"Error running command: {e}")
     exit(e.returncode)
 
   return docker_url
-
-
-def _run(command):
-  click.echo(command)
-  subprocess.run(
-    command,
-    shell=True,
-    check=True,
-  )
 
 
 if __name__ == "__main__":

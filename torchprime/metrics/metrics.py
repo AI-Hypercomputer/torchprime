@@ -21,6 +21,7 @@ class Metrics:
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/67):
   # Add train_loss, compile_time, train_tokens_per_step, warm_train_tokens_per_second, etc.
+  # Document them in docs/metrics.md too.
 
   def __str__(self):
     s = ""

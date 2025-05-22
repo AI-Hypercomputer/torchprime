@@ -7,14 +7,14 @@
 </div>
 <br /><br />
 
-torchprime is a reference implementation for training PyTorch models on TPU. It
+`torchprime` is a reference implementation for training PyTorch models on TPU. It
 is designed to showcase best practices for large-scale, high-performance model
 training using `torch_xla` ([project][torch_xla]), with
 minimal changes to model code. It aims to demystify training on XLA-based
 accelerators, providing clear patterns and best practices to help the PyTorch
 community unlock top performance and efficiency on Google Cloud TPUs.
 
-torchprime is under active development, and we're eager for feedback and input
+`torchprime` is under active development, and we're eager for feedback and input
 from the PyTorch community.
 
 ## Environment setup
@@ -48,7 +48,7 @@ gcloud compute tpus tpu-vm ssh <tpu-name> --zone=<zone>
 
 ### Install `torch_xla`
 
-Before installing torchprime, you will need to first install
+Before installing `torchprime`, you will need to first install
 [torch_xla][torch_xla] following its respective project README.
 You need to install nightly version of
 PyTorch/XLA.
@@ -81,13 +81,16 @@ pip install -e '.[dev]'
 
 ### Local training
 
-Here is a simple example of training on a single TPU VM. Train Llama 3 8B using
-torch_xla:
+Here is a simple example of training on a single TPU VM with 4 TPU chips.
+Train Llama 3 8B using `torch_xla`:
 
 ```sh
 export HF_TOKEN='...your huggingface token...'
 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 python3 torchprime/torch_xla_models/train.py
 ```
+
+By default, this will distribute the model over 4 TPU chips attached to the VM
+using the [FSDP parallelism strategy][fsdp].
 
 The first two training steps will take a while to compile. After that, the graphs
 will hit the compilation cache and you should see something like this:
@@ -107,7 +110,7 @@ Refer to `README.md` in `torchprime/torch_xla_models` for more details.
 
 ### Configuring training
 
-torchprime uses [hydra][hydra] to read configurations (e.g. model name, batch
+`torchprime` uses [hydra][hydra] to read configurations (e.g. model name, batch
 size) from the command line and `.yaml` files.
 
 In the `torch_xla_models` directory, you'll find a `configs/default.yaml`. That
@@ -125,12 +128,12 @@ python3 torchprime/torch_xla_models/train.py \
 
 You may refer to the hydra docs for other ways to specify configs.
 
-### Distributed training
+### Multi-VM distributed training
 
-torchprime uses [xpk][xpk] as the standard path for iterating on distributed
-training code.
+`torchprime` uses [xpk][xpk] as the standard path for iterating on distributed
+training code that needs to run on muliple VMs.
 
-First teach torchprime about the XPK cluster it is using, the artifact storage
+First teach `torchprime` about the XPK cluster it is using, the artifact storage
 location, etc. You only need to do this on first clone or when switching to a
 different topology or cluster. Example:
 
@@ -144,7 +147,7 @@ tp use \
     --artifact-dir gs://bucket/dir
 ```
 
-torchprime natively supports [multi-slice or multi-pod][multi-slice] training.
+`torchprime` natively supports [multi-slice or multi-pod][multi-slice] training.
 `--num-slices` specifies the number of [slices][tpu-slice] used by the workload.
 `--tpu-type` specifies the [accelerator type][accelerator-type] in each slice.
 To do multi-pod training, simply specify a `--tpu-type` that is as big as a
@@ -188,40 +191,17 @@ Besides forwarding your command line arguments, `tp run` will add:
 
 ## Supported Models
 
-Below are the status of various models. There are five stages for each model:
+torchprime has implementations for the following models:
 
-1. **TODO**: We need to implement the model.
-1. **Implemented**: The model runs either a training or an inference step.
-1. **Optimized**: We found the best scaling configuration for the model on one
-  or more hardware. One-off performance data is available.
-1. **Convergence**: We tested that the training loss converges to a reasonable
-  value, or that the loss curve tracks an existing reference if exists.
-1. **Production**: Not only is the model optimized and converges, its
-  performance is also continuously monitored. This is a good state for using the
-  model in production.
+- [Llama 3.0 8B](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)
+- [Llama 3.1 8B](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)
+- [Llama 3.1 70B](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)
+- [Llama 3.1 405B](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)
+- [Mixtral 8x7B](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)
 
-All implemented models will at least have unit tests to verify basic numerical
-correctness, and the convergence verification stage serves as an additional
-correctness guarantee.
+All implemented models will have a training recipe, and are backed by unit tests.
 
-If a model is implemented, you'll also find a training recipe linked from the
-checkmark emoji in the table. If a model is optimized, you'll also find MFU
-numbers linked from the table. Note that a model may continue to receive ongoing
-optimization thereafter.
-
-| **Model**            | **Implemented**                                                        | **Optimized**                                                        | **Converges** |
-| -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
-| Llama 3.0 8B         | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-30-8b-on-v6e-256)   | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/90) |
-| Llama 3.1 8B         | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)     | [✅](torchprime/torch_xla_models/README.md#llama-31-8b-on-v6e-256)    | TODO |
-| Llama 3.1 70B        | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)    | [✅](torchprime/torch_xla_models/README.md#llama-31-70b-on-v6e-256)   | TODO |
-| Llama 3.1 405B       | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256)   | [✅](torchprime/torch_xla_models/README.md#llama-31-405b-on-v6e-256) | TODO |
-| Llama 4 Scout        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/198)      | TODO | TODO |
-| Llama 4 Maverick     | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/200)      | TODO | TODO |
-| Mixtral 8x7B         | [✅](torchprime/torch_xla_models/README.md#mixtral-8x7b-on-v6e-256)    | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/44)     | TODO |
-| Mixtral 8x22B        | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/45)       | TODO | TODO |
-| DeepSeek V3/R1       | TODO                                                                   | TODO | TODO |
-| Stable Diffusion 2.0 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/87)       | TODO | TODO |
-| Stable Diffusion 2.1 | [TODO](https://github.com/AI-Hypercomputer/torchprime/issues/88)       | TODO | TODO |
+Interested in another model? File an [issue](https://github.com/AI-Hypercomputer/torchprime/issues).
 
 ## Structure
 
@@ -238,8 +218,7 @@ of reproducibility.
 
 `torchprime/torch_xla_models` contains model implementations using `torch_xla`.
 
-`torchprime/experimental/torchax_models` contains model implementations using
-`torchax`.
+`torchprime/experimental` contains experimental model implementations
 
 Finally, each model may also provide a GPU "original" version that illustrates
 and attributes where this model code came from, if any. This also helps to
@@ -261,6 +240,7 @@ For more information on PyTorch/XLA, visit the [official
 documentation](https://github.com/pytorch/xla).
 
 [torch_xla]: https://github.com/pytorch/xla
+[fsdp]: https://jax-ml.github.io/scaling-book/training/#fully-sharded-data-parallelism-fsdp
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]:
     https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables

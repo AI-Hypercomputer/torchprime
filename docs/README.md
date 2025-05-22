@@ -9,6 +9,8 @@ the best sharding strategies and how to diagnose out-of-memory (OOM) errors.
 
 [How to configure model sharding](./sharding.md)
 
+[How is training performance measured](./metrics.md)
+
 <!-- TODO: how to check model sharding once configured -->
 
 <!-- TODO(https://github.com/AI-Hypercomputer/torchprime/issues/130): OOM doc -->

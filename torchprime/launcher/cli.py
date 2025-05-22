@@ -23,6 +23,7 @@ from watchdog.observers import Observer
 
 import torchprime.launcher.doctor
 from torchprime.launcher.buildpush import buildpush
+from torchprime.launcher.util import run_docker
 
 _DOCKER_ENV_FORWARD_LIST = [
   "HF_TOKEN",
@@ -227,11 +228,11 @@ def docker_run(args, use_hf: bool):
   env_forwarding = [
     arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
   ]
+  args = list(v for v in args if v != "")
   command = [
     "python",
   ] + list(args)
   docker_command = [
-    "docker",
     "run",
     "-i",
     *env_forwarding,
@@ -245,7 +246,7 @@ def docker_run(args, use_hf: bool):
     "/workspace",
     docker_url,
   ] + command
-  subprocess.run(docker_command, check=True)
+  run_docker(docker_command)
 
 
 @cli.command(

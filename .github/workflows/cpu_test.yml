@@ -48,3 +48,11 @@ jobs:
         export PJRT_DEVICE=CPU
         export JAX_PLATFORMS=cpu
         pytest -v
+    - name: Run model forward
+      env:
+        # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      run: |
+        export PJRT_DEVICE=CPU
+        export JAX_PLATFORMS=cpu
+        python e2e_testing/run_model_forward.py pinterest/transformer_user_action --run_type=torch_xla

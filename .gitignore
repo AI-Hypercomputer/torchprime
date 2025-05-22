@@ -55,6 +55,9 @@ htmlcov/
 # Ignore pytest cache
 .pytest_cache/
 
+# Ignore ruff cache
+.ruff_cache/
+
 # Ignore local transformers repo
 **/transformers/
 **/local_transformers/
