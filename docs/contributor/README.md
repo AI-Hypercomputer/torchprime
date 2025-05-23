@@ -64,9 +64,14 @@ compatibility issues.
 
 ## Uploading Benchmark Result to Bigquery
 
-You can upload benchmark results to a BigQuery database. This allows you to track results without manual recording and provides an easier way to view them.
+You can upload benchmark results to a BigQuery database. This allows you to
+track results without manual recording and provides an easier way to view them.
 
-To use this feature, configure your BigQuery table and pass the `--upload-metrics` flag. If not specified, `bq-project`, `bq-dataset`, and `bq-table` default to `tpu-pytorch`, `benchmark_dataset_test`, and `benchmark_experiment` respectively.
+To use this feature, configure your BigQuery table and pass the
+`--upload-metrics` flag. If not specified, `bq-project`, `bq-dataset`, and
+`bq-table` default to `tpu-pytorch`, `benchmark_dataset_test`, and
+`benchmark_experiment` respectively. The default table can be find
+[here](http://shortn/_YMeB6vfEXc)
 
 ```
 tp use \
@@ -82,7 +87,8 @@ tp use \
     --upload-metrics
 ```
 
-When you run a training job, you can add comments to the upload with `--comments` which will be shown in `logs_comments` columns
+When you run a training job, you can add comments to the upload with
+`--comments` which will be shown in `logs_comments` columns
 ```
 tp run --comments="Test Comments" \
     torchprime/torch_xla_models/train.py \
@@ -91,7 +97,8 @@ tp run --comments="Test Comments" \
     ici_mesh.fsdp=256
 ```
 
-You can view the database by querying directly in the BigQuery console or by using Google Sheets.
+You can view the database by querying directly in the BigQuery console or by
+using Google Sheets.
 
 To view the database in a spreadsheet:
 
