@@ -330,16 +330,12 @@ def docker_run(args, use_hf: bool):
 @interactive
 def run(
   args,
- 
   name: str | None,
- 
   base_docker_url: str | None,
   num_slices: int | None,
- 
   use_hf: bool,
- 
   use_local_wheel: bool,
-  comments: str | None,,
+  comments: str | None,
 ):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
