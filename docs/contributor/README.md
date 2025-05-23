@@ -61,3 +61,39 @@ tp run --use-local-wheel torchprime/hf_models/train.py
 The wheels should be built inside a [PyTorch/XLA development docker
 image][torch_xla_dev_docker] or the PyTorch/XLA VSCode Dev Container to minimize
 compatibility issues.
+
+## Uploading Benchmark Result to Bigquery
+
+You can upload benchmark results to a BigQuery database. This allows you to track results without manual recording and provides an easier way to view them.
+
+To use this feature, configure your BigQuery table and pass the `--upload-metrics` flag. If not specified, `bq-project`, `bq-dataset`, and `bq-table` default to `tpu-pytorch`, `benchmark_dataset_test`, and `benchmark_experiment` respectively.
+
+```
+tp use \
+    --cluster <XPK CLUSTER NAME> \
+    --project my-gcp-project \
+    --zone us-east5-b \
+    --num-slices 1 \
+    --tpu-type v6e-256 \
+    --artifact-dir gs://bucket/dir
+    --bq-project <bq-project>
+    --bq-dataset <bq-datase>
+    --bq-table <bq-table>
+    --upload-metrics
+```
+
+When you run a training job, you can add comments to the upload with `--comments` which will be shown in `logs_comments` columns
+```
+tp run --comments="Test Comments" \
+    torchprime/torch_xla_models/train.py \
+    model=llama-3-8b \
+    global_batch_size=256 \
+    ici_mesh.fsdp=256
+```
+
+You can view the database by querying directly in the BigQuery console or by using Google Sheets.
+
+To view the database in a spreadsheet:
+
+1. Open a new Google Sheet.
+2. Go to Data > Data connectors > Connect to BigQuery.
