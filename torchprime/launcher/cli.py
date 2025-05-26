@@ -116,7 +116,7 @@ E.g. gs://foo/bar",
   "--bq-dataset",
   required=False,
   default="benchmark_dataset_test",
-  help="A bigqeury dataset to upload metrics.",
+  help="A bigquery dataset to upload metrics.",
 )
 @click.option(
   "--bq-table",

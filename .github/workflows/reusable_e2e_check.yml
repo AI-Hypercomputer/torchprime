@@ -51,7 +51,7 @@ jobs:
           kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
       - name: Wait for workload to complete
         run: |
-          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }}
+          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }} --project ${{ vars.GCP_PROJECT }} --zone ${{ vars.GCP_ZONE }}
       - name: Validate logs
         run: |
           pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
