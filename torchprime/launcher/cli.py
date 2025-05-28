@@ -43,10 +43,10 @@ class Config:
   num_slices: int
   tpu_type: str
   artifact_dir: str
-  upload_metrics: bool
-  bq_project: str
-  bq_dataset: str
-  bq_table: str
+  upload_metrics: bool | None = False
+  bq_project: str | None = None
+  bq_dataset: str | None = None
+  bq_table: str | None = None
   docker_project: str | None = None
 
 
@@ -395,14 +395,6 @@ def run(
     "--env",
     f"TORCHPRIME_CLUSTER={config.cluster}",
     "--env",
-    f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
-    "--env",
-    f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
-    "--env",
-    f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
-    "--env",
-    f"TORCHPRIME_BQ_TABLE={config.bq_table}",
-    "--env",
     f"TORCHPRIME_JOBSET_NAME={workload_name}",
     "--env",
     f"TORCHPRIME_COMMENTS={comments}",
@@ -411,6 +403,18 @@ def run(
     "--env",
     f"TORCHPRIME_USER={getpass.getuser()}",
   ]
+
+  if config.upload_metrics:
+    artifact_arg.extend(
+      "--env",
+      f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
+      "--env",
+      f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
+      "--env",
+      f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
+      "--env",
+      f"TORCHPRIME_BQ_TABLE={config.bq_table}",
+    )
 
   if num_slices is None:
     num_slices = config.num_slices
