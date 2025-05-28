@@ -34,6 +34,14 @@ def build_command(config: DictConfig) -> list:
         cmd.append(f"--{k}")
     else:
       cmd.append(f"--{k}={v}")
+    # Support `output_dir` config instead of the `output_dir` trainer argument.
+    if k == "output_dir":
+      raise ValueError(
+        "Do not set `output_dir` in `train_script.args`. \
+                       It is set automatically based on the config."
+      )
+  # Set output_dir based on config
+  cmd.append(f"--output_dir={config.output_dir}")
 
   return cmd
 

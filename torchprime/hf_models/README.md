@@ -10,7 +10,11 @@ torchprime and name it as `local_transformers`. This allows you to pick any
 branch or make code modifications in transformers for experiment:
 
 ```sh
+# Use the official Hugging Face repo.
 git clone https://github.com/huggingface/transformers.git local_transformers
+
+# Alternatively, use a TPU-specific fork.
+git clone --branch flash_attention https://github.com/pytorch-tpu/transformers.git local_transformers
 ```
 
 If huggingface transformer doesn't exist, torchprime will automatically clone
@@ -19,6 +23,30 @@ add flag `--use-hf` to `tp run` command:
 
 ```sh
 tp run --use-hf torchprime/hf_models/train.py
+```
+
+You may override the arguments to the Hugging Face training script via the Hydra
+config syntax. Examples:
+
+```sh
+# Run Llama 3.1 405B Hugging Face distributed training on an XPK cluster.
+tp run --use-hf torchprime/hf_models/train.py \
+    train_script.args.config_name=torchprime/hf_models/configs/model/llama-3/config_405b.json \
+    train_script.args.per_device_train_batch_size=64 \
+    train_script.args.fsdp_config=null \
+    train_script.args.fsdp=null \
+    train_script.args.tokenizer_name="meta-llama/Meta-Llama-3.1-405B" \
+    +train_script.args.spmd_2d_sharding=4
+
+# Locally run the Hugging Face trainer and log metrics to tensorboard for analysis.
+tp docker-run --use-hf torchprime/hf_models/train.py \
+    train_script.args.per_device_train_batch_size=8 \
+    +train_script.args.log_loss=true \
+    train_script.args.logging_strategy=steps \
+    +train_script.args.logging_steps=1 \
+    +train_script.args.logging_first_step=true \
+    +train_script.args.report_to=tensorboard \
+    train_script.args.max_steps=150
 ```
 
 [hf-transformers]: https://github.com/huggingface/transformers
