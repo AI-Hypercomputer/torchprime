@@ -406,14 +406,16 @@ def run(
 
   if config.upload_metrics:
     artifact_arg.extend(
-      "--env",
-      f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
-      "--env",
-      f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
-      "--env",
-      f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
-      "--env",
-      f"TORCHPRIME_BQ_TABLE={config.bq_table}",
+      [
+        "--env",
+        f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
+        "--env",
+        f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
+        "--env",
+        f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
+        "--env",
+        f"TORCHPRIME_BQ_TABLE={config.bq_table}",
+      ]
     )
 
   if num_slices is None:
