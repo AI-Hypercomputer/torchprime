@@ -51,12 +51,10 @@ def _get_env_configs() -> dict:
     "bq_dataset": os.environ["TORCHPRIME_BQ_DATASET"],
     "bq_table": os.environ["TORCHPRIME_BQ_TABLE"],
     "tpu_type": os.environ["TORCHPRIME_TPU_TYPE"],
-    "comments": os.environ.get("TORCHPRIME_COMMENTS"),  # comments can be None
+    "comments": os.environ.get("TORCHPRIME_COMMENTS"),
     "docker_url": os.environ["TORCHPRIME_DOCKER_URL"],
     "update_person_ldap": os.environ["TORCHPRIME_USER"],
-    "configs_xla_flags": os.environ.get(
-      "LIBTPU_INIT_ARGS", ""
-    ),  # LIBTPU_INIT_ARGS might not always be set
+    "configs_xla_flags": os.environ.get("LIBTPU_INIT_ARGS", ""),
     "all_env": dict(os.environ),  # For capturing the full environment
   }
 
