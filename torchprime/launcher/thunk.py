@@ -73,7 +73,7 @@ env = os.environ.copy()
 process = subprocess.run(args, env=env)
 
 # Upload result to database
-upload_metrics = os.getenv("TORCHPRIME_UPLOAD_METRICS")
+upload_metrics = os.getenv("TORCHPRIME_UPLOAD_METRICS", "")
 
 if upload_metrics.lower() == "true" and slice_id == "0" and worker_id == "0":
   try:
