@@ -67,12 +67,13 @@ def get_config(base_artifact_path: str, jobset_name_for_outputs: str) -> dict | 
     / "train_config.json"
   )
 
-  if config_file_path.exists():
-    # Load the JSON configuration file and convert it to a Python dictionary
-    config = OmegaConf.to_container(OmegaConf.load(config_file_path), resolve=True)
-    return config
-  click.echo(f"Config file not found at {config_file_path}", err=True)
-  return None
+  if not config_file_path.exists():
+    click.echo(f"Config file not found at {config_file_path}", err=True)
+    return None
+
+  # Load the JSON configuration file and convert it to a Python dictionary
+  config = OmegaConf.to_container(OmegaConf.load(config_file_path), resolve=True)
+  return config
 
 
 def prepare_benchmark_summary(
