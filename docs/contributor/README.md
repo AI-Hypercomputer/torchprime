@@ -62,7 +62,7 @@ The wheels should be built inside a [PyTorch/XLA development docker
 image][torch_xla_dev_docker] or the PyTorch/XLA VSCode Dev Container to minimize
 compatibility issues.
 
-## Uploading Benchmark Result to Bigquery
+## Uploading benchmark result to BigQuery
 
 You can upload benchmark results to a BigQuery database. This allows you to
 track results without manual recording and provides an easier way to view them.
@@ -70,26 +70,27 @@ track results without manual recording and provides an easier way to view them.
 To use this feature, configure your BigQuery table and pass the
 `--upload-metrics` flag. If not specified, `bq-project`, `bq-dataset`, and
 `bq-table` default to `tpu-pytorch`, `benchmark_dataset_test`, and
-`benchmark_experiment` respectively. The default table can be find
-[here](http://shortn/_YMeB6vfEXc)
+`benchmark_experiment` respectively. The default table can be found
+[here](http://shortn/_YMeB6vfEXc).
 
-```
+```sh
 tp use \
     --cluster <XPK CLUSTER NAME> \
     --project my-gcp-project \
     --zone us-east5-b \
     --num-slices 1 \
     --tpu-type v6e-256 \
-    --artifact-dir gs://bucket/dir
-    --bq-project <bq-project>
-    --bq-dataset <bq-datase>
-    --bq-table <bq-table>
+    --artifact-dir gs://bucket/dir \
+    --bq-project <bq-project> \
+    --bq-dataset <bq-dataset> \
+    --bq-table <bq-table> \
     --upload-metrics
 ```
 
 When you run a training job, you can add comments to the upload with
 `--comments` which will be shown in `logs_comments` columns
-```
+
+```sh
 tp run --comments="Test Comments" \
     torchprime/torch_xla_models/train.py \
     model=llama-3-8b \

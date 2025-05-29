@@ -73,18 +73,10 @@ $$\text{Interval} = [ \bar{x} - H, \quad \bar{x} + H ]$$
 
 E2E tests are launched onto an XPK cluster named `tpu-v6e-ci`.
 
-(Googlers only) To heal or re-create the cluster, use the following:
-
-```sh
-xpk cluster create \
-    --tpu-type v6e-4 \
-    --cluster tpu-v6e-ci \
-    --num-slices 64 \
-    --on-demand \
-    --zone us-central2-b \
-    --project tpu-pytorch \
-    --default-pool-cpu-machine-type=n2-standard-32
-```
+(Googlers only) To heal or re-create the cluster, run `create-e2e-cluster.sh`
+from the command line. That script will also create a corresponding network and
+firewall rules. If those have already been created, running the script again
+will produce some "already exists" errors, but you may safely ignore those.
 
 ### Secret management
 

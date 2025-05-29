@@ -44,18 +44,26 @@ jobs:
           gcloud container clusters get-credentials ${{ vars.XPK_CLUSTER_NAME }} --region=${{ vars.GCP_ZONE }} --project=${{ vars.GCP_PROJECT }}
           kubectl config view
           kubectl config set-context --current --namespace=default
+      - name: Get pod name
+        id: get_pod_name
+        run: |
+          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
+          echo "pod_name=$pod_name" >> $GITHUB_OUTPUT
+      - name: Wait for workload to start
+        run: |
+          kubectl wait "pod/${{ steps.get_pod_name.outputs.pod_name }}" \
+              --for='jsonpath={.status.containerStatuses[?(@.name=="jax-tpu")].state.running}' \
+              --timeout="60m"
       - name: Stream logs
         run: |
-          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
           # Save logs to a file for later checks
-          kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
+          kubectl logs -c jax-tpu -f ${{ steps.get_pod_name.outputs.pod_name }} | tee /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log
       - name: Wait for workload to complete
         run: |
-          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }}
+          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }} --project ${{ vars.GCP_PROJECT }} --zone ${{ vars.GCP_ZONE }}
       - name: Validate logs
         run: |
-          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
-          e2e_testing/check_logs.py /tmp/pod-$pod_name.log
+          e2e_testing/check_logs.py /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log
       - name: Validate profile
         run: |
           profile_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/profile/0-0"
