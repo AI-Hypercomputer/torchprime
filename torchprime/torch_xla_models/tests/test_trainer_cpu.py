@@ -22,6 +22,7 @@ import torch.nn as nn
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
+from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.trainer.basic import Trainer
 
 
@@ -71,7 +72,7 @@ def dummy_config():
       "profile_step": -1,
       "profile_dir": "/tmp/profile",
       "profile_duration": 5,
-      "optimizer": {"learning_rate": 1e-3},
+      "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
       "lr_scheduler": {"type": "constant", "warmup_steps": 0},
       "block_size": 4,
       "model": {
@@ -145,7 +146,7 @@ def test_train_loop(
   mock_train_step.return_value = torch.tensor(0.1)
 
   trainer = Trainer(model, dummy_config, dataset)
-  trainer.train_loop()
+  trainer.train_loop(metrics_logger=MetricsLogger())
   assert mock_train_step.call_count == dummy_config.max_steps
 
 
