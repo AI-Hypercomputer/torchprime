@@ -34,7 +34,6 @@ from transformers import (
 )
 from transformers.optimization import Adafactor
 
-from torchprime.metrics.metrics import MetricsLogger
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
 from torchprime.torch_xla_models.optimization.remat_and_scan import (
@@ -90,6 +89,10 @@ class Trainer:
     model = add_activation_checkpointing_and_scan(model, config)
     model = add_optimization_barriers(model, config)
     self.model = model
+
+    assert self.config.optimizer.type == "adafactor", (
+      "Currently only Adafactor optimizer is supported"
+    )
 
     # Set up optimizers
     self.optimizer = Adafactor(
@@ -159,7 +162,7 @@ class Trainer:
     )
     return loader
 
-  def train_loop(self) -> None:
+  def train_loop(self, metrics_logger) -> None:
     self.model.train()
     self.model.zero_grad()
 
@@ -168,7 +171,6 @@ class Trainer:
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
-    metrics_logger = MetricsLogger(self.config.model)
     logger.info("Starting training")
     logger.info(f"    Max step: {max_step}")
     logger.info(f"    Global batch size: {self.global_batch_size}")
@@ -226,27 +228,35 @@ class Trainer:
 
       tpu_name = os.environ.get("TORCHPRIME_TPU_TYPE", None)
       if tpu_name:
-        # Add "torch_dtype" in model config
-        model_config_for_mfu = OmegaConf.to_container(self.config.model, resolve=True)
-        model_config_for_mfu["torch_dtype"] = str(
-          get_model_dtype(self.model)
-        ).removeprefix("torch.")
-
         # Compute MFU
         mfu = compute_mfu(
-          config=model_config_for_mfu,
+          config=self.config.model,
           batch_size=self.config.global_batch_size,
           step_duration=step_duration,
           tpu_name=tpu_name,
           num_slices=get_num_slices(),
           sequence_length=self.config.block_size,
+          torch_dtype=self.config.torch_dtype,
         )
         metrics_logger.log_mfu(mfu.mfu)
+
+        # Compute tokens per seconds
+        tokens_per_second = (
+          self.config.block_size * self.config.global_batch_size // step_duration
+        )
+        metrics_logger.log_tokens_per_second(tokens_per_second)
+
+        # Log number of steps
+        metrics_logger.log_num_steps(self.config.max_steps)
 
     # Print and save metrics
     metrics = metrics_logger.finalize()
     logger.info("***** train metrics *****\n%s", metrics)
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
+
+    # Save the hydra config
+    config_save_path = Path(self.config.output_dir) / "train_config.json"
+    OmegaConf.save(config=self.config, f=config_save_path)
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch: dict) -> torch.Tensor:

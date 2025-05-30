@@ -18,6 +18,7 @@ from transformers import (
 )
 
 from torchprime.data.dataset import make_huggingface_dataset
+from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.trainer.basic import Trainer
 from torchprime.utils.retry import retry
 
