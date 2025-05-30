@@ -137,12 +137,12 @@ def calculate_tflops_training_per_device(config: Config, log=True):
 def compute_mfu(
   config: dict,
   batch_size: int,
-  torch_dtype: str,
   sequence_length: int,
   step_duration: float,
   tpu_name: str,
   num_slices: int = 1,
   gradient_accumulation_steps: int = 1,
+  torch_dtype: str = "bfloat16",
 ) -> MFU:
   """
   Calculate MFU of a training config on some TPU hardware.
@@ -152,8 +152,6 @@ def compute_mfu(
     config: a dictionary representing a decoded JSON HuggingFace-style model config.
 
     batch_size: global batch size.
-    
-    torch_dtype: data type used for training (e.g. `bfloat16`).
 
     sequence_length: number of tokens in each training example.
 
@@ -164,6 +162,7 @@ def compute_mfu(
     gradient_accumulation_steps: how many dataloader iterations per optimizer iteration. See \
       https://huggingface.co/docs/accelerate/v0.11.0/en/gradient_accumulation. Defaults to 1.
 
+    torch_dtype: data type used for training (e.g. `bfloat16`).
   """
   total_tflops = calculate_tflops_training_per_device(
     Config(
