@@ -41,12 +41,31 @@ tp run --use-hf torchprime/hf_models/train.py \
 # Locally run the Hugging Face trainer and log metrics to tensorboard for analysis.
 tp docker-run --use-hf torchprime/hf_models/train.py \
     train_script.args.per_device_train_batch_size=8 \
-    +train_script.args.log_loss=true \
     train_script.args.logging_strategy=steps \
+    +train_script.args.log_loss=true \
     +train_script.args.logging_steps=1 \
     +train_script.args.logging_first_step=true \
     +train_script.args.report_to=tensorboard \
     train_script.args.max_steps=150
 ```
+
+## Viewing tensorboard metrics
+
+The Hugging Face trainer writes tensorboard metrics for each experiment under
+`${output_dir}/runs`, where `output_dir` comes from the Hydra config.
+
+The metrics contains `loss` and `learning_rate` etc. and you can visualize their
+progression by starting a tensorboard web server:
+
+```sh
+tensorboard --logdir outputs/runs
+```
+
+If you're starting tensorboard on a remote VM, you may use VSCode or SSH to
+forward its HTTP port (typically `6006`) to your local machine, and then open
+the prompted link on your browser. You should expect to see something like this
+after running a few experiments:
+
+![Tensorboard metrics](./tensorboard-screenshot.png)
 
 [hf-transformers]: https://github.com/huggingface/transformers
