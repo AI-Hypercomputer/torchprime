@@ -114,6 +114,5 @@ def prepare_benchmark_summary(
       0
     ],  # hardware_id is the TPU generation (e.g. v4, v5e)
     "hardware_num_chips": hardware_num_chips,
-    "hardware_num_nodes": hardware_num_chips // 4,  # 4 chips per node for TPU
     **kwargs,
   }
