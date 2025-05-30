@@ -1,7 +1,21 @@
+"""
+Basic trainer module for TPU-based model training using PyTorch/XLA.
+
+This script provides a `Trainer` class that sets up model sharding, activation checkpointing,
+optimization, and the training loop with XLA-specific configurations. It is designed to work with
+distributed TPU training and includes utilities for metrics logging and MFU computation.
+
+Key functionalities:
+- Setup of XLA devices, model transformations, and optimizer.
+- Integration with Hugging Face transformers and Adafactor optimizer.
+- Training loop with step-level profiling, logging, and TPU synchronization.
+- Supports minibatch and full-batch training strategies.
+- Computes Model FLOPs Utilization (MFU) after profiling.
+"""
+
 import logging
 import math
 import os
-from functools import partial
 from pathlib import Path
 from timeit import default_timer as timer
 
@@ -10,39 +24,30 @@ import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.parallel_loader as pl
-import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
-from torch_xla.distributed.fsdp import checkpoint_module
-from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
 from transformers import (
   default_data_collator,
   get_scheduler,
 )
 from transformers.optimization import Adafactor
-from transformers.trainer_pt_utils import get_module_class_from_name
 
-from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
-from torchprime.sharding.shard_model import (
-  shard_torch_xla_model_from_config,
-  wrap_module,
+from torchprime.torch_xla_models.optimization.remat_and_scan import (
+  add_activation_checkpointing_and_scan,
+  add_optimization_barriers,
 )
-from torchprime.torch_xla_models import offloading, remat_all, scan_layers
-from torchprime.torch_xla_models.topology import (
-  get_mesh,
-  get_num_slices,
-  is_1d_sharding,
-)
+from torchprime.torch_xla_models.sharding.initialization import setup_sharding_and_mesh
+from torchprime.torch_xla_models.topology import get_num_slices
 
 logger = logging.getLogger(__name__)
 
 
-def get_model_dtype(module):
+def get_model_dtype(module: nn.Module) -> torch.dtype:
   dtypes = {param.dtype for param in module.parameters()}
   if len(dtypes) != 1:
     raise ValueError(f"Inconsistent dtypes found: {dtypes}")
@@ -50,7 +55,18 @@ def get_model_dtype(module):
 
 
 class Trainer:
-  """The basic trainer."""
+  """
+  Trainer class for TPU-accelerated model training using PyTorch/XLA.
+
+  This class encapsulates model preparation, optimizer configuration, data loading,
+  and the training loop. It is designed to handle distributed training across TPU cores,
+  enabling features like SPMD sharding, activation checkpointing, and profiling.
+
+  Args:
+    model (nn.Module): The model to train.
+    config (DictConfig): Configuration object containing training hyperparameters and setup.
+    train_dataset (Dataset | IterableDataset | None): Dataset used for training.
+  """
 
   minibatch: bool
 
@@ -65,38 +81,14 @@ class Trainer:
     self.global_batch_size = self.config.global_batch_size
     self.train_dataset = train_dataset
 
-    # Set up SPMD mesh and shard the model
-    mesh = get_mesh(self.config)
-    xs.set_global_mesh(mesh)
-    logger.info(f"Logical mesh shape: {mesh.shape()}")
-    logger.info(f"Logical mesh device assignments: {mesh.device_ids}")
-
-    # TODO(https://github.com/pytorch/xla/issues/8696): Minibatch only works in 1D sharding.
-    minibatch = is_1d_sharding(tuple(config.ici_mesh.values()))
-    self.minibatch = minibatch
-    logger.info(f"Minibatch dataloading: {minibatch}")
-
-    # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
-    self.input_sharding_spec = xs.ShardingSpec(
-      mesh, (("data", "fsdp"), None), minibatch=minibatch
+    # Sharding setup
+    model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
+      model, config
     )
 
-    # Recursively replace `nn.Linear` layers with einsum operations in the model.
-    # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
-    # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
-    model = apply_xla_patch_to_nn_linear(model)
-
-    # Annotate model weights and activations with sharding constraints to distribute
-    # the training across devices following the SPMD paradigm.
-    sharding_config = OmegaConf.to_container(self.config.model.sharding, resolve=True)
-    assert isinstance(sharding_config, dict), (
-      f"Sharding config {sharding_config} must be a dict"
-    )
-    model = shard_torch_xla_model_from_config(model, config=sharding_config)
-
-    # Rematerialize forward computation during the backward pass if requested.
-    model = self._add_checkpoint_offload_scan_model(model)
-    model = self._add_optimization_barrier_model(model)
+    # Model transformations
+    model = add_activation_checkpointing_and_scan(model, config)
+    model = add_optimization_barriers(model, config)
     self.model = model
 
     # Set up optimizers
@@ -120,7 +112,7 @@ class Trainer:
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
 
-  def _prime_optimizer(self):
+  def _prime_optimizer(self) -> None:
     for group in self.optimizer.param_groups:
       for p in group["params"]:
         p.grad = torch.zeros_like(p)
@@ -128,7 +120,7 @@ class Trainer:
     self.optimizer.step()
     torch_xla.sync()
 
-  def _get_train_dataloader(self):
+  def _get_train_dataloader(self) -> pl.MpDeviceLoader:
     if self.train_dataset is None:
       raise ValueError("Trainer: training requires a train_dataset.")
 
@@ -167,94 +159,7 @@ class Trainer:
     )
     return loader
 
-  def _add_checkpoint_offload_scan_model(self, model: nn.Module):
-    remat_classes = self._get_classes_by_names(
-      model, self.config.model.remat.get("activation_checkpoint_layers", [])
-    )
-    layers_to_scan = self.config.model.remat.get("scan_layers", None)
-    offload_tensors = self.config.model.remat.get("offload_tensors", [])
-
-    # Checking preconditions and logging.
-    if remat_classes:
-      logger.info(f"Enabling activation checkpointing on {remat_classes}")
-    if layers_to_scan:
-      assert isinstance(layers_to_scan, str)
-      logger.info(f"Compiling module `{layers_to_scan}` with scan")
-    if len(offload_tensors):
-      logger.info(f"Will offload these tensors to host RAM: {offload_tensors}")
-      if layers_to_scan is None:
-        raise NotImplementedError("Host offloading requires scan")
-      if len(remat_classes) != 1:
-        raise NotImplementedError(
-          "Host offloading requires checkpointing exactly one layer"
-        )
-
-    def maybe_checkpoint(mod, _name):
-      if isinstance(mod, tuple(remat_classes)):
-        return checkpoint_module(mod)
-      return mod
-
-    if layers_to_scan is None:
-      # Implement activation checkpointing without scan by wrapping modules.
-      if not remat_classes:
-        return model
-      return wrap_module(model, maybe_checkpoint)
-
-    if not remat_classes:
-      # Scan without activation checkpointing.
-      return scan_layers.compile(model, layers_to_scan)
-
-    # Implement activation checkpointing and host offloading under scan via
-    # a graph partitioner instead of `checkpoint_module`.
-    seq = model.get_submodule(layers_to_scan)
-    assert isinstance(seq, HomogeneousSequential)
-    if len(remat_classes) != 1 or list(remat_classes)[0] != seq.repeated_layer:
-      raise NotImplementedError(
-        f"When compiling decoder layers with scan and \
-          activation checkpointing is also requested, we only support \
-          checkpointing {seq.repeated_layer} i.e. the layer being scanned."
-      )
-    if not len(offload_tensors):
-      partition_fn = remat_all.remat_all_partition_fn
-    else:
-      partition_fn = partial(
-        offloading.remat_all_and_offload_these_inputs,
-        names_to_offload=offload_tensors,
-      )
-    return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn)
-
-  def _add_optimization_barrier_model(self, model: nn.Module):
-    classes = self._get_classes_by_names(
-      model, self.config.model.remat.get("optimization_barrier_layers", [])
-    )
-    if not classes:
-      return model
-
-    logger.info(f"Adding backward optimization barriers to {classes}")
-
-    def maybe_add_barrier(mod, _name):
-      if isinstance(mod, tuple(classes)):
-        # Register a backward hook to place optimization barrier to prevent
-        # gigantic fusions on syncing the gradients.
-        xs.apply_backward_optimization_barrier(mod)
-        return mod
-      return mod
-
-    return wrap_module(model, maybe_add_barrier)
-
-  def _get_classes_by_names(self, model, activation_checkpoint_layers: list[str]):
-    classes_to_checkpoint = set()
-    for layer_class in activation_checkpoint_layers:
-      cls = get_module_class_from_name(model, layer_class)
-      if cls is None:
-        raise Exception(
-          f"Could not find the transformer layer class {layer_class} in the model."
-        )
-      else:
-        classes_to_checkpoint.add(cls)
-    return tuple(classes_to_checkpoint)
-
-  def train_loop(self):
+  def train_loop(self) -> None:
     self.model.train()
     self.model.zero_grad()
 
@@ -344,7 +249,7 @@ class Trainer:
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
 
   @torch_xla.compile(full_graph=True)
-  def train_step(self, batch):
+  def train_step(self, batch: dict) -> torch.Tensor:
     _logits, loss = self.model(**batch)
     loss.backward()
     self.optimizer.step()

@@ -18,7 +18,7 @@ from transformers import (
 )
 
 from torchprime.data.dataset import make_huggingface_dataset
-from torchprime.torch_xla_models.trainers.basic import Trainer
+from torchprime.torch_xla_models.trainer.basic import Trainer
 from torchprime.utils.retry import retry
 
 transformers.utils.check_min_version("4.39.3")
