@@ -16,6 +16,7 @@ def test_llama2_7b_v5p_mfu():
   result = compute_mfu(
     config,
     batch_size=1024,
+    torch_dtype="bfloat16",
     sequence_length=4096,
     step_duration=2.801027417,
     tpu_name="foobar-v5p-512",
@@ -36,6 +37,7 @@ def test_llama2_70b_v5e_mfu():
   result = compute_mfu(
     config,
     batch_size=512,
+    torch_dtype="bfloat16",
     sequence_length=2048,
     step_duration=14.97010803,
     tpu_name="v5e-256-stuff",
@@ -56,6 +58,7 @@ def test_llama3_70b_v6e_mfu():
   result = compute_mfu(
     config,
     batch_size=128,
+    torch_dtype="bfloat16",
     sequence_length=8192,
     step_duration=16.992,
     tpu_name="abc-v6e-128-stuff",
@@ -76,6 +79,7 @@ def test_llama3_405b_v6e_2_pods_mfu():
   result = compute_mfu(
     config,
     batch_size=512,
+    torch_dtype="bfloat16",
     sequence_length=8192,
     step_duration=84.168,
     tpu_name="v6e-256",
@@ -99,6 +103,7 @@ def test_mixtral_8x7b_v5p_mfu():
   result = compute_mfu(
     config,
     batch_size=4608,
+    torch_dtype="bfloat16",
     sequence_length=4096,
     step_duration=51.876,
     tpu_name="abc-v5p-256-stuff",
@@ -121,6 +126,7 @@ def test_mixtral_8x7b_v6e_mfu():
   result = compute_mfu(
     config,
     batch_size=1024,
+    torch_dtype="bfloat16",
     sequence_length=4096,
     step_duration=5.04,
     tpu_name="v6e-256",
@@ -143,6 +149,7 @@ def test_mixtral_8x7b_v6e_2_pods_mfu():
   result = compute_mfu(
     config,
     batch_size=2048,
+    torch_dtype="bfloat16",
     sequence_length=4096,
     step_duration=5.36,
     tpu_name="v6e-256",
