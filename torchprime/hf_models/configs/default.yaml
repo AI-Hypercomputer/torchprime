@@ -8,6 +8,7 @@ env:
   - PROFILE_DURATION_MS: 100000
 
 profile_dir: "profile"
+output_dir: "outputs"
 
 # args for the hugging face run_clm.py training script
 train_script:
@@ -21,7 +22,6 @@ train_script:
     per_device_train_batch_size: 256
 
     do_train: true
-    output_dir: "test-clm"
     overwrite_output_dir: true
     config_name: "torchprime/hf_models/configs/model/llama-3/config_8b.json"
     cache_dir: "cache"

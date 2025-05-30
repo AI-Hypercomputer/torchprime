@@ -108,6 +108,10 @@ class Trainer:
     model = self._add_optimization_barrier_model(model)
     self.model = model
 
+    assert self.config.optimizer.type == "adafactor", (
+      "Currently only Adafactor optimizer is supported"
+    )
+
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
@@ -263,7 +267,7 @@ class Trainer:
         classes_to_checkpoint.add(cls)
     return tuple(classes_to_checkpoint)
 
-  def train_loop(self):
+  def train_loop(self, metrics_logger):
     self.model.train()
     self.model.zero_grad()
 
@@ -272,7 +276,6 @@ class Trainer:
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
-    metrics_logger = MetricsLogger(self.config.model)
     logger.info("Starting training")
     logger.info(f"    Max step: {max_step}")
     logger.info(f"    Global batch size: {self.global_batch_size}")
@@ -330,27 +333,35 @@ class Trainer:
 
       tpu_name = os.environ.get("TORCHPRIME_TPU_TYPE", None)
       if tpu_name:
-        # Add "torch_dtype" in model config
-        model_config_for_mfu = OmegaConf.to_container(self.config.model, resolve=True)
-        model_config_for_mfu["torch_dtype"] = str(
-          get_model_dtype(self.model)
-        ).removeprefix("torch.")
-
         # Compute MFU
         mfu = compute_mfu(
-          config=model_config_for_mfu,
+          config=self.config.model,
           batch_size=self.config.global_batch_size,
           step_duration=step_duration,
           tpu_name=tpu_name,
           num_slices=get_num_slices(),
           sequence_length=self.config.block_size,
+          torch_dtype=self.config.torch_dtype,
         )
         metrics_logger.log_mfu(mfu.mfu)
+
+        # Compute tokens per seconds
+        tokens_per_second = (
+          self.config.block_size * self.config.global_batch_size // step_duration
+        )
+        metrics_logger.log_tokens_per_second(tokens_per_second)
+
+        # Log number of steps
+        metrics_logger.log_num_steps(self.config.max_steps)
 
     # Print and save metrics
     metrics = metrics_logger.finalize()
     logger.info("***** train metrics *****\n%s", metrics)
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
+
+    # Save the hydra config
+    config_save_path = Path(self.config.output_dir) / "train_config.json"
+    OmegaConf.save(config=self.config, f=config_save_path)
 
   @torch_xla.compile(full_graph=True)
   def train_step(self, batch):
@@ -402,7 +413,9 @@ def get_model_dtype(module):
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
-  # Configure logging
+  metrics_logger = (
+    MetricsLogger()
+  )  # Call metricslogger in the beginning to get correct start time.
   print(OmegaConf.to_yaml(config))  # Print the config for debugging
   log_level = logging.INFO
   logger.setLevel(log_level)
@@ -421,10 +434,13 @@ def main(config: DictConfig):
   tokenizer_name = config.model.tokenizer_name
   tokenizer = retry(lambda: AutoTokenizer.from_pretrained(tokenizer_name))
 
+  assert config.torch_dtype == "bfloat16", "Currently only bfloat16 is supported"
+  model_dtype = getattr(torch, config.torch_dtype)
+
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
   # sharding annotations to the weights later, and run the constructor on the XLA device.
-  with set_default_dtype(torch.bfloat16), torch_xla.device():
+  with set_default_dtype(model_dtype), torch_xla.device():
     model = initialize_model_class(config.model)
 
   n_params = sum([p.numel() for p in model.parameters()])
@@ -449,7 +465,7 @@ def main(config: DictConfig):
 
   # TODO(https://github.com/pytorch/xla/issues/8954): Remove `jax_env_context`.
   with jax_env_context():
-    trainer.train_loop()
+    trainer.train_loop(metrics_logger)
 
 
 if __name__ == "__main__":

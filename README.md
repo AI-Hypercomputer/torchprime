@@ -131,7 +131,7 @@ You may refer to the hydra docs for other ways to specify configs.
 ### Multi-VM distributed training
 
 `torchprime` uses [xpk][xpk] as the standard path for iterating on distributed
-training code that needs to run on muliple VMs.
+training code that needs to run on multiple VMs.
 
 First teach `torchprime` about the XPK cluster it is using, the artifact storage
 location, etc. You only need to do this on first clone or when switching to a
