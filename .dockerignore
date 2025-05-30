@@ -71,3 +71,6 @@ htmlcov/
 
 # Google cloud credentials generated during CI
 gha-creds-*.json
+
+# model
+/torchprime/torch_xla_models/llama/llama3_8b/

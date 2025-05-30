@@ -76,3 +76,6 @@ htmlcov/
 
 # Google cloud credentials generated during CI
 gha-creds-*.json
+
+# safetensors model wieghts
+*.safetensors
