@@ -336,7 +336,9 @@ class Trainer:
         OmegaConf.set_struct(self.config.model, False)
 
         # Add precision in config
-        self.config.model.torch_dtype = get_model_dtype(self.model).name
+        self.config.model.torch_dtype = str(get_model_dtype(self.model)).removeprefix(
+          "torch."
+        )
 
         # Add optimizer in config
         self.config.optimizer.type = str(self.optimizer.__class__.__name__)
