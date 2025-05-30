@@ -3,6 +3,7 @@ defaults:
   - sharding: llama-fsdp  # refers to sharding/llama-fsdp.yaml
   - remat: llama  # refers to remat/llama.yaml
 
+model_id: llama-3.1-8b
 model_class: llama.LlamaForCausalLM  # Used to import the model from this class
 vocab_size: 128256
 hidden_size: 4096

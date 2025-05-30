@@ -142,6 +142,7 @@ def compute_mfu(
   tpu_name: str,
   num_slices: int = 1,
   gradient_accumulation_steps: int = 1,
+  torch_dtype: str = "bfloat16",
 ) -> MFU:
   """
   Calculate MFU of a training config on some TPU hardware.
@@ -161,6 +162,7 @@ def compute_mfu(
     gradient_accumulation_steps: how many dataloader iterations per optimizer iteration. See \
       https://huggingface.co/docs/accelerate/v0.11.0/en/gradient_accumulation. Defaults to 1.
 
+    torch_dtype: data type used for training (e.g. `bfloat16`).
   """
   total_tflops = calculate_tflops_training_per_device(
     Config(
@@ -181,8 +183,7 @@ def compute_mfu(
     log=False,
   )
 
-  dtype = config.get("torch_dtype")
-  assert dtype == "bfloat16", f"Unsupported dtype {dtype}"
+  assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 
   chip_count_per_slice, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_name)
 

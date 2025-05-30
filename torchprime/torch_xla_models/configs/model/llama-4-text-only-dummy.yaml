@@ -5,9 +5,9 @@ defaults:
   - sharding: llama4-fsdp  # refers to sharding/llama4-fsdp.yaml
   - remat: llama4  # refers to remat/llama4.yaml
 
+model_id: llama-4-text-only-dummy
 model_class: llama4.Llama4TextForCausalLM  # Used to import the model from this class
 tokenizer_name: meta-llama/Llama-4-Scout-17B-16E
-torch_dtype: bfloat16
 use_bfloat16: true
 temperature: 1.0
 bos_token_id: 200000

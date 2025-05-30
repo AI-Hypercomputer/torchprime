@@ -61,7 +61,9 @@ def set_default_dtype(dtype):
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
-  # Configure logging
+  metrics_logger = (
+    MetricsLogger()
+  )  # Call metricslogger in the beginning to get correct start time.
   print(OmegaConf.to_yaml(config))  # Print the config for debugging
   log_level = logging.INFO
   logger.setLevel(log_level)
@@ -80,10 +82,13 @@ def main(config: DictConfig):
   tokenizer_name = config.model.tokenizer_name
   tokenizer = retry(lambda: AutoTokenizer.from_pretrained(tokenizer_name))
 
+  assert config.torch_dtype == "bfloat16", "Currently only bfloat16 is supported"
+  model_dtype = getattr(torch, config.torch_dtype)
+
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
   # sharding annotations to the weights later, and run the constructor on the XLA device.
-  with set_default_dtype(torch.bfloat16), torch_xla.device():
+  with set_default_dtype(model_dtype), torch_xla.device():
     model = initialize_model_class(config.model)
 
   n_params = sum([p.numel() for p in model.parameters()])
@@ -108,7 +113,7 @@ def main(config: DictConfig):
 
   # TODO(https://github.com/pytorch/xla/issues/8954): Remove `jax_env_context`.
   with jax_env_context():
-    trainer.train_loop()
+    trainer.train_loop(metrics_logger)
 
 
 if __name__ == "__main__":

@@ -277,6 +277,7 @@ def docker_run(args, use_hf: bool):
     "--privileged",
     "--net",
     "host",
+    "--shm-size=16G",
     "--rm",
     "-v",
     f"{os.getcwd()}:/workspace",
