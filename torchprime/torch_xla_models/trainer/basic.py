@@ -163,7 +163,7 @@ class Trainer:
     self.model.train()
     self.model.zero_grad()
 
-    # For now we assume that we wil never train for mor than one epoch
+    # For now we assume that we will never train for more than one epoch
     max_step = self.config.max_steps
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
