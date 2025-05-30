@@ -93,7 +93,7 @@ def collect_and_upload_benchmark_summary(
     logs_comments=env_vars["comments"],
     gcs_metrics_bucket=os.path.join(env_vars["gcs_artifact_dir"], jobset_name),
     workload_gbs=config.get("global_batch_size") if config else None,
-    workload_precision=model_config.get("torch_dtype"),
+    workload_precision=config.get("torch_dtype"),
     workload_optimizer=optimizer_config.get("type"),
     workload_sequence_length=config.get("block_size") if config else None,
     **metrics,

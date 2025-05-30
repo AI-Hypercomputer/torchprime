@@ -137,6 +137,7 @@ def calculate_tflops_training_per_device(config: Config, log=True):
 def compute_mfu(
   config: dict,
   batch_size: int,
+  torch_dtype: str,
   sequence_length: int,
   step_duration: float,
   tpu_name: str,
@@ -151,6 +152,8 @@ def compute_mfu(
     config: a dictionary representing a decoded JSON HuggingFace-style model config.
 
     batch_size: global batch size.
+    
+    torch_dtype: data type used for training (e.g. `bfloat16`).
 
     sequence_length: number of tokens in each training example.
 
@@ -181,8 +184,7 @@ def compute_mfu(
     log=False,
   )
 
-  dtype = config.get("torch_dtype")
-  assert dtype == "bfloat16", f"Unsupported dtype {dtype}"
+  assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 
   chip_count_per_slice, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_name)
 

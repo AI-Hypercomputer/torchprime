@@ -337,6 +337,7 @@ class Trainer:
         mfu = compute_mfu(
           config=self.config.model,
           batch_size=self.config.global_batch_size,
+          torch_dtype=self.config.torch_dtype,
           step_duration=step_duration,
           tpu_name=tpu_name,
           num_slices=get_num_slices(),
@@ -433,8 +434,8 @@ def main(config: DictConfig):
   tokenizer_name = config.model.tokenizer_name
   tokenizer = retry(lambda: AutoTokenizer.from_pretrained(tokenizer_name))
 
-  assert config.model.torch_dtype == "bfloat16", "Currently only bfloat16 is supported"
-  model_dtype = getattr(torch, config.model.torch_dtype)
+  assert config.torch_dtype == "bfloat16", "Currently only bfloat16 is supported"
+  model_dtype = getattr(torch, config.torch_dtype)
 
   # Set the model dtype to bfloat16, and set the default device to the XLA device.
   # This will capture the model constructor into a graph so that we can add
