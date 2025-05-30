@@ -39,6 +39,8 @@ tp run --use-hf torchprime/hf_models/train.py \
     +train_script.args.spmd_2d_sharding=4
 
 # Locally run the Hugging Face trainer and log metrics to tensorboard for analysis.
+# By default, `torchprime/hf_models/train.py` will train the model configured
+# by `train_script.args.config_name`, which defaults to Llama 3.0 8B.
 tp docker-run --use-hf torchprime/hf_models/train.py \
     train_script.args.per_device_train_batch_size=8 \
     train_script.args.logging_strategy=steps \
@@ -48,6 +50,19 @@ tp docker-run --use-hf torchprime/hf_models/train.py \
     +train_script.args.report_to=tensorboard \
     train_script.args.max_steps=150
 ```
+
+## Configuring and sharding model in the Hugging Face trainer
+
+The Hugging Face training script takes different command line arguments than the
+torchprime trainer. See [`configs/default.yaml`](./configs/default.yaml) for the
+default set of command line arguments passed to the Hugging Face trainer.
+
+In particular, sharding is configured with a combination of two flags:
+
+- `fsdp`: `"full_shard"`
+- `fsdp_config`: `"torchprime/hf_models/configs/model/llama-3/fsdp_config.json"`.
+  This points to a config file that further specifies which layer and how to
+  apply FSDP parallelism.
 
 ## Viewing tensorboard metrics
 
