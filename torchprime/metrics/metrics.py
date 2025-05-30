@@ -25,9 +25,6 @@ class Metrics:
   tokens_per_second: float | None
   """The number of tokens processed per second during training."""
 
-  e2e_time: timedelta | None
-  """The end to end time of the training run."""
-
   num_steps: int | None
   """The number of steps performed during training."""
 
@@ -57,11 +54,11 @@ json_cfg.global_config.decoders[timedelta] = lambda obj: timedelta(seconds=obj)
 
 class MetricsLogger:
   def __init__(self):
+    self.train_runtime = None
     self.start_time = time.time()
     self.step_execution_time = None
     self.mfu = None
     self.tokens_per_second = None
-    self.e2e_time = None
     self.num_steps = None
 
   def log_step_execution_time(self, step_execution_time: float):
@@ -73,13 +70,11 @@ class MetricsLogger:
   def log_tokens_per_second(self, tokens_per_second: float):
     self.tokens_per_second = tokens_per_second
 
-  def log_e2e_time(self, e2e_time: timedelta):
-    self.e2e_time = e2e_time
-
   def log_num_steps(self, num_steps: int):
     self.num_steps = num_steps
 
   def finalize(self) -> Metrics:
+    self.train_runtime = timedelta(seconds=time.time() - self.start_time)
     return Metrics(
       train_runtime=timedelta(seconds=time.time() - self.start_time),
       step_execution_time=timedelta(seconds=self.step_execution_time)
@@ -87,6 +82,5 @@ class MetricsLogger:
       else None,
       mfu=self.mfu,
       tokens_per_second=self.tokens_per_second,
-      e2e_time=self.e2e_time,
       num_steps=self.num_steps,
     )

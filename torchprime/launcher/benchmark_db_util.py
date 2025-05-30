@@ -42,7 +42,7 @@ def get_metrics(base_artifact_path: str, jobset_name_for_outputs: str) -> dict |
     "metrics_step_time": metrics_data.step_execution_time.total_seconds(),
     "metrics_mfu": metrics_data.mfu,
     "metrics_tokens_per_second": metrics_data.tokens_per_second,
-    "metrics_e2e_time": metrics_data.e2e_time.total_seconds(),
+    "metrics_e2e_time": metrics_data.train_runtime.total_seconds(),
     "metrics_num_steps": metrics_data.num_steps,
   }
 

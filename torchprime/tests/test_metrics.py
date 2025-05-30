@@ -12,7 +12,6 @@ def test_print_metrics():
     step_execution_time=timedelta(seconds=63.1),
     mfu=0.30717649966,
     tokens_per_second=77936,
-    e2e_time=timedelta(seconds=813.02),
     num_steps=15,
   )
   expected_str = """
@@ -20,7 +19,6 @@ train_runtime        = 1:00:00
 step_execution_time  = 0:01:03.100000
 mfu                  = 0.30717649966
 tokens_per_second    = 77936
-e2e_time             = 0:13:33.020000
 num_steps            = 15
 """.lstrip()
   assert str(metrics) == expected_str
@@ -31,7 +29,6 @@ num_steps            = 15
     step_execution_time=None,
     mfu=None,
     tokens_per_second=None,
-    e2e_time=None,
     num_steps=None,
   )
   expected_str = """
@@ -39,7 +36,6 @@ train_runtime        = 1:00:00
 step_execution_time  = N/A
 mfu                  = N/A
 tokens_per_second    = N/A
-e2e_time             = N/A
 num_steps            = N/A
 """.lstrip()
   assert str(metrics) == expected_str
@@ -51,7 +47,6 @@ def test_metrics_to_json():
     step_execution_time=timedelta(seconds=1),
     mfu=1.0,
     tokens_per_second=1,
-    e2e_time=timedelta(seconds=1.0),
     num_steps=1,
   )
   json_str = metrics.to_json()  # type: ignore
