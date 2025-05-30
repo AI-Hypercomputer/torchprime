@@ -1,0 +1,7 @@
+global_batch_size: 4
+
+optimizer:
+  learning_rate: 5.e-5
+lr_scheduler:
+  type: linear
+  warmup_steps: 0
