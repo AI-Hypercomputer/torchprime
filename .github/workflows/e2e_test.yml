@@ -74,9 +74,10 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
-            global_batch_size=8 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=8 \
             ici_mesh.fsdp=4 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 
@@ -94,9 +95,10 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
             model.attention_kernel=splash_attention \
-            global_batch_size=8 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=8 \
             ici_mesh.fsdp=4 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 
@@ -114,9 +116,10 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
             model/remat=llama-scan-offload \
-            global_batch_size=8 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=8 \
             ici_mesh.fsdp=4 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 
@@ -134,10 +137,11 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model/sharding=llama-fsdp-tp \
-            global_batch_size=8 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=8 \
             ici_mesh.fsdp=2 \
             ici_mesh.tensor=2 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 
@@ -155,9 +159,10 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=mixtral-8x7b \
             model.num_hidden_layers=16 \
-            global_batch_size=8 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=8 \
             ici_mesh.fsdp=4 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 
@@ -176,10 +181,11 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model/sharding=llama-fsdp \
-            global_batch_size=16 \
+            data=wikitext \
+            task=basic \
+            task.global_batch_size=16 \
             dcn_mesh.fsdp=2 \
             ici_mesh.fsdp=4 \
-            dataset_config_name=wikitext-2-raw-v1 \
             profile_step=3 \
             max_steps=15
 

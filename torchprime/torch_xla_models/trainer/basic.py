@@ -73,7 +73,7 @@ class Trainer:
   ):
     self.config = config
     self.device = xm.xla_device()
-    self.global_batch_size = self.config.global_batch_size
+    self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
 
     # Sharding setup
@@ -86,14 +86,14 @@ class Trainer:
     model = add_optimization_barriers(model, config)
     self.model = model
 
-    assert self.config.optimizer.type == "adafactor", (
+    assert self.config.task.optimizer.type == "adafactor", (
       "Currently only Adafactor optimizer is supported"
     )
 
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
-      lr=self.config.optimizer.learning_rate,
+      lr=self.config.task.optimizer.learning_rate,
       relative_step=False,
       scale_parameter=False,
     )
@@ -102,10 +102,10 @@ class Trainer:
     # self._prime_optimizer()
 
     self.lr_scheduler = get_scheduler(
-      name=self.config.lr_scheduler.type,
+      name=self.config.task.lr_scheduler.type,
       optimizer=self.optimizer,
-      num_warmup_steps=self.config.lr_scheduler.warmup_steps,
-      num_training_steps=self.config.max_steps,
+      num_warmup_steps=self.config.task.lr_scheduler.warmup_steps,
+      num_training_steps=self.config.task.max_steps,
     )
 
     # Execute all initialization work queued so far before starting training.
@@ -166,7 +166,7 @@ class Trainer:
     self.model.zero_grad()
 
     # For now we assume that we will never train for more than one epoch
-    max_step = self.config.max_steps
+    max_step = self.config.task.max_steps
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
 
@@ -188,7 +188,7 @@ class Trainer:
       loss = self.train_step(batch)
       trace_end_time = timer()
 
-      if step % self.config.logging_steps == 0:
+      if step % self.config.task.logging_steps == 0:
 
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
           loss = loss.detach().item()
@@ -233,7 +233,7 @@ class Trainer:
         # Compute MFU
         mfu = compute_mfu(
           config=self.config.model,
-          batch_size=self.config.global_batch_size,
+          batch_size=self.config.task.global_batch_size,
           step_duration=step_duration,
           tpu_name=tpu_name,
           num_slices=get_num_slices(),
@@ -244,12 +244,12 @@ class Trainer:
 
         # Compute tokens per seconds
         tokens_per_second = (
-          self.config.block_size * self.config.global_batch_size // step_duration
+          self.config.block_size * self.config.task.global_batch_size // step_duration
         )
         metrics_logger.log_tokens_per_second(tokens_per_second)
 
         # Log number of steps
-        metrics_logger.log_num_steps(self.config.max_steps)
+        metrics_logger.log_num_steps(self.config.task.max_steps)
 
     # Print and save metrics
     metrics = metrics_logger.finalize()

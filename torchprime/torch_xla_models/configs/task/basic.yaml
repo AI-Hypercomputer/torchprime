@@ -1,4 +1,7 @@
+name: basic
 global_batch_size: 4
+logging_steps: 10
+max_steps: 15
 
 optimizer:
   learning_rate: 5.e-5

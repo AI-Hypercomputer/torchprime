@@ -9,20 +9,17 @@ defaults:
   - data: wikitext # refers to data/wikitext.yaml
   - task: basic # refers to task/basic.yaml
 
-
-logging_steps: 10
-max_steps: 15
 seed: 42
-profile_step: 2
+torch_dtype: bfloat16
 
 # This might be overwritten when using tp run to launch the run using XPK
+profile_step: 2
 profile_dir: profile
 profile_duration: 100000
 
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
 
-torch_dtype: bfloat16
 
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called

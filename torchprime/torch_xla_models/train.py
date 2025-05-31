@@ -96,16 +96,7 @@ def main(config: DictConfig):
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
   # Downloading and loading a dataset from the hub.
-  data = retry(
-    lambda: make_huggingface_dataset(
-      name=config.data.dataset_name,
-      config_name=config.data.dataset_config_name,
-      split="train",
-      cache_dir=config.cache_dir,
-      tokenizer=tokenizer,
-      block_size=config.block_size,
-    )
-  )
+  data = retry(lambda: make_huggingface_dataset(**config.data, tokenizer=tokenizer))
   trainer = Trainer(
     model=model,
     config=config,
