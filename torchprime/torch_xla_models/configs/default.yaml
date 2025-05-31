@@ -6,14 +6,12 @@
 defaults:
   - _self_ # refers to this config file
   - model: llama-3-8b # refers to model/llama-3-8b.yaml
+  - data: wikitext # refers to data/wikitext.yaml
+  - task: basic # refers to task/basic.yaml
 
-dataset_name: wikitext
-dataset_config_name: wikitext-2-raw-v1
-global_batch_size: 4
+
 logging_steps: 10
 max_steps: 15
-block_size: 8192
-cache_dir: /tmp/
 seed: 42
 profile_step: 2
 
@@ -25,12 +23,6 @@ profile_duration: 100000
 output_dir: outputs
 
 torch_dtype: bfloat16
-optimizer:
-  type: adafactor
-  learning_rate: 5.e-5
-lr_scheduler:
-  type: linear
-  warmup_steps: 0
 
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called

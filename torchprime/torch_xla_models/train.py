@@ -71,7 +71,7 @@ class Trainer:
   ):
     self.config = config
     self.device = xm.xla_device()
-    self.global_batch_size = self.config.global_batch_size
+    self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
 
     # Set up SPMD mesh and shard the model
@@ -449,8 +449,8 @@ def main(config: DictConfig):
   # Downloading and loading a dataset from the hub.
   data = retry(
     lambda: make_huggingface_dataset(
-      name=config.dataset_name,
-      config_name=config.dataset_config_name,
+      name=config.data.dataset_name,
+      config_name=config.data.dataset_config_name,
       split="train",
       cache_dir=config.cache_dir,
       tokenizer=tokenizer,
