@@ -1,16 +1,13 @@
-"""
-Basic trainer module for TPU-based model training using PyTorch/XLA.
+"""Basic trainer module for TPU-based model training using PyTorch/XLA.
 
 This script provides a `Trainer` class that sets up model sharding, activation checkpointing,
 optimization, and the training loop with XLA-specific configurations. It is designed to work with
 distributed TPU training and includes utilities for metrics logging and MFU computation.
 
-Key functionalities:
-- Setup of XLA devices, model transformations, and optimizer.
-- Integration with Hugging Face transformers and Adafactor optimizer.
-- Training loop with step-level profiling, logging, and TPU synchronization.
-- Supports minibatch and full-batch training strategies.
-- Computes Model FLOPs Utilization (MFU) after profiling.
+Typical usage example:
+
+  trainer = Trainer(model, config, train_dataset)
+  trainer.train_loop(metrics_logger)
 """
 
 import logging
@@ -54,17 +51,16 @@ def get_model_dtype(module: nn.Module) -> torch.dtype:
 
 
 class Trainer:
-  """
-  Trainer class for TPU-accelerated model training using PyTorch/XLA.
+  """Trainer class for TPU-accelerated model training using PyTorch/XLA.
 
   This class encapsulates model preparation, optimizer configuration, data loading,
   and the training loop. It is designed to handle distributed training across TPU cores,
   enabling features like SPMD sharding, activation checkpointing, and profiling.
 
   Args:
-    model (nn.Module): The model to train.
-    config (DictConfig): Configuration object containing training hyperparameters and setup.
-    train_dataset (Dataset | IterableDataset | None): Dataset used for training.
+    model: The model to train.
+    config: Configuration object containing training hyperparameters and setup.
+    train_dataset: Dataset used for training.
   """
 
   minibatch: bool
@@ -128,7 +124,8 @@ class Trainer:
       raise ValueError("Trainer: training requires a train_dataset.")
 
     num_replicas = xr.process_count()
-    logger.info(f"Num replicas: {num_replicas}")
+    logger.info("Num replicas: %d", num_replicas)
+
     if self.minibatch:
       sampler = torch.utils.data.DistributedSampler(
         self.train_dataset,
@@ -142,6 +139,7 @@ class Trainer:
         num_replicas=1,
         rank=0,
       )
+
     assert self.global_batch_size is not None
     if self.minibatch:
       # Each process loads the per-host batch size.
@@ -149,6 +147,7 @@ class Trainer:
     else:
       # Each process will load the global batch, then discard the unneeded parts.
       batch_size = self.global_batch_size
+
     dataloader = DataLoader(
       self.train_dataset,
       # Data collator will default to DataCollatorWithPadding, so we change it.
@@ -172,15 +171,15 @@ class Trainer:
     train_iterator = iter(train_loader)
 
     logger.info("Starting training")
-    logger.info(f"    Max step: {max_step}")
-    logger.info(f"    Global batch size: {self.global_batch_size}")
+    logger.info("    Max step: %d", max_step)
+    logger.info("    Global batch size: %d", self.global_batch_size)
 
     epoch = 0
     for step in range(max_step):
       try:
         batch = next(train_iterator)
       except StopIteration:
-        logger.warning(f"DataLoader exhausted at step {step}, reset iterator")
+        logger.warning("DataLoader exhausted at step %d, reset iterator", step)
         epoch += 1
         train_iterator = iter(train_loader)
         batch = next(train_iterator)
@@ -194,8 +193,11 @@ class Trainer:
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
           loss = loss.detach().item()
           logger.info(
-            f"Epoch: {epoch}, step: {step}, loss: {loss:0.4f}, "
-            f"trace time: {(trace_end_time - trace_start_time) * 1000:0.2f} ms"
+            "Epoch: %d, step: %d, loss: %.4f, trace time: %.2f ms",
+            epoch,
+            step,
+            loss,
+            (trace_end_time - trace_start_time) * 1000,
           )
           if math.isnan(loss):
             raise ValueError(f"Loss is NaN at step {step}")

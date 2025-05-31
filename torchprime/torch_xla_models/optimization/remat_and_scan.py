@@ -1,5 +1,4 @@
-"""
-Activation checkpointing, scan compilation, and optimization barrier injection utilities.
+"""Activation checkpointing, scan compilation, and optimization barrier injection utilities.
 
 This module defines utilities to apply memory-saving techniques during model training,
 specifically for use with PyTorch/XLA and SPMD sharding. It includes logic to:
@@ -8,11 +7,6 @@ specifically for use with PyTorch/XLA and SPMD sharding. It includes logic to:
 - Compile repeated modules with `scan` for memory/compute efficiency.
 - Enable host tensor offloading during checkpointing.
 - Apply backward optimization barriers to mitigate recompute overhead.
-
-Functions:
-- `add_activation_checkpointing_and_scan`: Configures checkpointing and scan transforms.
-- `add_optimization_barriers`: Inserts XLA backward barriers into specified layers.
-- `_get_classes_by_names`: Maps string layer names to actual model class objects.
 """
 
 import logging
@@ -34,23 +28,27 @@ logger = logging.getLogger(__name__)
 def add_activation_checkpointing_and_scan(
   model: nn.Module, config: DictConfig
 ) -> nn.Module:
-  """
-  Applies activation checkpointing and optionally compiles layers using scan.
+  """Applies activation checkpointing and optionally compiles layers using scan.
 
   This function enables memory-efficient training via:
-  - Rematerialization (activation checkpointing) for specified classes.
-  - XLA scan compilation for repeated layers to enable loop fusion and lower memory.
-  - Optional host offloading of tensors during rematerialization.
+    - Rematerialization (activation checkpointing) for specified classes.
+    - XLA scan compilation for repeated layers to enable loop fusion and lower memory.
+    - Optional host offloading of tensors during rematerialization.
 
   The logic handles multiple modes of operation depending on whether checkpointing,
   scan, and offloading are enabled/configured.
 
   Args:
-    model (torch.nn.Module): Model to transform.
-    config (omegaconf.DictConfig): Config with model.remat settings.
+    model: Model to transform.
+    config: Config with model.remat settings.
 
   Returns:
-    torch.nn.Module: Transformed model with checkpointing and scan if enabled.
+    Transformed model with checkpointing and scan if enabled.
+
+  Raises:
+    NotImplementedError: If host offloading is enabled without scan.
+    NotImplementedError: If multiple layers are passed for offloading.
+    NotImplementedError: If checkpointed layer does not match scanned layer.
   """
   remat_config = config.model.remat
   remat_classes = _get_classes_by_names(
@@ -61,11 +59,11 @@ def add_activation_checkpointing_and_scan(
 
   # Checking preconditions and logging.
   if remat_classes:
-    logger.info(f"Enabling activation checkpointing on {remat_classes}")
+    logger.info("Enabling activation checkpointing on %s", remat_classes)
   if layers_to_scan:
-    logger.info(f"Compiling module `{layers_to_scan}` with scan")
+    logger.info("Compiling module `%s` with scan", layers_to_scan)
   if offload_tensors:
-    logger.info(f"Will offload tensors to host RAM: {offload_tensors}")
+    logger.info("Will offload tensors to host RAM: %s", offload_tensors)
     if layers_to_scan is None:
       raise NotImplementedError("Host offloading requires scan")
     if len(remat_classes) != 1:
@@ -93,25 +91,25 @@ def add_activation_checkpointing_and_scan(
     remat_all.remat_all_partition_fn
     if not offload_tensors
     else partial(
-      offloading.remat_all_and_offload_these_inputs, names_to_offload=offload_tensors
+      offloading.remat_all_and_offload_these_inputs,
+      names_to_offload=offload_tensors,
     )
   )
   return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn)
 
 
 def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module:
-  """
-  Applies backward optimization barriers to specified layer types.
+  """Applies backward optimization barriers to specified layer types.
 
   Barriers help mitigate recompute inefficiencies during backpropagation.
   They are applied to user-specified layer classes using SPMD APIs.
 
   Args:
-    model (torch.nn.Module): The model to wrap.
-    config (omegaconf.DictConfig): Config with model.remat.optimization_barrier_layers.
+    model: The model to wrap.
+    config: Config with model.remat.optimization_barrier_layers.
 
   Returns:
-    torch.nn.Module: Modified model with optimization barriers.
+    Modified model with optimization barriers.
   """
   remat_config = config.model.remat
   classes = _get_classes_by_names(
@@ -120,7 +118,7 @@ def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module
   if not classes:
     return model
 
-  logger.info(f"Adding backward optimization barriers to {classes}")
+  logger.info("Adding backward optimization barriers to %s", classes)
 
   def maybe_add_barrier(mod: nn.Module, _name: str) -> nn.Module:
     if isinstance(mod, tuple(classes)):
@@ -133,15 +131,14 @@ def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module
 def _get_classes_by_names(
   model: nn.Module, class_names: list[str]
 ) -> tuple[type[nn.Module], ...]:
-  """
-  Helper to resolve string class names to actual model classes.
+  """Helper to resolve string class names to actual model classes.
 
   Args:
-    model (torch.nn.Module): Reference model to resolve context.
-    class_names (list[str]): List of fully-qualified class name strings.
+    model: Reference model to resolve context.
+    class_names: List of fully-qualified class name strings.
 
   Returns:
-    tuple[type]: Tuple of resolved class types.
+    Tuple of resolved class types.
 
   Raises:
     ValueError: If a class name cannot be resolved within the model.

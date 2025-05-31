@@ -1,5 +1,4 @@
-"""
-Unit tests for the TPU Trainer class using PyTorch/XLA.
+"""Unit tests for the TPU Trainer class using PyTorch/XLA.
 
 These tests validate the behavior of the Trainer class defined in
 `torchprime.torch_xla_models.trainer.basic` by mocking TPU-specific and sharding logic
