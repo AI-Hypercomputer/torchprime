@@ -25,7 +25,7 @@ dataset = "benchmark_dataset_test"
 table = "torchprime-e2e-tests"
 start_time = "2025-05-29 17:52:00 America/Los_Angeles"
 end_time = "2025-06-02 17:52:00 America/Los_Angeles"
-limit = 750
+limit = 800
 
 QUERY = f"""
 -- Find the most recent rows based on update_timestamp and sort them by most recent first

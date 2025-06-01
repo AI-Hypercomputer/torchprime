@@ -1,46 +1,46 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 2.67737232
+    step_time_lower_bound: 2.67728338
     step_time_upper_bound: 2.788876
-    confidence_interval: 0.05575
+    confidence_interval: 0.0558
     average: 2.7331
-    sample_size: 88
+    sample_size: 93
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.3577735
+    step_time_lower_bound: 2.3585946
     step_time_upper_bound: 2.452628
-    confidence_interval: 0.04743
-    average: 2.4052
-    sample_size: 88
+    confidence_interval: 0.04702
+    average: 2.4056
+    sample_size: 93
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.74174618
+    step_time_lower_bound: 2.73941304
     step_time_upper_bound: 2.857276
-    confidence_interval: 0.05776
-    average: 2.7995
-    sample_size: 88
+    confidence_interval: 0.05893
+    average: 2.7983
+    sample_size: 98
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.28929215
-    step_time_upper_bound: 3.38947363
+    step_time_lower_bound: 3.28923659
+    step_time_upper_bound: 3.38941638
     confidence_interval: 0.05009
-    average: 3.3394
-    sample_size: 81
+    average: 3.3393
+    sample_size: 93
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.09970013
-    step_time_upper_bound: 3.19410724
+    step_time_lower_bound: 3.09939419
+    step_time_upper_bound: 3.19379198
     confidence_interval: 0.0472
-    average: 3.1469
-    sample_size: 88
+    average: 3.1466
+    sample_size: 94
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 3.87682821
+    step_time_lower_bound: 3.87729011
     step_time_upper_bound: 4.026164
-    confidence_interval: 0.07467
-    average: 3.9515
-    sample_size: 75
+    confidence_interval: 0.07444
+    average: 3.9517
+    sample_size: 93
 metadata:
   query_start: 2025-05-29 17:52:00 America/Los_Angeles
   query_end: 2025-06-02 17:52:00 America/Los_Angeles

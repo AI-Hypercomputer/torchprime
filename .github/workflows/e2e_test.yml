@@ -214,7 +214,6 @@ jobs:
   #
   # Note that we use the convention of
   # `step_time_upper_bound - step_time_lower_bound = confidence_interval * 2`.
-
   validate:
     name: ${{ matrix.config.name }}
     needs: [tp-run, load-benchmarks]
