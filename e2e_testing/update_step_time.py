@@ -7,8 +7,10 @@ related to the `pytorch_torchprime` software ID within a specific date range.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
+import click
 import numpy as np
 import scipy
 import yaml
@@ -18,32 +20,15 @@ from rich.table import Table
 
 from torchprime.launcher.benchmark_db_util import TORCHPRIME_SOFTWARE_ID
 
-client = bigquery.Client()
-
-project = "tpu-pytorch"
-dataset = "benchmark_dataset_test"
-table = "torchprime-e2e-tests"
-start_time = "2025-05-29 17:52:00 America/Los_Angeles"
-end_time = "2025-06-02 17:52:00 America/Los_Angeles"
-limit = 800
-
-QUERY = f"""
--- Find the most recent rows based on update_timestamp and sort them by most recent first
-SELECT
-  *
-FROM
-  `{project}`.`{dataset}`.`{table}`
-WHERE
-  software_id = '{TORCHPRIME_SOFTWARE_ID}' AND
-  update_timestamp >= TIMESTAMP('{start_time}') AND
-  update_timestamp <= TIMESTAMP('{end_time}')
-ORDER BY
-  update_timestamp DESC
-LIMIT
-  {limit};
-"""
-query_job = client.query(QUERY)
-rows = list(query_job.result())
+BENCHMARKS = {
+  "Llama 3.0 8B": "match_llama3_8b",
+  "Llama 3.1 8B (Splash Attention)": "match_llama3_1_8b_sa",
+  "Llama 3.1 8B (Scan + Offload)": "match_llama3_1_8b_scan_offload",
+  "Llama 3.0 8B (2D sharding)": "match_llama3_8b_2d",
+  "Mixtral 8x7B": "match_mixtral",
+  "Llama 3.0 8B (2 Slice)": "match_llama_3_8b_2_slice",
+}
+CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
 
 
 def match_llama3_8b(row):
@@ -97,20 +82,46 @@ def match_llama_3_8b_2_slice(row):
   )
 
 
-BENCHMARKS = {
-  "Llama 3.0 8B": match_llama3_8b,
-  "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
-  "Llama 3.1 8B (Scan + Offload)": match_llama3_1_8b_scan_offload,
-  "Llama 3.0 8B (2D sharding)": match_llama3_8b_2d,
-  "Mixtral 8x7B": match_mixtral,
-  "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
-}
-CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
+def parse_datetime(datetime_str):
+  """
+  Parse datetime string. First tries GoogleSQL format with timezone,
+  then falls back to Python datetime parsing and converts to GoogleSQL format.
+  """
+  # First check if it's already in GoogleSQL format (has timezone)
+  if " America/" in datetime_str or " UTC" in datetime_str:
+    return datetime_str
+
+  # Try common datetime formats and convert to GoogleSQL format
+  formats = [
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y",
+  ]
+
+  for fmt in formats:
+    try:
+      dt = datetime.strptime(datetime_str, fmt)
+      # Convert to GoogleSQL format with Pacific timezone
+      return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} America/Los_Angeles"
+    except ValueError:
+      continue
+
+  # If all else fails, try dateutil parser
+  try:
+    from dateutil import parser
+
+    dt = parser.parse(datetime_str)
+    return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} America/Los_Angeles"
+  except:
+    # Return as-is and let BigQuery handle the error
+    return datetime_str
 
 
 def calculate_confidence_t_interval(alpha, stdev, count):
   """Calculate margin of error using t-distribution."""
-
   if count <= 1 or stdev < 0:
     raise ValueError(
       f"Invalid parameters for t-distribution: count={count}, stdev={stdev}"
@@ -128,7 +139,6 @@ def calculate_confidence_t_interval(alpha, stdev, count):
 
 def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   """Implements the formula described in e2e_testing/README.md"""
-
   n = len(step_times)
   assert n > 1, "Not enough step times to compute bounds"
 
@@ -154,59 +164,133 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   return lower_bound, upper_bound
 
 
-step_time_by_benchmark = {}
+@click.command()
+@click.option(
+  "--bq-project",
+  default="tpu-pytorch",
+  help="BigQuery project ID",
+)
+@click.option(
+  "--bq-dataset",
+  default="benchmark_dataset_test",
+  help="BigQuery dataset name",
+)
+@click.option(
+  "--bq-table",
+  default="torchprime-e2e-tests",
+  help="BigQuery table name",
+)
+@click.option(
+  "--start-time",
+  default="2025-05-29 17:52:00 America/Los_Angeles",
+  help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
+  "Can also accept common datetime formats which will be converted to Pacific timezone.",
+)
+@click.option(
+  "--end-time",
+  default="2025-06-02 17:52:00 America/Los_Angeles",
+  help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-02 17:52:00 America/Los_Angeles'). "
+  "Can also accept common datetime formats which will be converted to Pacific timezone.",
+)
+@click.option(
+  "--limit",
+  default=1000,
+  type=int,
+  help="Maximum number of rows to retrieve",
+)
+@click.option(
+  "--output",
+  default="e2e_testing/step_time_bounds.yaml",
+  type=click.Path(),
+  help="Output YAML file path",
+)
+def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
+  """
+  Query BigQuery for E2E test results and compute step time bounds.
 
-for row in rows:
-  matched = set()
-  for name, match_fn in BENCHMARKS.items():
-    if match_fn(row):
-      matched.add(name)
-  if not matched:
-    raise ValueError(f"Run ID {row.run_id} does not match any benchmark: {matched}")
-  if len(matched) > 1:
-    raise ValueError(f"Run ID {row.run_id} matches multiple benchmarks: {matched}")
-  step_time_by_benchmark.setdefault(matched.pop(), []).append(row.metrics_step_time)
+  This script queries the specified BigQuery table for recent test results,
+  computes statistical bounds for each benchmark's step times, and exports
+  the results to a YAML file for use in GitHub Actions.
+  """
+  console = Console()
 
-step_time_by_benchmark = {name: step_time_by_benchmark[name] for name in BENCHMARKS}
+  # Parse datetime inputs
+  start_time = parse_datetime(start_time)
+  end_time = parse_datetime(end_time)
 
+  console.print("[bold]Querying BigQuery:[/bold]")
+  console.print(f"  Project: {bq_project}")
+  console.print(f"  Dataset: {bq_dataset}")
+  console.print(f"  Table: {bq_table}")
+  console.print(f"  Start: {start_time}")
+  console.print(f"  End: {end_time}")
+  console.print(f"  Limit: {limit}")
 
-console = Console()
-table = Table(title="Confidence Intervals for Step Time")
+  client = bigquery.Client()
 
-table.add_column("Benchmark", justify="right", style="cyan", no_wrap=True)
-table.add_column("Runs", justify="right", style="magenta")
-table.add_column("Average (sec)", justify="right", style="green")
-table.add_column("Lower Bound", justify="right", style="green")
-table.add_column("Upper Bound", justify="right", style="green")
-table.add_column("Range (ms)", justify="right", style="green")
+  query = f"""
+  -- Find the most recent rows based on update_timestamp and sort them by most recent first
+  SELECT
+    *
+  FROM
+    `{bq_project}`.`{bq_dataset}`.`{bq_table}`
+  WHERE
+    software_id = '{TORCHPRIME_SOFTWARE_ID}' AND
+    update_timestamp >= TIMESTAMP('{start_time}') AND
+    update_timestamp <= TIMESTAMP('{end_time}')
+  ORDER BY
+    update_timestamp DESC
+  LIMIT
+    {limit};
+  """
 
-for name, step_times in step_time_by_benchmark.items():
-  lower_bound, upper_bound = compute_bounds(step_times)
-  average = sum(step_times) / len(step_times)
-  interval_ms = (upper_bound - lower_bound) * 1000
-  table.add_row(
-    name,
-    f"{len(step_times)}",
-    f"{average:.2f}",
-    f"{lower_bound:.4f}",
-    f"{upper_bound:.4f}",
-    f"{interval_ms:.1f}",
-  )
+  query_job = client.query(query)
+  rows = list(query_job.result())
 
-console.print(table)
+  console.print(f"\n[green]Retrieved {len(rows)} rows[/green]\n")
 
-benchmarks_data = {}
-for name, step_times in step_time_by_benchmark.items():
-  if len(step_times) <= 1:
-    console.print(
-      f"[yellow]Warning: Skipping {name} - insufficient data points[/yellow]"
-    )
-    continue
+  # Group rows by benchmark
+  step_time_by_benchmark = {}
 
-  lower_bound, upper_bound = compute_bounds(step_times)
-  average = sum(step_times) / len(step_times)
+  # Create match function mapping
+  match_functions = {
+    "Llama 3.0 8B": match_llama3_8b,
+    "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
+    "Llama 3.1 8B (Scan + Offload)": match_llama3_1_8b_scan_offload,
+    "Llama 3.0 8B (2D sharding)": match_llama3_8b_2d,
+    "Mixtral 8x7B": match_mixtral,
+    "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
+  }
 
-  # Map benchmark names to their GitHub Action job IDs
+  for row in rows:
+    matched = set()
+    for name, match_fn in match_functions.items():
+      if match_fn(row):
+        matched.add(name)
+
+    if not matched:
+      raise ValueError(f"Run ID {row.run_id} does not match any benchmark")
+
+    if len(matched) > 1:
+      raise ValueError(f"Run ID {row.run_id} matches multiple benchmarks: {matched}")
+
+    step_time_by_benchmark.setdefault(matched.pop(), []).append(row.metrics_step_time)
+
+  # Ensure all benchmarks are represented
+  step_time_by_benchmark = {
+    name: step_time_by_benchmark.get(name, []) for name in BENCHMARKS
+  }
+
+  # Display results table
+  table = Table(title="Confidence Intervals for Step Time")
+  table.add_column("Benchmark", justify="right", style="cyan", no_wrap=True)
+  table.add_column("Runs", justify="right", style="magenta")
+  table.add_column("Average (sec)", justify="right", style="green")
+  table.add_column("Lower Bound", justify="right", style="green")
+  table.add_column("Upper Bound", justify="right", style="green")
+  table.add_column("Range (ms)", justify="right", style="green")
+
+  benchmarks_data = {}
   job_id_mapping = {
     "Llama 3.0 8B": "llama-3-8b",
     "Llama 3.1 8B (Splash Attention)": "llama-3_1-8b-sa",
@@ -216,34 +300,54 @@ for name, step_times in step_time_by_benchmark.items():
     "Llama 3.0 8B (2 Slice)": "llama-3-8b-2-slice",
   }
 
-  job_id = job_id_mapping.get(name)
-  if job_id:
-    benchmarks_data[job_id] = {
-      "name": name,
-      "step_time_lower_bound": round(lower_bound, 8),
-      "step_time_upper_bound": round(upper_bound, 8),
-      "confidence_interval": round((upper_bound - lower_bound) / 2, 5),
-      "average": round(average, 4),
-      "sample_size": len(step_times),
-    }
+  for name, step_times in step_time_by_benchmark.items():
+    lower_bound, upper_bound = compute_bounds(step_times)
+    average = sum(step_times) / len(step_times)
+    interval_ms = (upper_bound - lower_bound) * 1000
 
-# Write to file
-output_path = Path("e2e_testing/step_time_bounds.yaml")
-output_path.parent.mkdir(exist_ok=True)
+    table.add_row(
+      name,
+      f"{len(step_times)}",
+      f"{average:.2f}",
+      f"{lower_bound:.4f}",
+      f"{upper_bound:.4f}",
+      f"{interval_ms:.1f}",
+    )
 
-with open(output_path, "w") as f:
-  yaml.dump(
-    {
-      "benchmarks": benchmarks_data,
-      "metadata": {
-        "query_start": start_time,
-        "query_end": end_time,
-        "confidence_level": CONFIDENCE_LEVEL,
+    job_id = job_id_mapping.get(name)
+    if job_id:
+      benchmarks_data[job_id] = {
+        "name": name,
+        "step_time_lower_bound": round(lower_bound, 8),
+        "step_time_upper_bound": round(upper_bound, 8),
+        "confidence_interval": round((upper_bound - lower_bound) / 2, 5),
+        "average": round(average, 4),
+        "sample_size": len(step_times),
+      }
+
+  console.print(table)
+
+  # Write to file
+  output_path = Path(output)
+  output_path.parent.mkdir(exist_ok=True, parents=True)
+
+  with open(output_path, "w") as f:
+    yaml.dump(
+      {
+        "benchmarks": benchmarks_data,
+        "metadata": {
+          "query_start": start_time,
+          "query_end": end_time,
+          "confidence_level": CONFIDENCE_LEVEL,
+        },
       },
-    },
-    f,
-    default_flow_style=False,
-    sort_keys=False,
-  )
+      f,
+      default_flow_style=False,
+      sort_keys=False,
+    )
 
-console.print(f"\nPerformance bounds exported to {output_path}")
+  console.print(f"\n[green]Performance bounds exported to {output_path}[/green]")
+
+
+if __name__ == "__main__":
+  main()

@@ -1,46 +1,46 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 2.67728338
+    step_time_lower_bound: 2.67975625
     step_time_upper_bound: 2.788876
-    confidence_interval: 0.0558
-    average: 2.7331
-    sample_size: 93
+    confidence_interval: 0.05456
+    average: 2.7343
+    sample_size: 104
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.3585946
+    step_time_lower_bound: 2.35893329
     step_time_upper_bound: 2.452628
-    confidence_interval: 0.04702
-    average: 2.4056
-    sample_size: 93
+    confidence_interval: 0.04685
+    average: 2.4058
+    sample_size: 104
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.73941304
+    step_time_lower_bound: 2.73966392
     step_time_upper_bound: 2.857276
-    confidence_interval: 0.05893
-    average: 2.7983
-    sample_size: 98
+    confidence_interval: 0.05881
+    average: 2.7985
+    sample_size: 104
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.28923659
-    step_time_upper_bound: 3.38941638
+    step_time_lower_bound: 3.2893677
+    step_time_upper_bound: 3.38955149
     confidence_interval: 0.05009
-    average: 3.3393
-    sample_size: 93
+    average: 3.3395
+    sample_size: 104
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.09939419
-    step_time_upper_bound: 3.19379198
-    confidence_interval: 0.0472
-    average: 3.1466
-    sample_size: 94
+    step_time_lower_bound: 3.09912397
+    step_time_upper_bound: 3.19351353
+    confidence_interval: 0.04719
+    average: 3.1463
+    sample_size: 104
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 3.87729011
+    step_time_lower_bound: 3.88106931
     step_time_upper_bound: 4.026164
-    confidence_interval: 0.07444
-    average: 3.9517
-    sample_size: 93
+    confidence_interval: 0.07255
+    average: 3.9536
+    sample_size: 104
 metadata:
   query_start: 2025-05-29 17:52:00 America/Los_Angeles
   query_end: 2025-06-02 17:52:00 America/Los_Angeles
