@@ -189,19 +189,20 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.load.outputs.matrix }}
-      benchmarks: ${{ steps.load.outputs.benchmarks }}
     steps:
       - uses: actions/checkout@v4
       - name: Load step_time_bounds.yaml
         id: load
         run: |
-          # Extract benchmark IDs for matrix
-          MATRIX=$(yq -o=json -I=0 '.benchmarks | keys' e2e_testing/step_time_bounds.yaml)
+          # Extract benchmarks as array of objects for matrix
+          MATRIX=$(yq -o=json -I=0 '.benchmarks | to_entries | map({
+            "benchmark": .key,
+            "name": .value.name,
+            "lower_bound": .value.step_time_lower_bound,
+            "upper_bound": .value.step_time_upper_bound
+          })' e2e_testing/step_time_bounds.yaml)
+          echo "Matrix JSON: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-
-          # Extract full benchmark data
-          BENCHMARKS=$(yq -o=json -I=0 '.benchmarks' e2e_testing/step_time_bounds.yaml)
-          echo "benchmarks=$BENCHMARKS" >> "$GITHUB_OUTPUT"
 
   # Validate the results of the workloads
   #
