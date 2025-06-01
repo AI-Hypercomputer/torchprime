@@ -183,16 +183,16 @@ jobs:
             profile_step=3 \
             max_steps=15
 
-  # Load benchmark reference data
+  # Load reference step times
   load-benchmarks:
-    name: Load benchmark reference data
+    name: Load reference step times
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.load.outputs.matrix }}
       benchmarks: ${{ steps.load.outputs.benchmarks }}
     steps:
       - uses: actions/checkout@v4
-      - name: Load benchmark bounds
+      - name: Load step_time_bounds.yaml
         id: load
         run: |
           # Extract benchmark IDs for matrix
@@ -215,41 +215,24 @@ jobs:
   # `step_time_upper_bound - step_time_lower_bound = confidence_interval * 2`.
 
   validate:
-    name: Validate ${{ matrix.benchmark }}
+    name: ${{ matrix.config.name }}
     needs: [tp-run, load-benchmarks]
-    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        benchmark: ${{ fromJson(needs.load-benchmarks.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Get benchmark config
-        id: config
-        run: |
-          BENCHMARKS='${{ needs.load-benchmarks.outputs.benchmarks }}'
-          BENCHMARK_DATA=$(echo "$BENCHMARKS" | jq -r '."${{ matrix.benchmark }}"')
-
-          echo "name=$(echo "$BENCHMARK_DATA" | jq -r '.name')" >> "$GITHUB_OUTPUT"
-          echo "lower_bound=$(echo "$BENCHMARK_DATA" | jq -r '.step_time_lower_bound')" >> "$GITHUB_OUTPUT"
-          echo "upper_bound=$(echo "$BENCHMARK_DATA" | jq -r '.step_time_upper_bound')" >> "$GITHUB_OUTPUT"
-
-          # Map benchmark ID to jobset name output
-          case "${{ matrix.benchmark }}" in
-            "llama-3-8b") JOBSET_NAME="${{ needs.tp-run.outputs.llama-3-8b-name }}" ;;
-            "llama-3_1-8b-sa") JOBSET_NAME="${{ needs.tp-run.outputs.llama-3_1-8b-sa-name }}" ;;
-            "llama-3_1-8b-scan-offload") JOBSET_NAME="${{ needs.tp-run.outputs.llama-3_1-8b-scan-offload-name }}" ;;
-            "llama-3-8b-2d") JOBSET_NAME="${{ needs.tp-run.outputs.llama-3-8b-2d-name }}" ;;
-            "mixtral-8x7b") JOBSET_NAME="${{ needs.tp-run.outputs.mixtral-8x7b-name }}" ;;
-            "llama-3-8b-2-slice") JOBSET_NAME="${{ needs.tp-run.outputs.llama-3-8b-2-slice-name }}" ;;
-          esac
-
-          echo "jobset_name=$JOBSET_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Validate ${{ steps.config.outputs.name }}
-        uses: ./.github/workflows/reusable_e2e_check.yml
-        with:
-          jobset_name: ${{ steps.config.outputs.jobset_name }}
-          artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-          step_time_lower_bound: ${{ steps.config.outputs.lower_bound }}
-          step_time_upper_bound: ${{ steps.config.outputs.upper_bound }}
+        config: ${{ fromJson(needs.load-benchmarks.outputs.matrix) }}
+    uses: ./.github/workflows/reusable_e2e_check.yml
+    with:
+      jobset_name: >-
+        ${{
+          matrix.config.benchmark == 'llama-3-8b' && needs.tp-run.outputs.llama-3-8b-name ||
+          matrix.config.benchmark == 'llama-3_1-8b-sa' && needs.tp-run.outputs.llama-3_1-8b-sa-name ||
+          matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
+          matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||
+          matrix.config.benchmark == 'mixtral-8x7b' && needs.tp-run.outputs.mixtral-8x7b-name ||
+          matrix.config.benchmark == 'llama-3-8b-2-slice' && needs.tp-run.outputs.llama-3-8b-2-slice-name
+        }}
+      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
+      step_time_lower_bound: ${{ matrix.config.lower_bound }}
+      step_time_upper_bound: ${{ matrix.config.upper_bound }}
+    secrets: inherit
