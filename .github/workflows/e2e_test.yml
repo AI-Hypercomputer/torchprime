@@ -195,11 +195,11 @@ jobs:
       - name: Load benchmark bounds
         id: load
         run: |
-          # Extract benchmark IDs for matrix - compress to single line
+          # Extract benchmark IDs for matrix
           MATRIX=$(yq -o=json -I=0 '.benchmarks | keys' e2e_testing/step_time_bounds.yaml)
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-          # Extract full benchmark data - compress to single line
+          # Extract full benchmark data
           BENCHMARKS=$(yq -o=json -I=0 '.benchmarks' e2e_testing/step_time_bounds.yaml)
           echo "benchmarks=$BENCHMARKS" >> "$GITHUB_OUTPUT"
 
