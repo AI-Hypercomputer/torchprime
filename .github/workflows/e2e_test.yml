@@ -77,9 +77,9 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=8 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
       - name: Run Llama 3.1 8B (Splash Attention)
         id: run-llama-3_1-8b-SplashAttention
@@ -98,9 +98,9 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=8 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
       - name: Run Llama 3.1 8B (Scan + Offload)
         id: run-llama-3_1-8b-scan-offload
@@ -119,9 +119,9 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=8 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
       - name: Run Llama 3.0 8B (2D sharding)
         id: run-llama-3-8b-2d
@@ -140,10 +140,10 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=8 \
+            task.max_steps=15 \
             ici_mesh.fsdp=2 \
             ici_mesh.tensor=2 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
       - name: Run Mixtral 8x7B
         id: run-mixtral-8x7b
@@ -162,9 +162,9 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=8 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
       - name: Run Llama 3.0 8B (2 slice)
         id: run-llama-3-8b-2-slice
@@ -184,10 +184,10 @@ jobs:
             data=wikitext \
             task=basic \
             task.global_batch_size=16 \
+            task.max_steps=15 \
             dcn_mesh.fsdp=2 \
             ici_mesh.fsdp=4 \
-            profile_step=3 \
-            max_steps=15
+            profile_step=3 
 
   # Validate the results of the workloads
   #
