@@ -37,6 +37,9 @@ dev = [
     "dataclasses-json~=0.6.7",
     "watchdog~=6.0.0",
     "pathspec~=0.12.1",
+    "pyyaml~=6.0.2",
+    "rich~=14.0.0",
+    "scipy~=1.15.2",
     "tomli~=2.2.1",
     "xpk@git+https://github.com/AI-Hypercomputer/xpk@e52a5f4cd56ad50aeab06d55100cf4d3abc4c2c8"
 ]

@@ -381,6 +381,9 @@ def run(
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
+  if num_slices is None:
+    num_slices = config.num_slices
+
   # Forward a bunch of important env vars.
   env_forwarding = [
     arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
@@ -392,7 +395,7 @@ def run(
     "--env",
     f"TORCHPRIME_TPU_TYPE={config.tpu_type}",
     "--env",
-    f"TORCHPRIME_NUM_SLICES={config.num_slices}",
+    f"TORCHPRIME_NUM_SLICES={num_slices}",
     "--env",
     f"TORCHPRIME_CLUSTER={config.cluster}",
     "--env",
@@ -418,9 +421,6 @@ def run(
         f"TORCHPRIME_BQ_TABLE={config.bq_table}",
       ]
     )
-
-  if num_slices is None:
-    num_slices = config.num_slices
 
   ensure_command("xpk")
   xpk_command = (

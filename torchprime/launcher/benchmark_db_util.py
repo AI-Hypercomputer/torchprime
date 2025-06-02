@@ -9,6 +9,9 @@ from omegaconf import OmegaConf
 from torchprime.metrics.metrics import Metrics
 from torchprime.metrics.mfu import get_num_chips_and_tflops_per_chip
 
+TORCHPRIME_SOFTWARE_ID = "pytorch_torchprime"
+"""The software ID used for torchprime benchmarks in the database schema."""
+
 
 def get_metrics(base_artifact_path: str, jobset_name_for_outputs: str) -> dict | None:
   """
@@ -101,6 +104,7 @@ def prepare_benchmark_summary(
   run_id = f"{jobset_name}-{current_time_str}-{unique_id_suffix}"
 
   hardware_num_chips, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_type)
+  hardware_id = tpu_type.split("-")[0]  # Extract the TPU generation (e.g., v4, v5e)
 
   click.echo(
     f"Tpu type: {tpu_type}, hardware_num_chips: {hardware_num_chips}, tflops_per_chip: {tflops_per_chip}"
@@ -109,10 +113,8 @@ def prepare_benchmark_summary(
   return {
     "run_id": run_id,
     "result_success": (process_returncode == 0),
-    "software_id": "pytorch_torchprime",
-    "hardware_id": tpu_type.split("-")[
-      0
-    ],  # hardware_id is the TPU generation (e.g. v4, v5e)
+    "software_id": TORCHPRIME_SOFTWARE_ID,
+    "hardware_id": hardware_id,
     "hardware_num_chips": hardware_num_chips,
     **kwargs,
   }
