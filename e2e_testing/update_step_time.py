@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
-This script is used to query the `torchprime-e2e-tests` table in the
-`benchmark_dataset_test` dataset of the `tpu-pytorch` project. It retrieves the
-most recent rows based on the `update_timestamp` field, filtering for entries
-related to the `pytorch_torchprime` software ID within a specific date range.
+"""Query BigQuery for E2E test results and compute step time bounds.
+
+This script queries the specified BigQuery table for recent test results,
+computes statistical bounds for each benchmark's step times, and exports
+the results to a YAML file for use in GitHub Actions.
 """
 
 import json
@@ -83,41 +83,36 @@ def match_llama_3_8b_2_slice(row):
 
 
 def parse_datetime(datetime_str):
-  """
-  Parse datetime string. First tries GoogleSQL format with timezone,
-  then falls back to Python datetime parsing and converts to GoogleSQL format.
+  """Parse datetime string.
+
+  First tries GoogleSQL format with timezone, then falls back to Python datetime
+  parsing and converts to GoogleSQL format.
   """
   # First check if it's already in GoogleSQL format (has timezone)
-  if " America/" in datetime_str or " UTC" in datetime_str:
+  if "/" in datetime_str or " UTC" in datetime_str:
     return datetime_str
 
   # Try common datetime formats and convert to GoogleSQL format
   formats = [
     "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%d %H:%M",
     "%Y-%m-%d",
     "%m/%d/%Y %H:%M:%S",
     "%m/%d/%Y",
   ]
 
+  local_tz = datetime.now().astimezone().tzinfo
   for fmt in formats:
     try:
       dt = datetime.strptime(datetime_str, fmt)
-      # Convert to GoogleSQL format with Pacific timezone
-      return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} America/Los_Angeles"
+      dt = dt.replace(tzinfo=local_tz)
+      dt_utc = dt.astimezone(datetime.utcnow().tzinfo)
+      return dt_utc.isoformat()
     except ValueError:
       continue
 
-  # If all else fails, try dateutil parser
-  try:
-    from dateutil import parser
-
-    dt = parser.parse(datetime_str)
-    return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} America/Los_Angeles"
-  except:
-    # Return as-is and let BigQuery handle the error
-    return datetime_str
+  # Return as-is and let BigQuery handle it
+  return datetime_str
 
 
 def calculate_confidence_t_interval(alpha, stdev, count):
@@ -184,13 +179,13 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   "--start-time",
   default="2025-05-29 17:52:00 America/Los_Angeles",
   help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted to Pacific timezone.",
+  "Can also accept common datetime formats which will be converted.",
 )
 @click.option(
   "--end-time",
-  default="2025-06-02 17:52:00 America/Los_Angeles",
-  help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-02 17:52:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted to Pacific timezone.",
+  default="2025-06-01 20:00:00 America/Los_Angeles",
+  help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
+  "Can also accept common datetime formats which will be converted.",
 )
 @click.option(
   "--limit",
