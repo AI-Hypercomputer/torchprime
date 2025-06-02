@@ -11,6 +11,7 @@ from timeit import default_timer as timer
 import datasets
 import hydra
 import torch
+import torch.distributed as dist
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
@@ -30,11 +31,12 @@ from transformers import (
   get_scheduler,
   set_seed,
 )
+from torch_xla.experimental.distributed_checkpoint import CheckpointManager, prime_optimizer
 from transformers.optimization import Adafactor
 from transformers.trainer_pt_utils import get_module_class_from_name
 from transformers.utils import check_min_version
 
-from torchprime.data.dataset import make_huggingface_dataset
+from torchprime.data.dataset import make_huggingface_dataset, make_gcs_dataset
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.metrics.mfu import compute_mfu
@@ -57,6 +59,7 @@ logger = logging.getLogger(__name__)
 xr.use_spmd()
 assert xr.is_spmd() is True
 
+dist.init_process_group(backend='gloo', init_method='xla://')
 
 class Trainer:
   """The trainer."""
@@ -130,6 +133,11 @@ class Trainer:
       num_training_steps=self.config.max_steps,
     )
 
+    # Initialize checkpoint manager
+    self.ckpt_dir = config.checkpoint_dir
+    self.ckpt_mgr = CheckpointManager(path=self.ckpt_dir, save_interval=config.save_steps)
+    self.start_step = 0
+
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
 
@@ -140,6 +148,34 @@ class Trainer:
         p.grad.requires_grad_(False)
     self.optimizer.step()
     torch_xla.sync()
+
+  def _load_checkpoint(self):
+    """Load optimizer, scheduler, and training state from checkpoint."""
+    tracked_steps = self.ckpt_mgr.all_steps()
+    if not tracked_steps:
+      logger.warning("No checkpoint steps found. Starting from scratch.")
+      return
+    self.optimizer = prime_optimizer(self.optimizer) # NOTE: needed to create the dummy state dict for the optimizer
+    state_dict = {
+      "model": self.model.state_dict(),
+      "optimizer": self.optimizer.state_dict(),
+      "scheduler": self.lr_scheduler.state_dict(),
+      "step": self.start_step,
+    }
+    if self.config.resume_from_checkpoint in tracked_steps:
+      logger.info(f"Loading checkpoint from step {self.config.resume_from_checkpoint}")
+      self.ckpt_mgr.restore(self.config.resume_from_checkpoint, state_dict)
+    elif self.config.resume_from_checkpoint == "latest":
+      last_step = max(tracked_steps)
+      logger.warning(f"Checkpoint step {self.config.resume_from_checkpoint} not found in tracked steps {tracked_steps}. Loading from latest checkpoint {last_step}.")
+      self.ckpt_mgr.restore(last_step, state_dict)
+    else:
+      raise ValueError(f"Invalid checkpoint step: {self.config.resume_from_checkpoint}. Must be one of {tracked_steps} or 'latest'.")
+
+    self.model.load_state_dict(state_dict["model"])
+    self.optimizer.load_state_dict(state_dict["optimizer"])
+    self.lr_scheduler.load_state_dict(state_dict["scheduler"])
+    self.start_step = state_dict["step"]
 
   def _get_train_dataloader(self):
     if self.train_dataset is None:
@@ -268,6 +304,8 @@ class Trainer:
     return tuple(classes_to_checkpoint)
 
   def train_loop(self, metrics_logger):
+    if self.config.resume_from_checkpoint is not None:
+      self._load_checkpoint()
     self.model.train()
     self.model.zero_grad()
 
@@ -279,9 +317,24 @@ class Trainer:
     logger.info("Starting training")
     logger.info(f"    Max step: {max_step}")
     logger.info(f"    Global batch size: {self.global_batch_size}")
-
+    if hasattr(self, 'start_step') and self.start_step > 0:
+      logger.info(f"    Resuming from step: {self.start_step}")
+    # Initialize epoch and step counters, accounting for checkpoint loading
     epoch = 0
-    for step in range(max_step):
+    start_step = self.start_step
+
+    # Skip batches if we're resuming from a checkpoint
+    if start_step > 0:
+      logger.info(f"Skipping {start_step} batches to resume from checkpoint...")
+      for _ in range(start_step):
+        try:
+          next(train_iterator)
+        except StopIteration:
+          epoch += 1
+          train_iterator = iter(train_loader)
+          next(train_iterator)
+
+    for step in range(start_step, max_step):
       try:
         batch = next(train_iterator)
       except StopIteration:
@@ -310,6 +363,22 @@ class Trainer:
           args=(epoch, step, loss, trace_start_time, trace_end_time),
           run_async=True,
         )
+
+      if step > self.start_step and step % self.config.save_steps == 0:
+        # NOTE: currently we save the checkpoint synchronously
+        xm.wait_device_ops()  # Wait for all XLA operations to complete
+        state_dict = {
+          "model": self.model.state_dict(),
+          "optimizer": self.optimizer.state_dict(),
+          "scheduler": self.lr_scheduler.state_dict(),
+          "step": step,
+        }
+        try:
+          self.ckpt_mgr.save(step, state_dict, force=True)
+          logger.info(f"Checkpoint saved at step {step} to {self.ckpt_dir}")
+        except Exception as e:
+          logger.error(f"Failed to save checkpoint at step with ckpt_mgr {step}: {e}")
+        xm.wait_device_ops()  # Ensure save is complete before logging
 
       # Capture profile at the prefer step
       if step == self.config.profile_step:
