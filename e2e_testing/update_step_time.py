@@ -7,9 +7,10 @@ the results to a YAML file for use in GitHub Actions.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import re
 import click
 import numpy as np
 import scipy
@@ -81,7 +82,34 @@ BENCHMARKS = {
   "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
 }
 
+STEP_ID_MAPPING = {
+  "Llama 3.0 8B": "llama-3-8b",
+  "Llama 3.1 8B (Splash Attention)": "llama-3_1-8b-sa",
+  "Llama 3.1 8B (Scan + Offload)": "llama-3_1-8b-scan-offload",
+  "Llama 3.0 8B (2D sharding)": "llama-3-8b-2d",
+  "Mixtral 8x7B": "mixtral-8x7b",
+  "Llama 3.0 8B (2 Slice)": "llama-3-8b-2-slice",
+}
+"""Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
+
 CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
+
+
+def parse_days_ago(days_str: str):
+  """Parse a string like '2 days ago' and return a datetime object."""
+  match = re.match(r"(\d+)\s+days?\s+ago", days_str.strip())
+  if not match or len(match.groups()) != 1:
+    raise ValueError(f"Invalid days ago format: {days_str}")
+  days = int(match.group(1))
+  return datetime.now() - timedelta(days=days)
+
+
+def render_local_datetime_utc(dt):
+  """Render a local datetime object in UTC timezone."""
+  local_tz = datetime.now().astimezone().tzinfo
+  dt = dt.replace(tzinfo=local_tz)
+  dt_utc = dt.astimezone(datetime.utcnow().tzinfo)
+  return dt_utc.isoformat()
 
 
 def parse_datetime(datetime_str):
@@ -94,6 +122,10 @@ def parse_datetime(datetime_str):
   if "/" in datetime_str or " UTC" in datetime_str:
     return datetime_str
 
+  # Then check if it's in 'N days ago' format
+  if "days ago" in datetime_str:
+    return render_local_datetime_utc(parse_days_ago(datetime_str))
+
   # Try common datetime formats and convert to GoogleSQL format
   formats = [
     "%Y-%m-%d %H:%M:%S",
@@ -103,13 +135,10 @@ def parse_datetime(datetime_str):
     "%m/%d/%Y",
   ]
 
-  local_tz = datetime.now().astimezone().tzinfo
   for fmt in formats:
     try:
       dt = datetime.strptime(datetime_str, fmt)
-      dt = dt.replace(tzinfo=local_tz)
-      dt_utc = dt.astimezone(datetime.utcnow().tzinfo)
-      return dt_utc.isoformat()
+      return render_local_datetime_utc(dt)
     except ValueError:
       continue
 
@@ -128,8 +157,10 @@ def calculate_confidence_t_interval(alpha, stdev, count):
 
   df = count - 1
   confidence_level = 1 - alpha
-  sem = stdev / np.sqrt(count)
-  _, upper_bound = scipy.stats.t.interval(confidence_level, df, loc=0, scale=sem)
+  standard_error = stdev / np.sqrt(count)
+  _, upper_bound = scipy.stats.t.interval(
+    confidence_level, df, loc=0, scale=standard_error
+  )
 
   return upper_bound
 
@@ -178,15 +209,19 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
 )
 @click.option(
   "--start-time",
-  default="2025-05-29 17:52:00 America/Los_Angeles",
+  default=parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
   help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted.",
+  "Can also accept common datetime formats which will be converted. "
+  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
+  "Defaults to 5 days ago.",
 )
 @click.option(
   "--end-time",
-  default="2025-06-01 20:00:00 America/Los_Angeles",
+  default=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
   help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted.",
+  "Can also accept common datetime formats which will be converted. "
+  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
+  "Defaults to the current time.",
 )
 @click.option(
   "--limit",
@@ -277,14 +312,6 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
   table.add_column("Range (ms)", justify="right", style="green")
 
   benchmarks_data = {}
-  job_id_mapping = {
-    "Llama 3.0 8B": "llama-3-8b",
-    "Llama 3.1 8B (Splash Attention)": "llama-3_1-8b-sa",
-    "Llama 3.1 8B (Scan + Offload)": "llama-3_1-8b-scan-offload",
-    "Llama 3.0 8B (2D sharding)": "llama-3-8b-2d",
-    "Mixtral 8x7B": "mixtral-8x7b",
-    "Llama 3.0 8B (2 Slice)": "llama-3-8b-2-slice",
-  }
 
   for name, step_times in step_time_by_benchmark.items():
     lower_bound, upper_bound = compute_bounds(step_times)
@@ -300,7 +327,7 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
       f"{interval_ms:.1f}",
     )
 
-    job_id = job_id_mapping.get(name)
+    job_id = STEP_ID_MAPPING.get(name)
     if job_id:
       benchmarks_data[job_id] = {
         "name": name,
