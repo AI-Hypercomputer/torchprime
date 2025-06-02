@@ -144,7 +144,7 @@ def main() -> int:
 
   # Attach logger to the output directory
   log_file = os.path.join(output_dir, "log.log")
-  os.makedirs(output_dir)
+  os.makedirs(output_dir, exist_ok=False) # This should be a new directory.
   logger.info("Created output directory: %s", output_dir)
   file_handler = logging.FileHandler(log_file)
   file_handler.setLevel(logging.INFO)

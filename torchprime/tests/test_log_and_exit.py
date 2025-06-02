@@ -12,7 +12,6 @@ def test_log_and_exit(caplog):
     result = torchprime.tools.log_and_exit.main()
 
   # Assert
-  print(caplog.text)
   assert result == 0
   assert "End of PyTorch Environment Logging" in caplog.text
   assert "PyTorch Environment Information" in caplog.text
