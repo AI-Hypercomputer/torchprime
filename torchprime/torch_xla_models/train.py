@@ -175,10 +175,39 @@ class Trainer:
       sampler=sampler,
       drop_last=True,
     )
+    dataloader = self._instrument_dataloader(dataloader, "base")
     loader = pl.MpDeviceLoader(
       dataloader, self.device, input_sharding=self.input_sharding_spec
     )
+    loader = self._instrument_dataloader(loader, "mp_device_loader")
     return loader
+
+  def _instrument_dataloader(self, dataloader, name):
+    """Instrument the shapes from the dataloader with a name for logging."""
+
+    class WrapperDataLoader:
+      def __init__(self, dataloader, name):
+        self.dataloader = dataloader
+        self.name = name
+
+      def __iter__(self):
+        for batch in self.dataloader:
+          # Log the shapes of the inputs and targets.
+          self._log_shapes(batch)
+          yield batch
+
+      def _log_shapes(self, batch):
+        import torch.utils._pytree as pytree
+
+        shapes = pytree.tree_map(
+          lambda x: x.shape if isinstance(x, torch.Tensor) else None, batch
+        )
+        logger.info(f"[{self.name}] data shapes: {shapes}")
+
+      def __len__(self):
+        return len(self.dataloader)
+
+    return WrapperDataLoader(dataloader, name)
 
   def _add_checkpoint_offload_scan_model(self, model: nn.Module):
     remat_classes = self._get_classes_by_names(
