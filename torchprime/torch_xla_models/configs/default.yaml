@@ -10,6 +10,7 @@ defaults:
   - task: basic # refers to task/basic.yaml
 
 seed: 42
+logging_steps: 10
 torch_dtype: bfloat16
 
 # This might be overwritten when using tp run to launch the run using XPK

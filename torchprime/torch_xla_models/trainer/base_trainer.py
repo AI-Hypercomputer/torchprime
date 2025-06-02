@@ -188,7 +188,7 @@ class Trainer:
       loss = self.train_step(batch)
       trace_end_time = timer()
 
-      if step % self.config.task.logging_steps == 0:
+      if step % self.config.logging_steps == 0:
 
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
           loss = loss.detach().item()

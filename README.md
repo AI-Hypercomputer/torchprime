@@ -122,7 +122,9 @@ ICI mesh axis length to 64:
 ```sh
 python3 torchprime/torch_xla_models/train.py \
     model=mixtral-8x7b \
-    global_batch_size=256 \
+    task=basic \
+    data=wikitext \
+    task.global_batch_size=256 \
     ici_mesh.fsdp=64
 ```
 
@@ -144,7 +146,7 @@ tp use \
     --zone us-east5-b \
     --num-slices 1 \
     --tpu-type v6e-256 \
-    --artifact-dir gs://bucket/dir
+    --artifact-dir <your-gs-bucket-dir>
 ```
 
 `torchprime` natively supports [multi-slice or multi-pod][multi-slice] training.
@@ -160,7 +162,7 @@ would like to run remotely, including arguments, e.g.
 # Train Llama 3.0 8B on 256 chips
 tp run torchprime/torch_xla_models/train.py \
     model=llama-3-8b \
-    global_batch_size=256 \
+    task.global_batch_size=256 \
     ici_mesh.fsdp=256
 ```
 

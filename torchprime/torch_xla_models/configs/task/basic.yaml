@@ -1,6 +1,5 @@
 name: basic  # Basic means simple forward/backward pass without any special task logic.
 global_batch_size: 4
-logging_steps: 10
 max_steps: 15
 
 optimizer:
