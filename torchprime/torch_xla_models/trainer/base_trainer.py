@@ -33,11 +33,13 @@ from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
-from torchprime.torch_xla_models.optimization.remat_and_scan import (
+from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   add_activation_checkpointing_and_scan,
   add_optimization_barriers,
 )
-from torchprime.torch_xla_models.sharding.initialization import setup_sharding_and_mesh
+from torchprime.torch_xla_models.model_rewriting.sharding_initialization import (
+  setup_sharding_and_mesh,
+)
 from torchprime.torch_xla_models.topology import get_num_slices
 
 logger = logging.getLogger(__name__)
