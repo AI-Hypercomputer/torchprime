@@ -7,10 +7,10 @@ the results to a YAML file for use in GitHub Actions.
 """
 
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import re
 import click
 import numpy as np
 import scipy
