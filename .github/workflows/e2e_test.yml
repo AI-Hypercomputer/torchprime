@@ -194,26 +194,22 @@ jobs:
       - name: Load step_time_bounds.yaml
         id: load
         run: |
-          # Extract benchmarks as array of objects for matrix
+          # Extract benchmarks as array of objects
           MATRIX=$(yq -o=json -I=0 '.benchmarks | to_entries | map({
             "benchmark": .key,
             "name": .value.name,
             "lower_bound": .value.step_time_lower_bound,
             "upper_bound": .value.step_time_upper_bound
           })' e2e_testing/step_time_bounds.yaml)
-          echo "Matrix JSON: $MATRIX"
+          echo "Benchmark matrix JSON: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
   # Validate the results of the workloads
   #
   # Each workload has a step time lower bound and upper bound.
-  #
   # The bounds and confidence intervals are programmatically derived from
   # historical E2E test results. To regenerate the bounds, you can run
   # `e2e_testing/update_step_time.py`.
-  #
-  # Note that we use the convention of
-  # `step_time_upper_bound - step_time_lower_bound = confidence_interval * 2`.
   validate:
     name: ${{ matrix.config.name }}
     needs: [tp-run, load-benchmarks]

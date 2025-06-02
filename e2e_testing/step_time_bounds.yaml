@@ -1,46 +1,46 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 2.6772919
+    step_time_lower_bound: 2.67793406
     step_time_upper_bound: 2.788876
-    confidence_interval: 0.05579
-    average: 2.7331
-    sample_size: 145
+    confidence_interval: 0.05547
+    average: 2.7334
+    sample_size: 169
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.3596336
-    step_time_upper_bound: 2.452628
-    confidence_interval: 0.0465
-    average: 2.4061
-    sample_size: 145
+    step_time_lower_bound: 2.35485746
+    step_time_upper_bound: 2.457598
+    confidence_interval: 0.05137
+    average: 2.4062
+    sample_size: 169
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.73950752
+    step_time_lower_bound: 2.73963398
     step_time_upper_bound: 2.85849
-    confidence_interval: 0.05949
-    average: 2.799
-    sample_size: 145
+    confidence_interval: 0.05943
+    average: 2.7991
+    sample_size: 169
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.28906594
-    step_time_upper_bound: 3.38924054
-    confidence_interval: 0.05009
-    average: 3.3392
-    sample_size: 145
+    step_time_lower_bound: 3.28863385
+    step_time_upper_bound: 3.38879529
+    confidence_interval: 0.05008
+    average: 3.3387
+    sample_size: 169
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.09896717
-    step_time_upper_bound: 3.19335196
+    step_time_lower_bound: 3.09891705
+    step_time_upper_bound: 3.19330031
     confidence_interval: 0.04719
-    average: 3.1462
-    sample_size: 145
+    average: 3.1461
+    sample_size: 169
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 3.88394539
+    step_time_lower_bound: 3.88681827
     step_time_upper_bound: 4.026164
-    confidence_interval: 0.07111
-    average: 3.9551
-    sample_size: 145
+    confidence_interval: 0.06967
+    average: 3.9565
+    sample_size: 169
 metadata:
   query_start: 2025-05-29 17:52:00 America/Los_Angeles
   query_end: 2025-06-01 20:00:00 America/Los_Angeles

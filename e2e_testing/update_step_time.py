@@ -20,16 +20,6 @@ from rich.table import Table
 
 from torchprime.launcher.benchmark_db_util import TORCHPRIME_SOFTWARE_ID
 
-BENCHMARKS = {
-  "Llama 3.0 8B": "match_llama3_8b",
-  "Llama 3.1 8B (Splash Attention)": "match_llama3_1_8b_sa",
-  "Llama 3.1 8B (Scan + Offload)": "match_llama3_1_8b_scan_offload",
-  "Llama 3.0 8B (2D sharding)": "match_llama3_8b_2d",
-  "Mixtral 8x7B": "match_mixtral",
-  "Llama 3.0 8B (2 Slice)": "match_llama_3_8b_2_slice",
-}
-CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
-
 
 def match_llama3_8b(row):
   config = json.loads(row.configs_framework)
@@ -80,6 +70,18 @@ def match_llama_3_8b_2_slice(row):
     and config["dcn_mesh"]["fsdp"] == 2
     and config["ici_mesh"]["fsdp"] == 4
   )
+
+
+BENCHMARKS = {
+  "Llama 3.0 8B": match_llama3_8b,
+  "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
+  "Llama 3.1 8B (Scan + Offload)": match_llama3_1_8b_scan_offload,
+  "Llama 3.0 8B (2D sharding)": match_llama3_8b_2d,
+  "Mixtral 8x7B": match_mixtral,
+  "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
+}
+
+CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
 
 
 def parse_datetime(datetime_str):
@@ -141,8 +143,7 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   min_time = min(step_times)
   max_time = max(step_times)
 
-  # Use sample standard deviation for consistency with t-distribution
-  stdev = (sum((x - mean) ** 2 for x in step_times) / (n - 1)) ** 0.5
+  stdev = np.std(step_times, ddof=1)
   t_critical = calculate_confidence_t_interval(1 - confidence_level, stdev, n)
 
   # Calculate the half-width H
@@ -189,7 +190,7 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
 )
 @click.option(
   "--limit",
-  default=1000,
+  default=1200,
   type=int,
   help="Maximum number of rows to retrieve",
 )
@@ -247,19 +248,9 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
   # Group rows by benchmark
   step_time_by_benchmark = {}
 
-  # Create match function mapping
-  match_functions = {
-    "Llama 3.0 8B": match_llama3_8b,
-    "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
-    "Llama 3.1 8B (Scan + Offload)": match_llama3_1_8b_scan_offload,
-    "Llama 3.0 8B (2D sharding)": match_llama3_8b_2d,
-    "Mixtral 8x7B": match_mixtral,
-    "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
-  }
-
   for row in rows:
     matched = set()
-    for name, match_fn in match_functions.items():
+    for name, match_fn in BENCHMARKS.items():
       if match_fn(row):
         matched.add(name)
 
