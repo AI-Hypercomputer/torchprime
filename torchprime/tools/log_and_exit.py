@@ -141,22 +141,25 @@ def main() -> int:
     if arg.startswith("output_dir="):
       output_dir = arg.split("=", 1)[1]
       break
-  else:  # no break
-    output_dir = "/tmp/"
+  else:
+    logger.error(
+      "No output_dir argument provided. Not attaching logger to output directory."
+    )
 
-  # Attach logger to the output directory
-  log_file = os.path.join(output_dir, "log.log")
-  os.makedirs(output_dir, exist_ok=False)  # This should be a new directory.
-  logger.info("Created output directory: %s", output_dir)
-  file_handler = logging.FileHandler(log_file)
-  file_handler.setLevel(logging.INFO)
-  formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-  )
-  file_handler.setFormatter(formatter)
-  logger.addHandler(file_handler)
-  logger.info("Attached logger to file: %s", log_file)
+  if output_dir:
+    # Attach logger to the output directory
+    log_file = os.path.join(output_dir, "log.log")
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info("Created output directory: %s", output_dir)
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+      "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+      datefmt="%m/%d/%Y %H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.info("Attached logger to file: %s", log_file)
 
   logger.info("======================================================================")
   logger.info("                       PyTorch Environment Information                ")
