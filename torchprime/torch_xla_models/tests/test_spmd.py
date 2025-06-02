@@ -8,10 +8,10 @@ import torch_xla
 import torch_xla.distributed.spmd as xs
 from omegaconf import OmegaConf
 
-from torchprime.torch_xla_models.llama import LlamaForCausalLM
-from torchprime.torch_xla_models.llama.model import LlamaDecoderLayer
-from torchprime.torch_xla_models.mixtral import MixtralForCausalLM
-from torchprime.torch_xla_models.mixtral.model import MixtralDecoderLayer
+from torchprime.torch_xla_models.model.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.model.llama.model import LlamaDecoderLayer
+from torchprime.torch_xla_models.model.mixtral import MixtralForCausalLM
+from torchprime.torch_xla_models.model.mixtral.model import MixtralDecoderLayer
 
 
 class TestConfigSpmd(unittest.TestCase):

@@ -35,6 +35,7 @@ from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
+from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 from torchprime.torch_xla_models.topology import get_num_slices
 
 
@@ -960,7 +961,7 @@ class MixtralModel(nn.Module):
     return (hidden_states, load_balance_loss)
 
 
-class MixtralForCausalLM(nn.Module):
+class MixtralForCausalLM(BaseCausalLM):
   def __init__(self, config):
     super().__init__()
     self.config = config
@@ -972,17 +973,6 @@ class MixtralForCausalLM(nn.Module):
     self.num_experts_per_tok = config.num_experts_per_tok
     # Initialize weights and apply final processing
     self.apply(self._init_weights)
-
-  def _init_weights(self, module):
-    std = self.config.initializer_range
-    if isinstance(module, nn.Linear):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.bias is not None:
-        module.bias.data.zero_()
-    elif isinstance(module, nn.Embedding):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.padding_idx is not None:
-        module.weight.data[module.padding_idx].zero_()
 
   @xp.trace_me("MixtralForCausalLM")
   def forward(

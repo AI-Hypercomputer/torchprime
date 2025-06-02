@@ -10,8 +10,8 @@ from omegaconf import DictConfig, OmegaConf
 from transformers import AutoConfig
 from transformers import Llama4ForCausalLM as HfLlama4ForCausalLM
 
-import torchprime.torch_xla_models.llama4.model as modeling_llama4
-from torchprime.torch_xla_models.llama4 import Llama4TextForCausalLM
+import torchprime.torch_xla_models.model.llama4.model as modeling_llama4
+from torchprime.torch_xla_models.model.llama4 import Llama4TextForCausalLM
 
 
 @dataclass

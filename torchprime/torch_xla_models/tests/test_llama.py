@@ -10,7 +10,7 @@ from omegaconf import OmegaConf
 from transformers import AutoConfig
 from transformers import LlamaForCausalLM as HfLlamaForCausalLM
 
-from torchprime.torch_xla_models.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.model.llama import LlamaForCausalLM
 
 
 @dataclass

@@ -30,6 +30,7 @@ from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
 from torchprime.torch_xla_models import offloading
 from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
+from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 
 logger = logging.get_logger(__name__)
 
@@ -545,7 +546,7 @@ class Llama4TextModel(nn.Module):
     return hidden_states
 
 
-class Llama4TextForCausalLM(nn.Module):
+class Llama4TextForCausalLM(BaseCausalLM):
   def __init__(self, config):
     super().__init__()
     self.config = config
@@ -555,17 +556,6 @@ class Llama4TextForCausalLM(nn.Module):
 
     # Initialize weights and apply final processing
     self.apply(self._init_weights)
-
-  def _init_weights(self, module):
-    std = self.config.initializer_range
-    if isinstance(module, nn.Linear):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.bias is not None:
-        module.bias.data.zero_()
-    elif isinstance(module, nn.Embedding):
-      module.weight.data.normal_(mean=0.0, std=std)
-      if module.padding_idx is not None:
-        module.weight.data[module.padding_idx].zero_()
 
   @xp.trace_me("Llama4TextForCausalLM")
   def forward(

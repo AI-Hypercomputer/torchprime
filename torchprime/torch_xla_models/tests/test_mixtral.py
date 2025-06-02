@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 from transformers import AutoConfig
 from transformers import MixtralForCausalLM as HfMixtralForCausalLM
 
-from torchprime.torch_xla_models.mixtral import MixtralForCausalLM
+from torchprime.torch_xla_models.model.mixtral import MixtralForCausalLM
 
 
 @dataclass
