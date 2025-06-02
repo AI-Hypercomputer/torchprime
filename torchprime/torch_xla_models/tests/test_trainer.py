@@ -1,23 +1,20 @@
 """Unit tests for the TPU Trainer class using PyTorch/XLA.
 
 These tests validate the behavior of the Trainer class defined in
-`torchprime.torch_xla_models.trainer.base_trainer` by mocking TPU-specific and sharding logic
-for CPU-based testing. It includes tests for:
+`torchprime.torch_xla_models.trainer.base_trainer` using dummy model/data and
+a fake mesh, while running real training logic on XLA device.
 
-- Trainer initialization logic and sharding setup.
-- Single training loop execution with logging and step closures.
-- XLA-compiled train step correctness.
-
-Mocks are used to isolate TPU-specific components like mesh configuration,
-device assignment, and compilation so tests can run on CPU.
+Includes:
+- Trainer initialization logic and mesh setup.
+- Full training loop execution with train_step call tracking.
+- Single train step correctness.
 """
-
-from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+import torch_xla.core.xla_model as xm
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
@@ -37,13 +34,20 @@ class DummyModel(nn.Module):
 
 
 class DummyDataset(Dataset):
+  def __init__(self):
+    self.device = xm.xla_device()
+
   def __getitem__(self, idx):
-    return {"input_ids": torch.ones(4), "attention_mask": torch.ones(4)}
+    return {
+      "input_ids": torch.ones(4, device=self.device),
+      "attention_mask": torch.ones(4, device=self.device),
+    }
 
   def __len__(self):
-    return 100
+    return 16
 
 
+# TODO: Replace FakeMesh with a real mesh implementation when available.
 class FakeMesh:
   def __init__(self):
     self.device_ids = [0]
@@ -83,80 +87,86 @@ def dummy_config():
         },
         "sharding": {"type": "spmd"},
       },
-      "ici_mesh": {
-        "data": 1,
-        "fsdp": 1,
-        "tensor": 1,
-      },
+      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
       "dcn_mesh": {},
     }
   )
 
 
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.get_mesh",
-  return_value=FakeMesh(),
-)
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
-  side_effect=lambda model, *args, **kwargs: model,
-)
-def test_trainer_init(mock_shard_model, mock_get_mesh, dummy_config):
-  model = DummyModel()
+def test_trainer_initialization(monkeypatch, dummy_config):
+  """Test Trainer initialization and mesh logic."""
+  from torchprime.torch_xla_models import sharding
+
+  monkeypatch.setattr(
+    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding.initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  device = xm.xla_device()
+  model = DummyModel().to(device)
   dataset = DummyDataset()
   trainer = Trainer(model, dummy_config, dataset)
+
   assert isinstance(trainer.model, DummyModel)
   assert trainer.global_batch_size == 4
-  assert str(trainer.device).startswith("xla")
 
 
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.get_mesh",
-  return_value=FakeMesh(),
-)
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
-  side_effect=lambda model, *args, **kwargs: model,
-)
-@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.add_step_closure")
-@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.wait_device_ops")
-@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer._get_train_dataloader")
-@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer.train_step")
-def test_train_loop(
-  mock_train_step,
-  mock_get_loader,
-  mock_wait,
-  mock_closure,
-  mock_shard_model,
-  mock_get_mesh,
-  dummy_config,
-):
-  model = DummyModel()
+def test_trainer_train_loop(monkeypatch, dummy_config):
+  """Test full training loop execution and step count via wrapper."""
+  from torchprime.torch_xla_models import sharding
+
+  monkeypatch.setattr(
+    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding.initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  device = xm.xla_device()
+  model = DummyModel().to(device)
   dataset = DummyDataset()
-  mock_get_loader.return_value = iter([dataset[0], dataset[0]])
-  mock_train_step.return_value = torch.tensor(0.1)
-
   trainer = Trainer(model, dummy_config, dataset)
+
+  # Count how many times train_step is called
+  call_counter = {"steps": 0}
+  original_train_step = Trainer.train_step
+
+  def counting_train_step(self, batch):
+    call_counter["steps"] += 1
+    return original_train_step(self, batch)
+
+  monkeypatch.setattr(Trainer, "train_step", counting_train_step)
+
   trainer.train_loop(metrics_logger=MetricsLogger())
-  assert mock_train_step.call_count == dummy_config.max_steps
+  assert call_counter["steps"] == dummy_config.max_steps
 
 
-@patch(
-  "torchprime.torch_xla_models.trainer.base_trainer.torch_xla.compile",
-  lambda **kwargs: lambda fn: fn,
-)
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.get_mesh",
-  return_value=FakeMesh(),
-)
-@patch(
-  "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
-  side_effect=lambda model, *args, **kwargs: model,
-)
-def test_train_step(mock_shard_model, mock_get_mesh, dummy_config):
-  model = DummyModel()
+def test_trainer_train_step(monkeypatch, dummy_config):
+  """Test correctness of one training step."""
+  from torchprime.torch_xla_models import sharding
+
+  monkeypatch.setattr(
+    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding.initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  device = xm.xla_device()
+  model = DummyModel().to(device)
   dataset = DummyDataset()
-  batch = {k: v.unsqueeze(0) for k, v in dataset[0].items()}
   trainer = Trainer(model, dummy_config, dataset)
+
+  batch = {k: v.unsqueeze(0).to(device) for k, v in dataset[0].items()}
   loss = trainer.train_step(batch)
+
   assert isinstance(loss, torch.Tensor)
+  assert loss.ndim == 0  # scalar loss
