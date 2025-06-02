@@ -1,7 +1,7 @@
 """Unit tests for the TPU Trainer class using PyTorch/XLA.
 
 These tests validate the behavior of the Trainer class defined in
-`torchprime.torch_xla_models.trainer.basic` by mocking TPU-specific and sharding logic
+`torchprime.torch_xla_models.trainer.base_trainer` by mocking TPU-specific and sharding logic
 for CPU-based testing. It includes tests for:
 
 - Trainer initialization logic and sharding setup.
@@ -118,10 +118,10 @@ def test_trainer_init(mock_shard_model, mock_get_mesh, dummy_config):
   "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
   side_effect=lambda model, *args, **kwargs: model,
 )
-@patch("torchprime.torch_xla_models.trainer.basic.xm.add_step_closure")
-@patch("torchprime.torch_xla_models.trainer.basic.xm.wait_device_ops")
-@patch("torchprime.torch_xla_models.trainer.basic.Trainer._get_train_dataloader")
-@patch("torchprime.torch_xla_models.trainer.basic.Trainer.train_step")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.add_step_closure")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.wait_device_ops")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer._get_train_dataloader")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer.train_step")
 def test_train_loop(
   mock_train_step,
   mock_get_loader,
@@ -142,7 +142,7 @@ def test_train_loop(
 
 
 @patch(
-  "torchprime.torch_xla_models.trainer.basic.torch_xla.compile",
+  "torchprime.torch_xla_models.trainer.base_trainer.torch_xla.compile",
   lambda **kwargs: lambda fn: fn,
 )
 @patch(
