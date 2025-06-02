@@ -4,9 +4,13 @@ from datetime import datetime
 from pathlib import Path
 
 import click
+from omegaconf import OmegaConf
 
 from torchprime.metrics.metrics import Metrics
 from torchprime.metrics.mfu import get_num_chips_and_tflops_per_chip
+
+TORCHPRIME_SOFTWARE_ID = "pytorch_torchprime"
+"""The software ID used for torchprime benchmarks in the database schema."""
 
 
 def get_metrics(base_artifact_path: str, jobset_name_for_outputs: str) -> dict | None:
@@ -38,10 +42,41 @@ def get_metrics(base_artifact_path: str, jobset_name_for_outputs: str) -> dict |
   metrics_data = Metrics.load(metric_file_path)
 
   return {
-    "model_id": metrics_data.model,
     "metrics_step_time": metrics_data.step_execution_time.total_seconds(),
     "metrics_mfu": metrics_data.mfu,
+    "metrics_tokens_per_second": metrics_data.tokens_per_second,
+    "metrics_e2e_time": metrics_data.train_runtime.total_seconds(),
+    "metrics_num_steps": metrics_data.num_steps,
   }
+
+
+def get_config(base_artifact_path: str, jobset_name_for_outputs: str) -> dict | None:
+  """
+  Loads the Hydra configuration from train_config.json of slice 0 and worker 0
+  found in the artifact output directories.
+
+  Args:
+      base_artifact_path: The base path where jobset-specific artifact directories are located.
+      jobset_name_for_outputs: The name of the jobset, used to find its 'outputs' subdirectory.
+
+  Returns:
+      A dictionary representing the Hydra configuration, or None if the config file is not found.
+  """
+  config_file_path = (
+    Path(base_artifact_path)
+    / jobset_name_for_outputs
+    / "outputs"
+    / "0-0"
+    / "train_config.json"
+  )
+
+  if not config_file_path.exists():
+    click.echo(f"Config file not found at {config_file_path}", err=True)
+    return None
+
+  # Load the JSON configuration file and convert it to a Python dictionary
+  config = OmegaConf.to_container(OmegaConf.load(config_file_path), resolve=True)
+  return config
 
 
 def prepare_benchmark_summary(
@@ -69,6 +104,7 @@ def prepare_benchmark_summary(
   run_id = f"{jobset_name}-{current_time_str}-{unique_id_suffix}"
 
   hardware_num_chips, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_type)
+  hardware_id = tpu_type.split("-")[0]  # Extract the TPU generation (e.g., v4, v5e)
 
   click.echo(
     f"Tpu type: {tpu_type}, hardware_num_chips: {hardware_num_chips}, tflops_per_chip: {tflops_per_chip}"
@@ -77,8 +113,8 @@ def prepare_benchmark_summary(
   return {
     "run_id": run_id,
     "result_success": (process_returncode == 0),
-    "software_id": "torchprime",
-    "hardware_id": tpu_type,
+    "software_id": TORCHPRIME_SOFTWARE_ID,
+    "hardware_id": hardware_id,
     "hardware_num_chips": hardware_num_chips,
     **kwargs,
   }

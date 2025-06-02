@@ -45,6 +45,18 @@ If there were no code changes and the step time is still above the upper bound,
 we'll need to discuss with the hardware teams because it may be the result of
 hardware changes.
 
+### Recalculating all bounds
+
+Sometimes (e.g. due to moving to different hardware or changing step time
+accounting methodology) there will be a need to recalculate all step time bounds:
+
+- First collect enough samples e.g. by manually triggering the E2E tests GitHub
+  Action a number of times.
+- Run [`update_step_time.py`](./update_step_time.py) to pull the latest E2E
+  results from the database and update the reference step time bounds file. Refer
+  to the help message of the script for how to select results from a specific
+  time span.
+
 ### Formula for computing the lower and upper bounds
 
 Let $X = \{x_1, x_2, \ldots, x_n\}$ be the observed step time for a workload.

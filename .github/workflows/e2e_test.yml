@@ -107,7 +107,7 @@ jobs:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
         run: |
-          name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
+          name=$(e2e_testing/gen_name.py llama-3dot1-8b-scan-offload)
           echo "name=$name" >> "$GITHUB_OUTPUT"
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
@@ -183,84 +183,52 @@ jobs:
             profile_step=3 \
             max_steps=15
 
+  # Load reference step times
+  load-benchmarks:
+    name: Load reference step times
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.load.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load step_time_bounds.yaml
+        id: load
+        run: |
+          # Extract benchmarks as array of objects
+          MATRIX=$(yq -o=json -I=0 '.benchmarks | to_entries | map({
+            "benchmark": .key,
+            "name": .value.name,
+            "lower_bound": .value.step_time_lower_bound,
+            "upper_bound": .value.step_time_upper_bound
+          })' e2e_testing/step_time_bounds.yaml)
+          echo "Benchmark matrix JSON: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
   # Validate the results of the workloads
   #
   # Each workload has a step time lower bound and upper bound.
-  #
-  # The initial bounds and confidence interval comes from a one-time analysis in Apr 2025:
-  # https://docs.google.com/spreadsheets/d/1VS_0tkmmUwT22F2eeqqIOuExiBwIIbqn58MXw3RMe7M/edit?usp=sharing
-  #
-  # Note that we use the convention of
-  # `step_time_upper_bound - step_time_lower_bound = confidence_interval * 2`.
-
-  llama-3-8b:
-    name: Llama 3.0 8B
-    needs: tp-run
+  # The bounds and confidence intervals are programmatically derived from
+  # historical E2E test results. To regenerate the bounds, you can run
+  # `e2e_testing/update_step_time.py`.
+  validate:
+    name: ${{ matrix.config.name }}
+    needs: [tp-run, load-benchmarks]
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.load-benchmarks.outputs.matrix) }}
     uses: ./.github/workflows/reusable_e2e_check.yml
     with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-name }}
+      jobset_name: >-
+        ${{
+          matrix.config.benchmark == 'llama-3-8b' && needs.tp-run.outputs.llama-3-8b-name ||
+          matrix.config.benchmark == 'llama-3_1-8b-sa' && needs.tp-run.outputs.llama-3_1-8b-sa-name ||
+          matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
+          matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||
+          matrix.config.benchmark == 'mixtral-8x7b' && needs.tp-run.outputs.mixtral-8x7b-name ||
+          matrix.config.benchmark == 'llama-3-8b-2-slice' && needs.tp-run.outputs.llama-3-8b-2-slice-name
+        }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.05506
-      step_time_lower_bound: 2.72650087
-      step_time_upper_bound: 2.83662087
-    secrets: inherit
-
-  llama-3_1-8b-sa:
-    name: Llama 3.1 8B (Splash Attention)
-    needs: tp-run
-    uses: ./.github/workflows/reusable_e2e_check.yml
-    with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-sa-name }}
-      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.11286
-      step_time_lower_bound: 2.331278095
-      step_time_upper_bound: 2.556998095
-    secrets: inherit
-
-  llama-3_1-8b-scan-offload:
-    name: Llama 3.1 8B (Scan + Offload)
-    needs: tp-run
-    uses: ./.github/workflows/reusable_e2e_check.yml
-    with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3_1-8b-scan-offload-name }}
-      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.0293
-      step_time_lower_bound: 2.797995238
-      step_time_upper_bound: 2.856595238
-    secrets: inherit
-
-  llama-3-8b-2d:
-    name: Llama 3.0 8B (2D sharding)
-    needs: tp-run
-    uses: ./.github/workflows/reusable_e2e_check.yml
-    with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2d-name }}
-      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.0337
-      step_time_lower_bound: 3.335909524
-      step_time_upper_bound: 3.403309524
-    secrets: inherit
-
-  llama-3-8b-2-slice:
-    name: Llama 3.0 8B (2 slice)
-    needs: tp-run
-    uses: ./.github/workflows/reusable_e2e_check.yml
-    with:
-      jobset_name: ${{ needs.tp-run.outputs.llama-3-8b-2-slice-name }}
-      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.15707
-      step_time_lower_bound: 3.904201429
-      step_time_upper_bound: 4.218341429
-    secrets: inherit
-
-  mixtral-8x7b:
-    name: Mixtral 8x7B
-    needs: tp-run
-    uses: ./.github/workflows/reusable_e2e_check.yml
-    with:
-      jobset_name: ${{ needs.tp-run.outputs.mixtral-8x7b-name }}
-      artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
-      # Confidence interval: 0.03167
-      step_time_lower_bound: 3.135134762
-      step_time_upper_bound: 3.198474762
+      step_time_lower_bound: ${{ matrix.config.lower_bound }}
+      step_time_upper_bound: ${{ matrix.config.upper_bound }}
     secrets: inherit

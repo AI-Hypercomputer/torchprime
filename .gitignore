@@ -16,6 +16,7 @@ env/
 # Ignore cache directories
 __pycache__/
 .cache/
+/cache/
 
 # Ignore OS-specific files
 .DS_Store

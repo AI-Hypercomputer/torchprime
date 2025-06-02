@@ -3,6 +3,7 @@ defaults:
   - sharding: mixtral-fsdp  # refers to sharding/mixtral-fsdp.yaml
   - remat: mixtral  # refers to remat/mixtral.yaml
 
+model_id: mixtral-8x7b
 model_class: mixtral.MixtralForCausalLM  # Used to import the model from this class
 bos_token_id: 1
 eos_token_id: 2

@@ -43,10 +43,10 @@ class Config:
   num_slices: int
   tpu_type: str
   artifact_dir: str
-  upload_metrics: bool
-  bq_project: str
-  bq_dataset: str
-  bq_table: str
+  upload_metrics: bool | None = False
+  bq_project: str | None = None
+  bq_dataset: str | None = None
+  bq_table: str | None = None
   docker_project: str | None = None
 
 
@@ -277,6 +277,7 @@ def docker_run(args, use_hf: bool):
     "--privileged",
     "--net",
     "host",
+    "--shm-size=16G",
     "--rm",
     "-v",
     f"{os.getcwd()}:/workspace",
@@ -380,6 +381,9 @@ def run(
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(args)
 
+  if num_slices is None:
+    num_slices = config.num_slices
+
   # Forward a bunch of important env vars.
   env_forwarding = [
     arg for env_var in _DOCKER_ENV_FORWARD_LIST for arg in forward_env(env_var)
@@ -391,17 +395,9 @@ def run(
     "--env",
     f"TORCHPRIME_TPU_TYPE={config.tpu_type}",
     "--env",
-    f"TORCHPRIME_NUM_SLICES={config.num_slices}",
+    f"TORCHPRIME_NUM_SLICES={num_slices}",
     "--env",
     f"TORCHPRIME_CLUSTER={config.cluster}",
-    "--env",
-    f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
-    "--env",
-    f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
-    "--env",
-    f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
-    "--env",
-    f"TORCHPRIME_BQ_TABLE={config.bq_table}",
     "--env",
     f"TORCHPRIME_JOBSET_NAME={workload_name}",
     "--env",
@@ -412,8 +408,19 @@ def run(
     f"TORCHPRIME_USER={getpass.getuser()}",
   ]
 
-  if num_slices is None:
-    num_slices = config.num_slices
+  if config.upload_metrics:
+    artifact_arg.extend(
+      [
+        "--env",
+        f"TORCHPRIME_UPLOAD_METRICS={config.upload_metrics}",
+        "--env",
+        f"TORCHPRIME_BQ_PROJECT={config.bq_project}",
+        "--env",
+        f"TORCHPRIME_BQ_DATASET={config.bq_dataset}",
+        "--env",
+        f"TORCHPRIME_BQ_TABLE={config.bq_table}",
+      ]
+    )
 
   ensure_command("xpk")
   xpk_command = (

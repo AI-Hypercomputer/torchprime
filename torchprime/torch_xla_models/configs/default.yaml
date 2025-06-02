@@ -29,7 +29,9 @@ checkpoint_dir: checkpoints/
 resume_from_checkpoint: null
 save_steps: 15
 
+torch_dtype: bfloat16
 optimizer:
+  type: adafactor
   learning_rate: 5.e-5
 lr_scheduler:
   type: linear
