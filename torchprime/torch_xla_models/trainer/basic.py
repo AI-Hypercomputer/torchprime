@@ -244,7 +244,9 @@ class Trainer:
 
         # Compute tokens per seconds
         tokens_per_second = (
-          self.config.data.block_size * self.config.task.global_batch_size // step_duration
+          self.config.data.block_size
+          * self.config.task.global_batch_size
+          // step_duration
         )
         metrics_logger.log_tokens_per_second(tokens_per_second)
 
