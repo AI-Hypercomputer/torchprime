@@ -9,7 +9,8 @@ import sys
 logging.basicConfig(
   format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
   datefmt="%m/%d/%Y %H:%M:%S",
-  level=logging.INFO,)
+  level=logging.INFO,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def log_basic_system_info() -> None:
   logger.info(f"Python Version: {sys.version.replace(chr(10), ' ')}")  # Remove newlines
   logger.info(f"Python Executable: {sys.executable}")
 
+
 def log_args() -> None:
   """Logs command line arguments."""
   logger.info("--- Command Line Arguments ---")
@@ -38,6 +40,7 @@ def log_args() -> None:
     for i, arg in enumerate(sys.argv):
       logger.info(f"Argument {i}: {arg}")
   logger.info(f"Total arguments: {len(sys.argv)}")
+
 
 def log_all_env_variables() -> None:
   """Logs all environment variables."""
@@ -113,7 +116,7 @@ def log_pytorch_info() -> None:
   except ImportError:
     logger.warning("torch_xla not found. Exiting without further checks.")
     return
-  
+
   try:
     logger.info("torch_xla imported successfully.")
     logger.info(f"torch_xla version: {torch_xla.__version__}")
@@ -132,19 +135,18 @@ def log_pytorch_info() -> None:
     return
 
 
-
 def main() -> int:
-  # Don't use a fancy arg parser here. We are just pulling 2 args. 
+  # Don't use a fancy arg parser here. We are just pulling 2 args.
   for arg in sys.argv:
     if arg.startswith("output_dir="):
       output_dir = arg.split("=", 1)[1]
       break
-  else: # no break
+  else:  # no break
     output_dir = "/tmp/"
 
   # Attach logger to the output directory
   log_file = os.path.join(output_dir, "log.log")
-  os.makedirs(output_dir, exist_ok=False) # This should be a new directory.
+  os.makedirs(output_dir, exist_ok=False)  # This should be a new directory.
   logger.info("Created output directory: %s", output_dir)
   file_handler = logging.FileHandler(log_file)
   file_handler.setLevel(logging.INFO)
@@ -155,7 +157,6 @@ def main() -> int:
   file_handler.setFormatter(formatter)
   logger.addHandler(file_handler)
   logger.info("Attached logger to file: %s", log_file)
-
 
   logger.info("======================================================================")
   logger.info("                       PyTorch Environment Information                ")
