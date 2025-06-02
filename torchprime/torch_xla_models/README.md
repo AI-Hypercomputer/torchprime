@@ -50,6 +50,7 @@ tp run torchprime/torch_xla_models/train.py \
     task=basic \
     task.global_batch_size=1024 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     profile_step=6 \
     profile_duration=20000 \
     ici_mesh.fsdp=256 \
@@ -69,6 +70,7 @@ tp run torchprime/torch_xla_models/train.py \
     task=basic \
     task.global_batch_size=1024 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     profile_step=6 \
     profile_duration=20000 \
     ici_mesh.fsdp=256 \
@@ -88,6 +90,7 @@ tp run torchprime/torch_xla_models/train.py \
     task=basic \
     task.global_batch_size=512 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     profile_step=5 \
     profile_duration=250000  \
     ici_mesh.fsdp=256 \
@@ -110,12 +113,12 @@ tp run torchprime/torch_xla_models/train.py \
     task.global_batch_size=256 \
     task.max_steps=50 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     data.block_size=8192 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
     profile_step=5 \
     profile_duration=240000 \
-    dataset_config_name=wikitext-103-raw-v1 \
     logging_steps=10
 ```
 
@@ -133,13 +136,13 @@ tp run torchprime/torch_xla_models/train.py \
     task.global_batch_size=512 \
     task.max_steps=50 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     data.block_size=8192 \
     dcn_mesh.fsdp=2 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
     profile_step=15 \
     profile_duration=240000 \
-    dataset_config_name=wikitext-103-raw-v1 \
     logging_steps=10
 ```
 
@@ -155,8 +158,8 @@ tp run torchprime/torch_xla_models/train.py \
     task=basic \
     task.global_batch_size=512 \
     data=wikitext \
+    data.config_name=wikitext-103-raw-v1 \
     ici_mesh.fsdp=256 \
-    dataset_config_name=wikitext-103-raw-v1 \
     profile_step=5
 ```
 
