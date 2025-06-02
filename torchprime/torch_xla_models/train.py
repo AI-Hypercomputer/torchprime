@@ -19,7 +19,6 @@ import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.spmd as xs
 import torch_xla.runtime as xr
 import transformers
-import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
@@ -159,15 +158,15 @@ class Trainer:
       "scheduler": self.lr_scheduler.state_dict(),
       "step": self.start_step,
     }
-    if self.config.checkpoint_step in tracked_steps:
-      logger.info(f"Loading checkpoint from step {self.config.checkpoint_step}")
-      self.ckpt_mgr.restore(self.config.checkpoint_step, state_dict)
-    elif self.config.checkpoint_step == "latest":
+    if self.config.resume_from_checkpoint in tracked_steps:
+      logger.info(f"Loading checkpoint from step {self.config.resume_from_checkpoint}")
+      self.ckpt_mgr.restore(self.config.resume_from_checkpoint, state_dict)
+    elif self.config.resume_from_checkpoint == "latest":
       last_step = max(tracked_steps)
-      logger.warning(f"Checkpoint step {self.config.checkpoint_step} not found in tracked steps {tracked_steps}. Loading from latest checkpoint {last_step}.")
+      logger.warning(f"Checkpoint step {self.config.resume_from_checkpoint} not found in tracked steps {tracked_steps}. Loading from latest checkpoint {last_step}.")
       self.ckpt_mgr.restore(last_step, state_dict)
     else:
-      raise ValueError(f"Invalid checkpoint step: {self.config.checkpoint_step}. Must be one of {tracked_steps} or 'latest'.")
+      raise ValueError(f"Invalid checkpoint step: {self.config.resume_from_checkpoint}. Must be one of {tracked_steps} or 'latest'.")
 
     self.model.load_state_dict(state_dict["model"])
     self.optimizer.load_state_dict(state_dict["optimizer"])
@@ -301,7 +300,7 @@ class Trainer:
     return tuple(classes_to_checkpoint)
 
   def train_loop(self):
-    if self.config.checkpoint_step is not None:
+    if self.config.resume_from_checkpoint is not None:
       self._load_checkpoint()
     self.model.train()
     self.model.zero_grad()
