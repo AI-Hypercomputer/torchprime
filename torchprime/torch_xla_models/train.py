@@ -204,6 +204,14 @@ class Trainer:
         )
         logger.info(f"[{self.name}] data shapes: {shapes}")
 
+        # Visualize one tensor.
+        import click
+        from torch_xla.distributed.spmd.debugging import visualize_tensor_sharding
+
+        t = next(iter(pytree.tree_iter(batch)))
+        generated_table = visualize_tensor_sharding(t, use_color=False)
+        click.echo(generated_table)
+
       def __len__(self):
         return len(self.dataloader)
 
