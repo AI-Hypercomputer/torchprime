@@ -95,13 +95,13 @@ def dummy_config():
 
 def test_trainer_initialization(monkeypatch, dummy_config):
   """Test Trainer initialization and mesh logic."""
-  from torchprime.torch_xla_models import sharding
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
 
   monkeypatch.setattr(
-    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
   )
   monkeypatch.setattr(
-    sharding.initialization,
+    sharding_initialization,
     "shard_torch_xla_model_from_config",
     lambda model, *args, **kwargs: model,
   )
@@ -117,13 +117,13 @@ def test_trainer_initialization(monkeypatch, dummy_config):
 
 def test_trainer_train_loop(monkeypatch, dummy_config):
   """Test full training loop execution and step count via wrapper."""
-  from torchprime.torch_xla_models import sharding
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
 
   monkeypatch.setattr(
-    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
   )
   monkeypatch.setattr(
-    sharding.initialization,
+    sharding_initialization,
     "shard_torch_xla_model_from_config",
     lambda model, *args, **kwargs: model,
   )
@@ -149,13 +149,13 @@ def test_trainer_train_loop(monkeypatch, dummy_config):
 
 def test_trainer_train_step(monkeypatch, dummy_config):
   """Test correctness of one training step."""
-  from torchprime.torch_xla_models import sharding
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
 
   monkeypatch.setattr(
-    sharding.initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
   )
   monkeypatch.setattr(
-    sharding.initialization,
+    sharding_initialization,
     "shard_torch_xla_model_from_config",
     lambda model, *args, **kwargs: model,
   )
