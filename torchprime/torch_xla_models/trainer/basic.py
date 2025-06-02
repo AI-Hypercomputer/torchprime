@@ -237,14 +237,14 @@ class Trainer:
           step_duration=step_duration,
           tpu_name=tpu_name,
           num_slices=get_num_slices(),
-          sequence_length=self.config.block_size,
+          sequence_length=self.config.data.block_size,
           torch_dtype=self.config.torch_dtype,
         )
         metrics_logger.log_mfu(mfu.mfu)
 
         # Compute tokens per seconds
         tokens_per_second = (
-          self.config.block_size * self.config.task.global_batch_size // step_duration
+          self.config.data.block_size * self.config.task.global_batch_size // step_duration
         )
         metrics_logger.log_tokens_per_second(tokens_per_second)
 
