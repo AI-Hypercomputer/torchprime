@@ -134,8 +134,9 @@ You may refer to the hydra docs for other ways to specify configs.
 training code that needs to run on multiple VMs.
 
 First teach `torchprime` about the XPK cluster it is using, the artifact storage
-location, etc. You only need to do this on first clone or when switching to a
-different topology or cluster. Example:
+location, the Google Cloud project/zone, and the TPU topology. You only need
+to do this on first clone or when switching to a different topology or cluster.
+Example:
 
 ```sh
 tp use \
