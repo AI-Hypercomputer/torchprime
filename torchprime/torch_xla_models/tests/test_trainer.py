@@ -1,7 +1,7 @@
 """Unit tests for the TPU Trainer class using PyTorch/XLA.
 
 These tests validate the behavior of the Trainer class defined in
-`torchprime.torch_xla_models.trainer.basic` by mocking TPU-specific and sharding logic
+`torchprime.torch_xla_models.trainer.base_trainer` by mocking TPU-specific and sharding logic
 for CPU-based testing. It includes tests for:
 
 - Trainer initialization logic and sharding setup.
@@ -22,7 +22,7 @@ from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
 from torchprime.metrics.metrics import MetricsLogger
-from torchprime.torch_xla_models.trainer.basic import Trainer
+from torchprime.torch_xla_models.trainer.base_trainer import Trainer
 
 
 class DummyModel(nn.Module):
@@ -105,17 +105,13 @@ def dummy_config():
   "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
   side_effect=lambda model, *args, **kwargs: model,
 )
-@patch("torchprime.torch_xla_models.trainer.basic.xm.xla_device", return_value="cpu")
-@patch("torchprime.torch_xla_models.trainer.basic.torch_xla.sync")
-def test_trainer_init(
-  mock_sync, mock_device, mock_shard_model, mock_get_mesh, dummy_config
-):
+def test_trainer_init(mock_shard_model, mock_get_mesh, dummy_config):
   model = DummyModel()
   dataset = DummyDataset()
   trainer = Trainer(model, dummy_config, dataset)
   assert isinstance(trainer.model, DummyModel)
   assert trainer.global_batch_size == 4
-  assert trainer.device == "cpu"
+  assert str(trainer.device).startswith("xla")
 
 
 @patch(
@@ -126,19 +122,15 @@ def test_trainer_init(
   "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
   side_effect=lambda model, *args, **kwargs: model,
 )
-@patch("torchprime.torch_xla_models.trainer.basic.xm.xla_device", return_value="cpu")
-@patch("torchprime.torch_xla_models.trainer.basic.torch_xla.sync")
-@patch("torchprime.torch_xla_models.trainer.basic.xm.add_step_closure")
-@patch("torchprime.torch_xla_models.trainer.basic.xm.wait_device_ops")
-@patch("torchprime.torch_xla_models.trainer.basic.Trainer._get_train_dataloader")
-@patch("torchprime.torch_xla_models.trainer.basic.Trainer.train_step")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.add_step_closure")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.xm.wait_device_ops")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer._get_train_dataloader")
+@patch("torchprime.torch_xla_models.trainer.base_trainer.Trainer.train_step")
 def test_train_loop(
   mock_train_step,
   mock_get_loader,
   mock_wait,
   mock_closure,
-  mock_sync,
-  mock_device,
   mock_shard_model,
   mock_get_mesh,
   dummy_config,
@@ -154,7 +146,7 @@ def test_train_loop(
 
 
 @patch(
-  "torchprime.torch_xla_models.trainer.basic.torch_xla.compile",
+  "torchprime.torch_xla_models.trainer.base_trainer.torch_xla.compile",
   lambda **kwargs: lambda fn: fn,
 )
 @patch(
@@ -165,11 +157,7 @@ def test_train_loop(
   "torchprime.torch_xla_models.sharding.initialization.shard_torch_xla_model_from_config",
   side_effect=lambda model, *args, **kwargs: model,
 )
-@patch("torchprime.torch_xla_models.trainer.basic.xm.xla_device", return_value="cpu")
-@patch("torchprime.torch_xla_models.trainer.basic.torch_xla.sync")
-def test_train_step(
-  mock_sync, mock_device, mock_shard_model, mock_get_mesh, dummy_config
-):
+def test_train_step(mock_shard_model, mock_get_mesh, dummy_config):
   model = DummyModel()
   dataset = DummyDataset()
   batch = {k: v.unsqueeze(0) for k, v in dataset[0].items()}

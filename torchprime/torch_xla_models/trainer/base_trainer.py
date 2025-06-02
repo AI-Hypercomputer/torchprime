@@ -1,4 +1,4 @@
-"""Basic trainer module for TPU-based model training using PyTorch/XLA.
+"""Base trainer module for TPU-based model training using PyTorch/XLA.
 
 This script provides a `Trainer` class that sets up model sharding, activation checkpointing,
 optimization, and the training loop with XLA-specific configurations. It is designed to work with
