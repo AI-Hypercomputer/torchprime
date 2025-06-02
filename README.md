@@ -232,6 +232,11 @@ Contributions are welcome! Please feel free to submit a pull request.
 
 Refer to the [contributor guide](./docs/contributor/README.md) to get started.
 
+## Questions and suggestions
+
+Feel free to ask questions in the [Discussions][discussions] panel, or to look
+at previous questions and discussions.
+
 ## License
 
 This project is licensed under the New BSD License - see the [LICENSE](LICENSE)
@@ -242,6 +247,7 @@ documentation](https://github.com/pytorch/xla).
 
 [torch_xla]: https://github.com/pytorch/xla
 [fsdp]: https://jax-ml.github.io/scaling-book/training/#fully-sharded-data-parallelism-fsdp
+[discussions]: https://github.com/AI-Hypercomputer/torchprime/discussions/categories/q-a
 [xpk]: https://github.com/AI-Hypercomputer/xpk
 [torch_xla_debug_env]:
     https://github.com/pytorch/xla/blob/master/docs/source/learn/troubleshoot.md#environment-variables
