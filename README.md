@@ -190,7 +190,7 @@ Besides forwarding your command line arguments, `tp run` will add:
 - `output_dir=[...]` path to a directory where the workload may store output
   artifacts such as metrics and checkpoints
 
-#### Troublshooting distributed training setup
+#### Troubleshooting distributed training setup
 
 See the guide to [troubleshoot distributed training][troubleshoot_distributed]
 for more tools to get your distributed training environment setup.
