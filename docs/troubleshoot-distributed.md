@@ -1,4 +1,4 @@
-# Troubleshooting Distributed Setup
+# Troubleshooting distributed setup
 
 `torchprime` is designed for scaled, distributed training. 
 Once properly configured, the `tp run` command-line function 
@@ -21,9 +21,9 @@ configurations you may need to run.
 
 ## End-to-end test
 
-A simple first script to run using `tp run` is the log_and_exit script. 
-This script will log data about the host, and attempt to run a simple
-calculations with PyTorch using both the CPU and XLA backends. 
+A simple first script to run using `tp run` is the `log_and_exit.py` script. 
+This script will log data about the host, and attempt to run minimal
+calculation with PyTorch using both the CPU and XLA backends. 
 
 ```sh
 tp run torchprime/tools/log_and_exit.py --name first-run
