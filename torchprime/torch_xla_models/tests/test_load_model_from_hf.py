@@ -50,5 +50,5 @@ def test_llama3_8b_from_pretrained_param_count():
   mismatched_model = initialize_model_class(config)
 
   # Expect state_dict loading to fail due to size/shape mismatch
-  with pytest.raises(RuntimeError, match="size mismatch|missing|unexpected"):
+  with pytest.raises(RuntimeError, match=r"(Unexpected|Missing) key|size mismatch"):
     mismatched_model.from_pretrained("meta-llama/Meta-Llama-3-8B")
