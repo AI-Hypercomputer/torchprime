@@ -10,6 +10,8 @@ import os
 
 import torch
 import torch.nn as nn
+from huggingface_hub import snapshot_download
+from omegaconf import OmegaConf
 from safetensors import safe_open
 from safetensors.torch import save_file
 
@@ -24,7 +26,7 @@ def load_sharded_safetensors_to_state_dict(model_dir: str) -> dict:
   for filename in set(weight_map.values()):
     path = os.path.join(model_dir, filename)
     with safe_open(path, framework="pt", device="cpu") as f:
-      for key in f:
+      for key in f.keys():  # noqa: SIM118
         state_dict[key] = f.get_tensor(key)
   return state_dict
 
@@ -76,10 +78,19 @@ class BaseCausalLM(nn.Module):
       for k, v in self.state_dict().items()
     }
     save_sharded_safetensors_by_layer(state_dict, save_directory)
-    with open(os.path.join(save_directory, "config.json"), "w") as f:
-      json.dump(vars(self.config), f, indent=2)
 
-  def from_pretrain(self, model_dir: str):
-    """Load model weights from a directory containing sharded safetensors."""
+    with open(os.path.join(save_directory, "config.json"), "w") as f:
+      json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
+
+  def from_pretrained(self, model_path_or_repo: str):
+    """Load model weights from local directory or Hugging Face Hub repo."""
+    if os.path.isdir(model_path_or_repo):
+      model_dir = model_path_or_repo
+    else:
+      model_dir = snapshot_download(
+        repo_id=model_path_or_repo, allow_patterns=["*.safetensors*", "config.json"]
+      )
+
+    # Load weights
     state_dict = load_sharded_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)

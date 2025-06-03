@@ -1,6 +1,5 @@
 import logging
 import sys
-from contextlib import contextmanager
 
 import datasets
 import hydra
@@ -18,7 +17,10 @@ from transformers import (
 
 from torchprime.data.dataset import make_huggingface_dataset
 from torchprime.metrics.metrics import MetricsLogger
-from torchprime.torch_xla_models.model.model_utils import initialize_model_class
+from torchprime.torch_xla_models.model.model_utils import (
+  initialize_model_class,
+  set_default_dtype,
+)
 from torchprime.torch_xla_models.trainer.base_trainer import Trainer
 from torchprime.utils.retry import retry
 
@@ -27,19 +29,6 @@ logger = logging.getLogger(__name__)
 
 xr.use_spmd()
 assert xr.is_spmd() is True
-
-
-@contextmanager
-def set_default_dtype(dtype):
-  # Get the current default dtype
-  previous_dtype = torch.get_default_dtype()
-  # Set the new default dtype
-  torch.set_default_dtype(dtype)
-  try:
-    yield
-  finally:
-    # Revert to the original default dtype
-    torch.set_default_dtype(previous_dtype)
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")

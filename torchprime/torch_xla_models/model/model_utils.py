@@ -1,7 +1,11 @@
 """Utility function(s) for model initialization."""
 
 import importlib
+import re
 import sys
+from contextlib import contextmanager
+
+import torch
 
 
 def initialize_model_class(model_config):
@@ -26,3 +30,36 @@ def initialize_model_class(model_config):
 
   model_class = getattr(module, model_class_name)
   return model_class(model_config)
+
+
+@contextmanager
+def set_default_dtype(dtype):
+  # Get the current default dtype
+  previous_dtype = torch.get_default_dtype()
+  # Set the new default dtype
+  torch.set_default_dtype(dtype)
+  try:
+    yield
+  finally:
+    # Revert to the original default dtype
+    torch.set_default_dtype(previous_dtype)
+
+
+def extract_model_size_from_model_name(model_name: str) -> int | float:
+  """Extract the model size in billions from a model name string.
+
+  Args:
+      model_name (str): The model name string, e.g., "llama-3-8b.yaml".
+
+  Returns:
+      Union[int, float]: The model size in billions, or -1 if not found.
+  """
+  match = re.search(r"(\d+(?:\.\d+)?)b", model_name.lower())
+  if match:
+    size_str = match.group(1)
+    try:
+      size = float(size_str)
+      return int(size) if size.is_integer() else size
+    except ValueError:
+      return -1
+  return -1

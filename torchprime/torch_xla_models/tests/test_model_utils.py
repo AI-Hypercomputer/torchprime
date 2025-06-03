@@ -5,6 +5,8 @@ instantiates each model via the utility function, and checks:
 - That the model loads successfully.
 - That it is an instance of BaseCausalLM.
 - That the number of trainable parameters exceeds a threshold.
+
+This test can take a long time to run, depending on the number of models.
 """
 
 import glob
@@ -16,7 +18,10 @@ import yaml
 from omegaconf import OmegaConf
 
 from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
-from torchprime.torch_xla_models.model.model_utils import initialize_model_class
+from torchprime.torch_xla_models.model.model_utils import (
+  extract_model_size_from_model_name,
+  initialize_model_class,
+)
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../model")))
 
@@ -24,7 +29,10 @@ MODEL_CONFIG_DIR = os.path.join("torchprime", "torch_xla_models", "configs", "mo
 
 
 def get_model_config_files():
-  return glob.glob(os.path.join(MODEL_CONFIG_DIR, "*.yaml"))
+  models = glob.glob(os.path.join(MODEL_CONFIG_DIR, "*.yaml"))
+  # only test models with size < 10B
+  models = [m for m in models if 0 < extract_model_size_from_model_name(m) < 10]
+  return models
 
 
 @pytest.mark.parametrize("config_path", get_model_config_files())
