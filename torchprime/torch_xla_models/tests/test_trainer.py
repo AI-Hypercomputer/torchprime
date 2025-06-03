@@ -70,6 +70,7 @@ def dummy_config():
     {
       "global_batch_size": 4,
       "max_steps": 2,
+      "run_name": None,
       "output_dir": "/tmp/test_output",
       "logging_steps": 1,
       "profile_step": -1,
