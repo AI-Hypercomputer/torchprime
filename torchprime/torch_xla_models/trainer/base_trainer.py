@@ -181,7 +181,9 @@ class Trainer:
     )
     return loader
 
-  def _log_to_tensorboard(self, epoch: float, step: int, loss: float, learning_rate: float):
+  def _log_to_tensorboard(
+    self, epoch: float, step: int, loss: float, learning_rate: float
+  ):
     """Log metrics to TensorBoard."""
     self.summary_writer.add_scalar("train/epoch", loss, epoch)
     self.summary_writer.add_scalar("train/loss", loss, step)
@@ -220,7 +222,7 @@ class Trainer:
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time, lr):
           loss = loss.detach().item()
           logger.info(
-            f"Epoch: %d, step: %d, loss: %.4f, lr: %.2f, trace time: %.2f ms",
+            "Epoch: %d, step: %d, loss: %.4f, lr: %.2f, trace time: %.2f ms",
             epoch,
             step,
             loss,
