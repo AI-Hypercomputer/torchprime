@@ -49,14 +49,17 @@ def temp_dirs(tmp_path):
 
 def test_log_and_exit_with_fixture(caplog, temp_dirs):
   """Test using a custom fixture for temp directories."""
-  with unittest.mock.patch(
-    "sys.argv",
-    [
-      "log_and_exit.py",
-      f"output_dir={temp_dirs['output_dir']}",
-      f"profile_dir={temp_dirs['profile_dir']}",
-    ],
-  ), caplog.at_level(logging.INFO):
+  with (
+    unittest.mock.patch(
+      "sys.argv",
+      [
+        "log_and_exit.py",
+        f"output_dir={temp_dirs['output_dir']}",
+        f"profile_dir={temp_dirs['profile_dir']}",
+      ],
+    ),
+    caplog.at_level(logging.INFO),
+  ):
     result = torchprime.tools.log_and_exit.main()
 
   assert result == 0
