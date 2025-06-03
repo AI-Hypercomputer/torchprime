@@ -56,9 +56,8 @@ def test_log_and_exit_with_fixture(caplog, temp_dirs):
       f"output_dir={temp_dirs['output_dir']}",
       f"profile_dir={temp_dirs['profile_dir']}",
     ],
-  ):
-    with caplog.at_level(logging.INFO):
-      result = torchprime.tools.log_and_exit.main()
+  ), caplog.at_level(logging.INFO):
+    result = torchprime.tools.log_and_exit.main()
 
   assert result == 0
   assert "End of PyTorch Environment Logging" in caplog.text
