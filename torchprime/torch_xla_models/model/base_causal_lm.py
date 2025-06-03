@@ -1,4 +1,4 @@
-"""BaseModel Module
+"""BaseCausalLM Module
 
 This module defines a minimal base class for causal language models using PyTorch.
 It includes a standard weight initialization method, a placeholder forward pass,
