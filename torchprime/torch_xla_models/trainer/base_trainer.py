@@ -181,8 +181,9 @@ class Trainer:
     )
     return loader
 
-  def _log_to_tensorboard(self, step: int, loss: float, learning_rate: float):
+  def _log_to_tensorboard(self, epoch: float, step: int, loss: float, learning_rate: float):
     """Log metrics to TensorBoard."""
+    self.summary_writer.add_scalar("train/epoch", loss, epoch)
     self.summary_writer.add_scalar("train/loss", loss, step)
     self.summary_writer.add_scalar("train/learning_rate", learning_rate, step)
     self.summary_writer.flush()
@@ -225,7 +226,7 @@ class Trainer:
             loss,
             (trace_end_time - trace_start_time) * 1000,
           )
-          self._log_to_tensorboard(step, loss, lr)
+          self._log_to_tensorboard(epoch, step, loss, lr)
           if math.isnan(loss):
             raise ValueError(f"Loss is NaN at step {step}")
 
