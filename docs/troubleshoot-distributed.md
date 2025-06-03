@@ -140,7 +140,7 @@ unauthorized: authentication failed
 Error running command: Command '['sudo', 'docker', 'push', ... 
 ```
 
-you may need to authenticate your gcloud as root.
+you may need to authenticate gcloud as root.
 
 ```sh
 sudo gcloud auth login
