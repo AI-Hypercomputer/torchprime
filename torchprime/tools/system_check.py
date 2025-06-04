@@ -1,11 +1,11 @@
 """Utility to log system info and check PyTorch environment."""
 
 import datetime
-import importlib.metadata
 import logging
 import os
 import platform
 import sys
+from importlib.metadata import distributions
 
 logging.basicConfig(
   format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -56,8 +56,6 @@ def log_all_env_variables() -> None:
 
 
 def log_python_package_info() -> None:
-  from importlib.metadata import distributions
-
   logger.info("--- Python Package Information ---")
   dists = list(sorted(distributions(), key=lambda d: d.metadata["Name"].lower()))
   for dist in dists:
