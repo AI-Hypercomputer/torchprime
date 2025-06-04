@@ -15,7 +15,7 @@ def initialize_model_class(model_config):
 
   for candidate_module_name in [f"model.{module_name}", module_name]:
     # use full import path to avoid issues with relative imports
-    full_module_name = f"trochprime.torch_xla_models.{candidate_module_name}"
+    full_module_name = f"torchprime.torch_xla_models.{candidate_module_name}"
     try:
       module = importlib.import_module(full_module_name)
       break
