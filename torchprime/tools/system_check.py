@@ -1,6 +1,7 @@
-"""Utility to log environment information and exit gracefully."""
+"""Utility to log system info and check PyTorch environment."""
 
 import datetime
+import importlib.metadata
 import logging
 import os
 import platform
@@ -52,6 +53,17 @@ def log_all_env_variables() -> None:
   for key, value in sorted(os.environ.items()):
     logger.info(f"{key}={value}")
   logger.info(f"Logged {len(os.environ)} environment variable(s).")
+
+
+def log_python_package_info() -> None:
+  from importlib.metadata import distributions
+
+  logger.info("--- Python Package Information ---")
+  dists = list(sorted(distributions(), key=lambda d: d.metadata["Name"].lower()))
+  for dist in dists:
+    logger.info(f"{dist.metadata['Name']}=={dist.version}")
+
+  logger.info(f"Logged {len(dists)} Python package(s).")
 
 
 def log_pytorch_info() -> None:
@@ -170,6 +182,8 @@ def main() -> int:
   log_basic_system_info()
   logger.info("----------------------------------------------------------------------")
   log_all_env_variables()
+  logger.info("----------------------------------------------------------------------")
+  log_python_package_info()
   logger.info("----------------------------------------------------------------------")
   log_pytorch_info()
   logger.info("----------------------------------------------------------------------")

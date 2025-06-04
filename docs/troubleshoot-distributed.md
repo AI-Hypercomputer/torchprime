@@ -21,12 +21,12 @@ configurations you may need to run.
 
 ## End-to-end test
 
-A simple first script to run using `tp run` is the `log_and_exit.py` script. 
+A simple first script to run using `tp run` is the `system_check.py` script. 
 This script will log data about the host, and attempt to run minimal
 calculation with PyTorch using both the CPU and XLA backends. 
 
 ```sh
-tp run torchprime/tools/log_and_exit.py --name first-run
+tp run torchprime/tools/system_check.py --name first-run
 ```
 
 The logs are sent to both the cluster's stdout, which you can retrieve 
@@ -45,7 +45,7 @@ An example output:
 06/02/2025 21:09:12 - INFO - __main__ -                        PyTorch Environment Information                
 06/02/2025 21:09:12 - INFO - __main__ - ======================================================================
 06/02/2025 21:09:12 - INFO - __main__ - --- Command Line Arguments ---
-06/02/2025 21:09:12 - INFO - __main__ - Argument 0: torchprime/tools/log_and_exit.py
+06/02/2025 21:09:12 - INFO - __main__ - Argument 0: torchprime/tools/system_check.py
 06/02/2025 21:09:12 - INFO - __main__ - Argument 1: profile_dir=/tmp/gcs-mount/first-run/profile/0-0
 06/02/2025 21:09:12 - INFO - __main__ - Argument 2: output_dir=/tmp/gcs-mount/first-run/outputs/0-0
 06/02/2025 21:09:12 - INFO - __main__ - Total arguments: 3
@@ -140,7 +140,10 @@ unauthorized: authentication failed
 Error running command: Command '['sudo', 'docker', 'push', ... 
 ```
 
-you may need to authenticate gcloud as root.
+this may be because `tp` is using sudo to push docker images, but your
+gcloud is not authenticated as root. Either setup 
+[non-root docker](https://docs.docker.com/engine/install/linux-postinstall/)
+or authenticate gcloud as root.
 
 ```sh
 sudo gcloud auth login
