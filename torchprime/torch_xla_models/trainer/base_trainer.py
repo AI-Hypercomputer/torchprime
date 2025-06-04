@@ -226,6 +226,7 @@ class Trainer:
             epoch,
             step,
             loss,
+            lr,
             (trace_end_time - trace_start_time) * 1000,
           )
           self._log_to_tensorboard(epoch, step, loss, lr)
