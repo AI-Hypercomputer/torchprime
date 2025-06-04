@@ -1,8 +1,6 @@
 import logging
 import unittest.mock
 
-import pytest
-
 import torchprime.tools.system_check
 
 
