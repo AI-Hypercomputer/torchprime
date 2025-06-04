@@ -49,8 +49,11 @@ buckets.
    You may provide a `--name [some-name]` argument to `tp run` to simplify the
    discovery of the output directory.
 
-1. Launch tensorboard with this path as the log dir. Example:
+1. Launch tensorboard with the `runs` subdirectory relative to the output.
+   Example:
 
    ```sh
-   tensorboard --logdir gs://torchprime/my-exp/my-xpk-v6e-4-1-20250604-005509/outputs/0-0  --port=6006
+   tensorboard \
+       --logdir gs://torchprime/my-exp/my-xpk-v6e-4-1-20250604-005509/outputs/0-0/runs \
+       --port=6006
    ```
