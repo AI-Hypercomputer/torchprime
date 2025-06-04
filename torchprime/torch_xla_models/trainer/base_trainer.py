@@ -13,6 +13,7 @@ Typical usage example:
 import logging
 import math
 import os
+from datetime import datetime
 from pathlib import Path
 from timeit import default_timer as timer
 
@@ -25,6 +26,7 @@ import torch_xla.runtime as xr
 from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.tensorboard import SummaryWriter
 from transformers import (
   default_data_collator,
   get_scheduler,
@@ -78,6 +80,9 @@ class Trainer:
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
 
+    # Initialize tensorboard metrics writer
+    self._initialize_tensorboard_writer()
+
     # Sharding setup
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
@@ -112,6 +117,19 @@ class Trainer:
 
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
+
+  def __del__(self):
+    # Close TensorBoard writer on destruction.
+    self.summary_writer.close()
+
+  def _initialize_tensorboard_writer(self):
+    run_name = self.config.run_name
+    if run_name is None:
+      run_name = datetime.now().strftime("%b%d_%H-%M-%S")
+    tensorboard_dir = Path(self.config.output_dir) / "runs" / run_name
+    tensorboard_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"TensorBoard logging to: {tensorboard_dir}")
+    self.summary_writer = SummaryWriter(log_dir=str(tensorboard_dir))
 
   def _prime_optimizer(self) -> None:
     for group in self.optimizer.param_groups:
@@ -163,6 +181,15 @@ class Trainer:
     )
     return loader
 
+  def _log_to_tensorboard(
+    self, epoch: float, step: int, loss: float, learning_rate: float
+  ):
+    """Log metrics to TensorBoard."""
+    self.summary_writer.add_scalar("train/epoch", epoch, step)
+    self.summary_writer.add_scalar("train/loss", loss, step)
+    self.summary_writer.add_scalar("train/learning_rate", learning_rate, step)
+    self.summary_writer.flush()
+
   def train_loop(self, metrics_logger) -> None:
     self.model.train()
     self.model.zero_grad()
@@ -192,21 +219,30 @@ class Trainer:
 
       if step % self.config.logging_steps == 0:
 
-        def step_closure(epoch, step, loss, trace_start_time, trace_end_time):
+        def step_closure(epoch, step, loss, trace_start_time, trace_end_time, lr):
           loss = loss.detach().item()
           logger.info(
-            "Epoch: %d, step: %d, loss: %.4f, trace time: %.2f ms",
+            "Epoch: %d, step: %d, loss: %.4f, lr: %.2e, trace time: %.2f ms",
             epoch,
             step,
             loss,
+            lr,
             (trace_end_time - trace_start_time) * 1000,
           )
+          self._log_to_tensorboard(epoch, step, loss, lr)
           if math.isnan(loss):
             raise ValueError(f"Loss is NaN at step {step}")
 
         xm.add_step_closure(
           step_closure,
-          args=(epoch, step, loss, trace_start_time, trace_end_time),
+          args=(
+            epoch,
+            step,
+            loss,
+            trace_start_time,
+            trace_end_time,
+            self.lr_scheduler.get_last_lr()[0],
+          ),
           run_async=True,
         )
 

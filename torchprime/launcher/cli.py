@@ -454,6 +454,17 @@ def run(
   )
   subprocess.run(xpk_command, check=True)
 
+  styled_workload = click.style(workload_name, bold=True, fg="green")
+  styled_cluster = click.style(config.cluster, bold=True, fg="green")
+  styled_artifacts = click.style(
+    f"{config.artifact_dir}/{workload_name}", bold=True, fg="green"
+  )
+  click.echo(f"""
+Workload {styled_workload} submitted to cluster {styled_cluster}
+
+Artifacts are stored at {styled_artifacts}
+""")
+
 
 @cli.command(
   context_settings=dict(
