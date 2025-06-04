@@ -68,7 +68,6 @@ class FakeMesh:
 def dummy_config():
   return OmegaConf.create(
     {
-      "run_name": "test_trainer_dummy",
       "model": {
         "remat": {
           "activation_checkpoint_layers": [],
@@ -86,6 +85,7 @@ def dummy_config():
         "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
         "lr_scheduler": {"type": "constant", "warmup_steps": 0},
       },
+      "run_name": None,
       "output_dir": "/tmp/test_output",
       "logging_steps": 1,
       "profile_step": -1,

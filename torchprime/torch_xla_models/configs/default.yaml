@@ -21,6 +21,9 @@ profile_duration: 100000
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
 
+# The name of the training run as it shows up on tensorboard.
+# If unspecified, defaults to the current date and time.
+run_name: null
 
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called
