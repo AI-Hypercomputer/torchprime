@@ -27,8 +27,12 @@ def log_basic_system_info() -> None:
   logger.info("Architecture: %s", platform.architecture()[0])
   logger.info("System: %s %s", platform.system(), platform.release())
   logger.info("Version: %s", platform.version())
-  logger.info("OS: %s %s (%s)", platform.system(), platform.release(), platform.version())
-  logger.info("Python Version: %s", sys.version.replace(chr(10), ' '))  # Remove newlines
+  logger.info(
+    "OS: %s %s (%s)", platform.system(), platform.release(), platform.version()
+  )
+  logger.info(
+    "Python Version: %s", sys.version.replace(chr(10), " ")
+  )  # Remove newlines
   logger.info("Python Executable: %s", sys.executable)
 
 
@@ -59,7 +63,7 @@ def log_python_package_info() -> None:
   logger.info("--- Python Package Information ---")
   dists = list(sorted(distributions(), key=lambda d: d.metadata["Name"].lower()))
   for dist in dists:
-    logger.info("%s==%s", dist.metadata['Name'], dist.version)
+    logger.info("%s==%s", dist.metadata["Name"], dist.version)
 
   logger.info("Logged %d Python package(s).", len(dists))
 
@@ -124,7 +128,7 @@ def main() -> int:
   if output_dir:
     # Attach logger to the output directory
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_file = os.path.join(output_dir, "log-{}.log".format(timestamp))
+    log_file = os.path.join(output_dir, f"log-{timestamp}.log")
     os.makedirs(output_dir, exist_ok=True)
     logger.info("Created output directory: %s", output_dir)
     file_handler = logging.FileHandler(log_file)
