@@ -6,8 +6,8 @@
 defaults:
   - _self_ # refers to this config file
   - model: llama-3-8b # refers to model/llama-3-8b.yaml
-  - data: wikitext # refers to data/wikitext.yaml
-  - task: basic # refers to task/basic.yaml
+  - dataset: wikitext # refers to dataset/wikitext.yaml
+  - task: train # refers to task/train.yaml
 
 seed: 42
 logging_steps: 10

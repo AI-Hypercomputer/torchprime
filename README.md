@@ -122,8 +122,8 @@ ICI mesh axis length to 64:
 ```sh
 python3 torchprime/torch_xla_models/train.py \
     model=mixtral-8x7b \
-    task=basic \
-    data=wikitext \
+    task=train \
+    dataset=wikitext \
     task.global_batch_size=256 \
     ici_mesh.fsdp=64
 ```

@@ -1,4 +1,5 @@
-name: basic  # Basic means simple forward/backward pass without any special task logic.
+# this is for basic training loop, i.e., forward/backward pass without any special task logic.
+name: train 
 global_batch_size: 4
 max_steps: 15
 

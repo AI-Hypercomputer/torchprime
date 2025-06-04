@@ -68,6 +68,7 @@ class FakeMesh:
 def dummy_config():
   return OmegaConf.create(
     {
+      "run_name": "test_trainer_dummy",
       "model": {
         "remat": {
           "activation_checkpoint_layers": [],

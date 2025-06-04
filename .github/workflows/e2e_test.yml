@@ -74,8 +74,8 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
@@ -95,8 +95,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
             model.attention_kernel=splash_attention \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
@@ -116,8 +116,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
             model/remat=llama-scan-offload \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
@@ -137,8 +137,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model/sharding=llama-fsdp-tp \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=2 \
@@ -159,8 +159,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=mixtral-8x7b \
             model.num_hidden_layers=16 \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
@@ -181,8 +181,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model/sharding=llama-fsdp \
-            data=wikitext \
-            task=basic \
+            dataset=wikitext \
+            task=train \
             task.global_batch_size=16 \
             task.max_steps=15 \
             dcn_mesh.fsdp=2 \
