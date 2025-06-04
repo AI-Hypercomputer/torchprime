@@ -8,6 +8,7 @@ defaults:
   - model: llama-3-8b # refers to model/llama-3-8b.yaml
 
 # The name of the training run as it shows up on tensorboard.
+# If unspecified, defaults to the current date and time.
 run_name: null
 dataset_name: wikitext
 dataset_config_name: wikitext-2-raw-v1

@@ -19,7 +19,7 @@ The metrics contains `loss` and `learning_rate` etc. and you can visualize their
 progression by starting a tensorboard web server:
 
 ```sh
-tensorboard --logdir outputs/runs
+tensorboard --logdir outputs/runs --port=6006
 ```
 
 If you're starting tensorboard on a remote VM, you may use VSCode or SSH to
@@ -27,3 +27,30 @@ forward its HTTP port (typically `6006`) to your local machine, and then open
 the prompted link on your browser. You should expect to see something like this:
 
 ![Tensorboard metrics](./tensorboard-screenshot.png)
+
+## Viewing tensorboard metrics in distributed training
+
+It's also possible to view tensorboard metrics written by a distributed training
+job. `tensorboard` natively supports reading summaries from Google Cloud Storage
+buckets.
+
+1. Launch a distributed training job using `tp run`.
+
+1. Locate the output directory of your training job. For example, if you
+   configured the artifact storage location to `gs://torchprime/my-exp` during
+   `tp use`, the output directory may look like:
+
+   ```
+   gs://torchprime/my-exp/my-xpk-v6e-4-1-20250604-005509/outputs/0-0
+   ```
+ 
+   where `0-0` indicates the first host of the first slice.
+ 
+   You may provide a `--name [some-name]` argument to `tp run` to simplify the
+   discovery of the output directory.
+
+1. Launch tensorboard with this path as the log dir. Example:
+
+   ```sh
+   tensorboard --logdir gs://torchprime/my-exp/my-xpk-v6e-4-1-20250604-005509/outputs/0-0  --port=6006
+   ```

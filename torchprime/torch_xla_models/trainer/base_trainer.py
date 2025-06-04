@@ -222,7 +222,7 @@ class Trainer:
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time, lr):
           loss = loss.detach().item()
           logger.info(
-            "Epoch: %d, step: %d, loss: %.4f, lr: %.2f, trace time: %.2f ms",
+            "Epoch: %d, step: %d, loss: %.4f, lr: %.2e, trace time: %.2f ms",
             epoch,
             step,
             loss,
