@@ -1,5 +1,4 @@
-"""
-Unit test for a scaled-down LLaMA-3-8B model using BaseCausalLM.
+"""Unit test for a scaled-down LLaMA-3-8B model using BaseCausalLM.
 
 This test loads a minimal LLaMA config (135,488 parameters),
 initializes the model with random weights, runs a dummy forward pass,

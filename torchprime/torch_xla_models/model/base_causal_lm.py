@@ -13,21 +13,33 @@ import torch.nn as nn
 from huggingface_hub import snapshot_download
 from omegaconf import OmegaConf
 from safetensors import safe_open
-from safetensors.torch import save_file
+from safetensors.torch import load_file, save_file
 
 
-def load_sharded_safetensors_to_state_dict(model_dir: str) -> dict:
-  """Load a model state dict from sharded safetensors in a given directory."""
+def load_safetensors_to_state_dict(model_dir: str) -> dict:
+  """Load a model state dict from safetensors, supporting both sharded and single-file formats."""
   state_dict = {}
   index_file = os.path.join(model_dir, "model.safetensors.index.json")
-  with open(index_file) as f:
-    index = json.load(f)
-  weight_map = index["weight_map"]
-  for filename in set(weight_map.values()):
-    path = os.path.join(model_dir, filename)
-    with safe_open(path, framework="pt", device="cpu") as f:
-      for key in f.keys():  # noqa: SIM118
-        state_dict[key] = f.get_tensor(key)
+  single_file = os.path.join(model_dir, "model.safetensors")
+
+  if os.path.exists(index_file):
+    # Load sharded safetensors
+    with open(index_file) as f:
+      index = json.load(f)
+    weight_map = index["weight_map"]
+    for filename in set(weight_map.values()):
+      path = os.path.join(model_dir, filename)
+      with safe_open(path, framework="pt", device="cpu") as f:
+        for key in f.keys():  # noqa: SIM118
+          state_dict[key] = f.get_tensor(key)
+  elif os.path.exists(single_file):
+    # Load single safetensor file
+    state_dict = load_file(single_file)
+  else:
+    raise FileNotFoundError(
+      f"No safetensors found in {model_dir}. Expected 'model.safetensors' or 'model.safetensors.index.json'."
+    )
+
   return state_dict
 
 
@@ -92,5 +104,5 @@ class BaseCausalLM(nn.Module):
       )
 
     # Load weights
-    state_dict = load_sharded_safetensors_to_state_dict(model_dir)
+    state_dict = load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)

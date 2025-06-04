@@ -23,12 +23,29 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../m
 
 
 @pytest.mark.integration
-def test_llama3_8b_from_pretrained_param_count():
-  with open(
-    os.path.join(
-      "torchprime", "torch_xla_models", "configs", "model", "llama-3-8b.yaml"
-    )
-  ) as f:
+@pytest.mark.parametrize(
+  "config_file, hf_model, skip_on_ci",
+  [
+    (
+      "llama-1b-random-for-test.yaml",
+      "hf-internal-testing/tiny-random-LlamaForCausalLM",
+      False,
+    ),
+    (
+      "llama-3-8b.yaml",
+      "meta-llama/Meta-Llama-3-8B",
+      True,
+    ),
+  ],
+)
+def test_llama3_8b_from_pretrained_param_count(config_file, hf_model, skip_on_ci):
+  if skip_on_ci and os.environ.get("CI"):  # set export CI=true in GitHub Actions
+    pytest.skip(f"Skipping {hf_model} test in CI due to resource limits.")
+
+  config_path = os.path.join(
+    "torchprime", "torch_xla_models", "configs", "model", config_file
+  )
+  with open(config_path) as f:
     config_data = yaml.safe_load(f)
 
   config = OmegaConf.create(config_data)
@@ -37,18 +54,18 @@ def test_llama3_8b_from_pretrained_param_count():
   assert isinstance(model, BaseCausalLM)
 
   try:
-    model.from_pretrained("meta-llama/Meta-Llama-3-8B")
+    model.from_pretrained(hf_model)
   except Exception as e:
-    pytest.fail(f"Failed to load Meta-Llama-3-8B: {e}")
+    pytest.fail(f"Failed to load weights for {config_file}: {e}")
 
   model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-  assert random_model_params == model_params, "Unmatched number of parameters"
+  assert random_model_params == model_params, f"Param count mismatch in {config_file}"
 
   # Modify config to break the architecture
-  config.num_hidden_layers = config.num_hidden_layers - 1
+  config.num_hidden_layers -= 1
   mismatched_model = initialize_model_class(config)
 
   # Expect state_dict loading to fail due to size/shape mismatch
   with pytest.raises(RuntimeError, match=r"(Unexpected|Missing) key|size mismatch"):
-    mismatched_model.from_pretrained("meta-llama/Meta-Llama-3-8B")
+    mismatched_model.from_pretrained(hf_model)
