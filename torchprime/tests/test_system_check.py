@@ -31,7 +31,9 @@ def test_system_check(caplog, tmp_path):
 
   # Verify that a log file was created in the temp directory
   log_files = list(output_dir.glob("log-*.log"))
-  assert len(log_files) == 1, f"Expected 1 log file, found {len(log_files)}: {log_files}"
+  assert len(log_files) == 1, (
+    f"Expected 1 log file, found {len(log_files)}: {log_files}"
+  )
   log_file = log_files[0]
   assert log_file.exists()
   # Optionally verify the filename pattern
