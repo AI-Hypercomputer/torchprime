@@ -11,7 +11,6 @@ This test can take a long time to run, depending on the number of models.
 
 import glob
 import os
-import sys
 
 import pytest
 import yaml
@@ -22,8 +21,6 @@ from torchprime.torch_xla_models.model.model_utils import (
   extract_model_size_from_model_name,
   initialize_model_class,
 )
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../model")))
 
 MODEL_CONFIG_DIR = os.path.join("torchprime", "torch_xla_models", "configs", "model")
 

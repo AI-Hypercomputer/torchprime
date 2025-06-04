@@ -17,7 +17,21 @@ from safetensors.torch import load_file, save_file
 
 
 def load_safetensors_to_state_dict(model_dir: str) -> dict:
-  """Load a model state dict from safetensors, supporting both sharded and single-file formats."""
+  """Load a model state dict from safetensors, supporting both sharded and single-file formats.
+
+  This function loads model weights from the specified directory. It supports both
+  sharded (`model.safetensors.index.json`) and single-file (`model.safetensors`) formats.
+
+  Args:
+      model_dir: Path to the directory containing the model files.
+
+  Returns:
+      dict: A state dictionary containing the model's parameters.
+
+  Raises:
+      FileNotFoundError: If neither the sharded nor single-file safetensors are found.
+  """
+
   state_dict = {}
   index_file = os.path.join(model_dir, "model.safetensors.index.json")
   single_file = os.path.join(model_dir, "model.safetensors")
@@ -44,7 +58,17 @@ def load_safetensors_to_state_dict(model_dir: str) -> dict:
 
 
 def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
-  """Save a model state dict to sharded safetensors by layer prefix."""
+  """Save a model state dict to sharded safetensors by layer prefix.
+
+  This function saves the model's state dictionary into separate sharded files,
+  grouped by the top-level layer prefix. It also creates an index file
+  (`model.safetensors.index.json`) mapping each parameter to its corresponding shard.
+
+  Args:
+      state_dict (dict): The model's state dictionary to be saved.
+      save_dir (str): Directory where the sharded safetensors and index file will be saved.
+  """
+
   os.makedirs(save_dir, exist_ok=True)
   grouped = {}
   for k, v in state_dict.items():
@@ -61,8 +85,23 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
 
 
 class BaseCausalLM(nn.Module):
-  def _init_weights(self, module):
-    """Initialize weights for Linear and Embedding layers."""
+  """Base class for causal language models.
+
+  This class provides a template for building causal language models using PyTorch.
+  It includes methods for weight initialization, saving, and loading model checkpoints.
+  Subclasses should implement the `forward` method.
+  """
+
+  def _init_weights(self, module: nn.Module):
+    """Initialize weights for Linear and Embedding layers.
+
+    This method initializes the weights of Linear and Embedding layers
+    using a normal distribution with mean 0 and standard deviation specified
+    by `self.config.initializer_range`. Biases are initialized to zero.
+
+    Args:
+        module: The module whose weights need to be initialized.
+    """
     std = self.config.initializer_range
     if isinstance(module, nn.Linear):
       module.weight.data.normal_(mean=0.0, std=std)
@@ -79,11 +118,35 @@ class BaseCausalLM(nn.Module):
     labels: torch.LongTensor | None = None,
     attention_mask: torch.FloatTensor | None = None,
   ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
-    """Forward method to be implemented by subclass."""
+    """Forward method to be implemented by subclass.
+
+    Args:
+        input_ids: Input token IDs of shape (batch_size, sequence_length).
+        labels (optional): Target labels for computing the loss.
+        attention_mask (toptional): Attention mask to avoid performing attention on padding token indices.
+
+    Returns:
+        tuple: A tuple containing the model's output logits and, optionally, the loss.
+
+    Raises:
+        NotImplementedError: If the method is not implemented in the subclass.
+    """
     raise NotImplementedError("Subclasses must implement forward")
 
   def export(self, save_directory: str):
-    """Export model weights and config to a directory in sharded safetensors format."""
+    """Export model weights and config to a directory in sharded safetensors format.
+
+    This method saves the model's state dictionary and configuration to the specified directory.
+    The state dictionary is saved in sharded safetensors format, grouped by layer prefix.
+    The configuration is saved as a JSON file.
+
+    Note:
+        In distributed training setups, ensure that only the primary process
+        (e.g., rank 0) performs the saving operation to avoid conflicts.
+
+    Args:
+        save_directory: Directory where the model weights and configuration will be saved.
+    """
     os.makedirs(save_directory, exist_ok=True)
     state_dict = {
       k: v.cpu() if str(v.device).startswith("xla") else v
@@ -95,7 +158,18 @@ class BaseCausalLM(nn.Module):
       json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
 
   def from_pretrained(self, model_path_or_repo: str):
-    """Load model weights from local directory or Hugging Face Hub repo."""
+    """Load model weights from local directory or Hugging Face Hub repo.
+
+    This method loads the model's state dictionary from the specified path or repository.
+    It supports both local directories and remote repositories hosted on the Hugging Face Hub.
+
+    Note:
+        In distributed training setups, ensure that all replicas perform the loading operation
+        to synchronize model weights across processes.
+
+    Args:
+        model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
+    """
     if os.path.isdir(model_path_or_repo):
       model_dir = model_path_or_repo
     else:

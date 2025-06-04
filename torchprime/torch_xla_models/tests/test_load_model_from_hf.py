@@ -10,7 +10,6 @@ during weight loading.
 """
 
 import os
-import sys
 
 import pytest
 import yaml
@@ -18,8 +17,6 @@ from omegaconf import OmegaConf
 
 from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 from torchprime.torch_xla_models.model.model_utils import initialize_model_class
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../model")))
 
 
 @pytest.mark.integration
