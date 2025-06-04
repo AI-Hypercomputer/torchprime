@@ -29,6 +29,11 @@ def test_system_check(caplog, tmp_path):
   assert "PyTorch Environment Information" in caplog.text
   assert "Basic System Information" in caplog.text
 
-  # Verify log file was created in the temp directory
-  log_file = output_dir / "log.log"
+  # Verify that a log file was created in the temp directory
+  log_files = list(output_dir.glob("log-*.log"))
+  assert len(log_files) == 1, f"Expected 1 log file, found {len(log_files)}: {log_files}"
+  log_file = log_files[0]
   assert log_file.exists()
+  # Optionally verify the filename pattern
+  assert log_file.name.startswith("log-")
+  assert log_file.name.endswith(".log")

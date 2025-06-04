@@ -19,17 +19,17 @@ logger = logging.getLogger(__name__)
 def log_basic_system_info() -> None:
   """Logs basic system and Python information."""
   logger.info("--- Basic System Information ---")
-  logger.info(f"Timestamp: {datetime.datetime.now().isoformat()}")
-  logger.info(f"Hostname: {platform.node()}")
-  logger.info(f"Platform: {platform.platform()}")
-  logger.info(f"Machine: {platform.machine()}")
-  logger.info(f"Processor: {platform.processor()}")
-  logger.info(f"Architecture: {platform.architecture()[0]}")
-  logger.info(f"System: {platform.system()} {platform.release()}")
-  logger.info(f"Version: {platform.version()}")
-  logger.info(f"OS: {platform.system()} {platform.release()} ({platform.version()})")
-  logger.info(f"Python Version: {sys.version.replace(chr(10), ' ')}")  # Remove newlines
-  logger.info(f"Python Executable: {sys.executable}")
+  logger.info("Timestamp: %s", datetime.datetime.now().isoformat())
+  logger.info("Hostname: %s", platform.node())
+  logger.info("Platform: %s", platform.platform())
+  logger.info("Machine: %s", platform.machine())
+  logger.info("Processor: %s", platform.processor())
+  logger.info("Architecture: %s", platform.architecture()[0])
+  logger.info("System: %s %s", platform.system(), platform.release())
+  logger.info("Version: %s", platform.version())
+  logger.info("OS: %s %s (%s)", platform.system(), platform.release(), platform.version())
+  logger.info("Python Version: %s", sys.version.replace(chr(10), ' '))  # Remove newlines
+  logger.info("Python Executable: %s", sys.executable)
 
 
 def log_args() -> None:
@@ -39,8 +39,8 @@ def log_args() -> None:
     logger.info("No command line arguments provided.")
   else:
     for i, arg in enumerate(sys.argv):
-      logger.info(f"Argument {i}: {arg}")
-  logger.info(f"Total arguments: {len(sys.argv)}")
+      logger.info("Argument %d: %s", i, arg)
+  logger.info("Total arguments: %d", len(sys.argv))
 
 
 def log_all_env_variables() -> None:
@@ -51,17 +51,17 @@ def log_all_env_variables() -> None:
     return
 
   for key, value in sorted(os.environ.items()):
-    logger.info(f"{key}={value}")
-  logger.info(f"Logged {len(os.environ)} environment variable(s).")
+    logger.info("%s=%s", key, value)
+  logger.info("Logged %d environment variable(s).", len(os.environ))
 
 
 def log_python_package_info() -> None:
   logger.info("--- Python Package Information ---")
   dists = list(sorted(distributions(), key=lambda d: d.metadata["Name"].lower()))
   for dist in dists:
-    logger.info(f"{dist.metadata['Name']}=={dist.version}")
+    logger.info("%s==%s", dist.metadata['Name'], dist.version)
 
-  logger.info(f"Logged {len(dists)} Python package(s).")
+  logger.info("Logged %d Python package(s).", len(dists))
 
 
 def log_pytorch_info() -> None:
@@ -73,52 +73,16 @@ def log_pytorch_info() -> None:
     logger.warning("torch not found. Exiting without further checks.")
     return
 
-  logger.info(f"torch imported successfully. torch version: {torch.__version__}")
+  logger.info("torch imported successfully. torch version: %s", torch.__version__)
 
   # CPU tensor addition
   try:
     a_cpu = torch.tensor([1.0, 2.0, 3.0])
     b_cpu = torch.tensor([4.0, 5.0, 6.0])
     c_cpu = a_cpu + b_cpu
-    logger.info(f"torch CPU tensor addition (a+b): {a_cpu} + {b_cpu} = {c_cpu}")
+    logger.info("torch CPU tensor addition (a+b): %s + %s = %s", a_cpu, b_cpu, c_cpu)
   except Exception as e:
-    logger.error(f"Error during torch CPU tensor operation: {e}")
-
-  # Check CUDA availability
-  try:
-    cuda_available = torch.cuda.is_available()
-    logger.info(f"torch.cuda.is_available(): {cuda_available}")
-    if cuda_available:
-      logger.info(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
-      logger.info(f"torch.cuda.current_device(): {torch.cuda.current_device()}")
-      logger.info(
-        f"torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else 'N/A (No CUDA devices)'}"
-      )
-  except Exception as e:
-    logger.error(f"Error checking CUDA availability: {e}")
-
-  # Check MPS availability (for Apple Silicon)
-  try:
-    # Check if MPS is available and built with PyTorch
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-      mps_available = True
-      # Further check if a device can be allocated. is_built() is not always enough.
-      try:
-        torch.tensor([1], device="mps")
-        mps_functional = True
-      except Exception:
-        mps_functional = False
-      logger.info(
-        f"torch.backends.mps.is_available(): {mps_available} (Functional: {mps_functional})"
-      )
-    elif hasattr(torch.backends, "mps"):  # mps backend exists but not available
-      logger.info(
-        f"torch.backends.mps.is_available(): False (torch.backends.mps.is_built(): {torch.backends.mps.is_built()})"
-      )
-    else:  # mps backend does not exist
-      logger.info("torch.backends.mps not available in this PyTorch build.")
-  except Exception as e:
-    logger.error(f"Error checking MPS availability: {e}")
+    logger.error("Error during torch CPU tensor operation: %s", e)
 
   logger.info("--- PyTorch/XLA Information ---")
   try:
@@ -129,7 +93,7 @@ def log_pytorch_info() -> None:
 
   try:
     logger.info("torch_xla imported successfully.")
-    logger.info(f"torch_xla version: {torch_xla.__version__}")
+    logger.info("torch_xla version: %s", torch_xla.__version__)
 
     device = torch.device("xla")
 
@@ -138,15 +102,16 @@ def log_pytorch_info() -> None:
     c_xla = a_xla + b_xla
     # xm.mark_step() # Often needed in XLA training loops, not strictly for a single op
     logger.info(
-      f"torch_xla tensor addition on {device} (a+b): {a_xla} + {b_xla} = {c_xla}"
+      "torch_xla tensor addition on %s (a+b): %s + %s = %s", device, a_xla, b_xla, c_xla
     )
   except Exception as e:
-    logger.error(f"Error during torch_xla operations: {e}")
+    logger.error("Error during torch_xla operations: %s", e)
     return
 
 
 def main() -> int:
   # Don't use a fancy arg parser here. We are just pulling 2 args.
+  output_dir = None
   for arg in sys.argv:
     if arg.startswith("output_dir="):
       output_dir = arg.split("=", 1)[1]
@@ -158,7 +123,8 @@ def main() -> int:
 
   if output_dir:
     # Attach logger to the output directory
-    log_file = os.path.join(output_dir, "log.log")
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_file = os.path.join(output_dir, "log-{}.log".format(timestamp))
     os.makedirs(output_dir, exist_ok=True)
     logger.info("Created output directory: %s", output_dir)
     file_handler = logging.FileHandler(log_file)
