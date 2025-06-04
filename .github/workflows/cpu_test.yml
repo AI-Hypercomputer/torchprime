@@ -10,7 +10,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04-16core
     outputs:
       container_date: ${{ steps.identify-date.outputs.container-date }}
     steps:
