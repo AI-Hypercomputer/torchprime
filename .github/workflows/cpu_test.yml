@@ -11,6 +11,7 @@ on:
 jobs:
   setup:
     runs-on: ubuntu-22.04-16core
+    timeout-minutes: 30
     outputs:
       container_date: ${{ steps.identify-date.outputs.container-date }}
     steps:
@@ -29,6 +30,7 @@ jobs:
   pytest:
     needs: setup
     runs-on: ubuntu-22.04-16core
+    timeout-minutes: 30
     strategy:
       matrix:
         python-version: ["3.10", "3.11"]
