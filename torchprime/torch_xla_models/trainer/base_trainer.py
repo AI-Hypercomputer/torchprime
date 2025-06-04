@@ -185,7 +185,7 @@ class Trainer:
     self, epoch: float, step: int, loss: float, learning_rate: float
   ):
     """Log metrics to TensorBoard."""
-    self.summary_writer.add_scalar("train/epoch", loss, epoch)
+    self.summary_writer.add_scalar("train/epoch", epoch, step)
     self.summary_writer.add_scalar("train/loss", loss, step)
     self.summary_writer.add_scalar("train/learning_rate", learning_rate, step)
     self.summary_writer.flush()
