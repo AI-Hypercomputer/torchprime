@@ -1,0 +1,9 @@
+# Configuration for supervised fine-tuning using the Alpaca dataset
+# Overrides the default dataset and task while reusing the default model
+
+defaults:
+  - _self_
+  - model: llama-3-8b
+  - dataset: alpaca
+  - task: sft
+

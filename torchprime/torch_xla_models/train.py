@@ -15,13 +15,13 @@ from transformers import (
   set_seed,
 )
 
-from torchprime.data.dataset import make_train_dataset
+from torchprime.data import DATASET_BUILDERS, make_train_dataset
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.model.model_utils import (
   initialize_model_class,
   set_default_dtype,
 )
-from torchprime.torch_xla_models.trainer.base_trainer import Trainer
+from torchprime.torch_xla_models.trainer import TRAINERS, Trainer
 from torchprime.utils.retry import retry
 
 transformers.utils.check_min_version("4.39.3")
@@ -66,9 +66,12 @@ def main(config: DictConfig):
   n_params = sum([p.numel() for p in model.parameters()])
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
-  # Downloading and loading a dataset from the hub.
-  data = retry(lambda: make_train_dataset(**config.dataset, tokenizer=tokenizer))
-  trainer = Trainer(
+  # Select dataset builder and trainer based on the task name.
+  dataset_fn = DATASET_BUILDERS.get(config.task.name, make_train_dataset)
+  trainer_cls = TRAINERS.get(config.task.name, Trainer)
+  data = retry(lambda: dataset_fn(**config.dataset, tokenizer=tokenizer))
+
+  trainer = trainer_cls(
     model=model,
     config=config,
     train_dataset=data,
