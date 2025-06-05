@@ -54,9 +54,9 @@ def _load_hf_dataset(
 
 
 def load_hf_or_json_dataset(
-  name: str | None = None,
-  config_name: str | None = None,
-  data_files: str | None = None,
+  hf_dataset_name: str | None = None,
+  hf_dataset_config_name: str | None = None,
+  file_dataset_path: str | None = None,
   split: str = "train",
   cache_dir: str | None = None,
 ):
@@ -67,21 +67,21 @@ def load_hf_or_json_dataset(
   2. JSONL files (either local or `gs://`-hosted) using `fsspec`.
 
   Args:
-    name: Optional name of the HF dataset.
-    config_name: Optional configuration name for the HF dataset.
-    data_files: Optional path to a JSONL file (local or remote).
+    hf_dataset_name: Optional name of the HF dataset.
+    hf_dataset_config_name: Optional configuration name for the HF dataset.
+    file_dataset_path: Optional path to a JSONL file (local or remote).
     split: Dataset split to load (default is "train").
     cache_dir: Optional directory to use for dataset caching (HF only).
 
   Returns:
     A HuggingFace ``Dataset`` instance.
   """
-  if name:
-    data = _load_hf_dataset(name, config_name, split, cache_dir)
-  elif data_files:
-    data = _load_json_dataset(data_files, split)
+  if hf_dataset_name:
+    data = _load_hf_dataset(hf_dataset_name, hf_dataset_config_name, split, cache_dir)
+  elif file_dataset_path:
+    data = _load_json_dataset(file_dataset_path, split)
   else:
-    raise ValueError("Either name or data_files must be provided")
+    raise ValueError("Either hf_dataset_name or file_dataset_path must be provided")
 
   assert isinstance(data, Dataset), "Loaded dataset must be a Dataset instance."
 
@@ -89,9 +89,9 @@ def load_hf_or_json_dataset(
 
 
 def make_train_dataset(
-  name: str | None = None,
-  config_name: str | None = None,
-  data_files: str | None = None,
+  hf_dataset_name: str | None = None,
+  hf_dataset_config_name: str | None = None,
+  file_dataset_path: str | None = None,
   split: str = "train",
   cache_dir: str | None = None,
   *,
@@ -106,9 +106,9 @@ def make_train_dataset(
   for efficient language modeling, especially on accelerators like TPUs.
 
   Args:
-    name: Optional Hugging Face dataset name. (e.g., "wikitext").
-    config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
-    data_files: Optional path or ``gs://`` URI to a JSONL dataset.
+    hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
+    hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
+    file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
     split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     tokenizer: A Hugging Face tokenizer used to tokenize the input text.
@@ -119,9 +119,9 @@ def make_train_dataset(
     each with keys `"input_ids"` and `"labels"`.
   """
   data = load_hf_or_json_dataset(
-    name=name,
-    config_name=config_name,
-    data_files=data_files,
+    hf_dataset_name=hf_dataset_name,
+    hf_dataset_config_name=hf_dataset_config_name,
+    file_dataset_path=file_dataset_path,
     split=split,
     cache_dir=cache_dir,
   )

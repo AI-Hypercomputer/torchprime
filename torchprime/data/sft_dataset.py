@@ -271,9 +271,9 @@ def _pad_and_maybe_pack_samples(
 
 
 def make_sft_dataset(
-  name: str | None = None,
-  config_name: str | None = None,
-  data_files: str | None = None,
+  hf_dataset_name: str | None = None,
+  hf_dataset_config_name: str | None = None,
+  file_dataset_path: str | None = None,
   split: str = "train",
   cache_dir: str | None = None,
   format: FORMAT_OPTION = "prompt_completion",
@@ -286,13 +286,13 @@ def make_sft_dataset(
 ) -> Dataset:
   """Create a dataset for supervised fine-tuning.
 
-  Either ``name`` or ``data_files`` must be supplied to specify the data
+  Either ``hf_dataset_name`` or ``file_dataset_path`` must be supplied to specify the data
   source. The data can be in plain prompt/completion form or chat format.
 
   Args:
-    name: Optional Hugging Face dataset name. (e.g., "wikitext").
-    config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
-    data_files: Optional path or ``gs://`` URI to a JSONL dataset.
+    hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
+    hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
+    file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
     split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     format: ``"prompt_completion"`` or ``"chat"``.
@@ -307,9 +307,9 @@ def make_sft_dataset(
     Dataset of tokenized examples ready for model training.
   """
   data = load_hf_or_json_dataset(
-    name=name,
-    config_name=config_name,
-    data_files=data_files,
+    hf_dataset_name=hf_dataset_name,
+    hf_dataset_config_name=hf_dataset_config_name,
+    file_dataset_path=file_dataset_path,
     split=split,
     cache_dir=cache_dir,
   )

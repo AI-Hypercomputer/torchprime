@@ -90,7 +90,10 @@ def test_local_json_prompt_completion(tmp_path: Path):
   path = _write_json(tmp_path, "pc.json", data)
   tok = _tokenizer()
   ds = make_sft_dataset(
-    data_files=str(path), format="prompt_completion", tokenizer=tok, block_size=16
+    file_dataset_path=str(path),
+    format="prompt_completion",
+    tokenizer=tok,
+    block_size=16,
   )
   assert isinstance(ds, Dataset)
   # "Hello" -> [8], "World" -> [9]
@@ -121,7 +124,7 @@ def test_gcp_json_chat_mask_last(tmp_path: Path):
   with mock.patch("fsspec.open") as open_mock:
     open_mock.return_value.__enter__.return_value = local.open()
     ds = make_sft_dataset(
-      data_files="gs://bucket/chat.json",
+      file_dataset_path="gs://bucket/chat.json",
       format="chat",
       compute_loss_on="last_assistant",
       tokenizer=tok,
@@ -170,7 +173,7 @@ def test_hf_dataset_pack_mask_all(tmp_path: Path):
   with mock.patch("torchprime.data.dataset._load_hf_dataset") as loader:
     loader.return_value = Dataset.from_list(data)
     ds = make_sft_dataset(
-      name="dummy",
+      hf_dataset_name="dummy",
       format="chat",
       compute_loss_on="assistant",
       pack_samples=True,
@@ -207,7 +210,7 @@ def test_chat_multi_turn_mask_modes(tmp_path: Path):
 
   for mode, (mask_first, mask_second, mask_user) in modes.items():
     ds = make_sft_dataset(
-      data_files=str(path),
+      file_dataset_path=str(path),
       format="chat",
       compute_loss_on=mode,
       tokenizer=tok,
@@ -261,21 +264,21 @@ def test_truncation_modes(tmp_path: Path):
   tok = _tokenizer()
 
   right = make_sft_dataset(
-    data_files=str(path),
+    file_dataset_path=str(path),
     format="prompt_completion",
     truncation="right",
     tokenizer=tok,
     block_size=5,
   )
   left = make_sft_dataset(
-    data_files=str(path),
+    file_dataset_path=str(path),
     format="prompt_completion",
     truncation="left",
     tokenizer=tok,
     block_size=5,
   )
   dropped = make_sft_dataset(
-    data_files=str(path),
+    file_dataset_path=str(path),
     format="prompt_completion",
     truncation="drop",
     tokenizer=tok,
@@ -297,7 +300,7 @@ def test_samplewise_packing(tmp_path: Path):
   path = _write_json(tmp_path, "pack.json", data)
   tok = _tokenizer()
   ds = make_sft_dataset(
-    data_files=str(path),
+    file_dataset_path=str(path),
     format="prompt_completion",
     pack_samples=True,
     tokenizer=tok,

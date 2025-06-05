@@ -1,6 +1,6 @@
 # Config aligned with the Hugging Face datasets library
-name: wikitext
-config_name: wikitext-2-raw-v1
+hf_dataset_name: wikitext
+hf_dataset_config_name: wikitext-2-raw-v1
 split: train
 block_size: 8192
 cache_dir: /tmp/
