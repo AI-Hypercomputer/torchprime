@@ -194,7 +194,7 @@ Besides forwarding your command line arguments, `tp run` will add:
 
 #### Troubleshooting distributed training setup
 
-See the guide to [troubleshoot distributed training][troubleshoot_distributed]
+See the guide to [troubleshoot distributed training][troubleshoot-distributed]
 for troubleshooting tools and an FAQ. 
 
 ## Supported Models
