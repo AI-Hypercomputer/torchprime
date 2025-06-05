@@ -25,31 +25,90 @@ def _tokenizer():
     "<pad>": 0,
     "<s>": 1,
     "</s>": 2,
-    "Hello": 3,
-    "World": 4,
-    "Hi": 5,
-    "Hey": 6,
-    "Bye": 7,
-    "See": 8,
+    "<start>": 3,
+    "<sep>": 4,
+    "<end>": 5,
+    "user": 6,
+    "assistant": 7,
+    "Hello": 8,
+    "World": 9,
+    "Hi": 10,
+    "Hey": 11,
+    "Bye": 12,
+    "See": 13,
+    "<unk>": 14,
   }
-  model = WordLevel(vocab)
+  model = WordLevel(vocab, unk_token="<unk>")
   tok = Tokenizer(model)
   tok.pre_tokenizer = Whitespace()
-  return PreTrainedTokenizerFast(
-    tokenizer_object=tok, bos_token="<s>", eos_token="</s>", pad_token="<pad>"
+  tokenizer = PreTrainedTokenizerFast(
+    tokenizer_object=tok,
+    bos_token="<s>",
+    eos_token="</s>",
+    pad_token="<pad>",
+    unk_token="<unk>",
   )
+  tokenizer.chat_template = "{% for message in messages %}<start> {{ message['role'] }} <sep> {{ message['content'] }} <end> {% endfor %}"
+  return tokenizer
+
+
+def test_chat_template():
+  """Verify ``apply_chat_template`` tokenizes messages as expected."""
+
+  tok = _tokenizer()
+  messages = [
+    {"role": "user", "content": "Hi"},
+    {"role": "assistant", "content": "Hey"},
+  ]
+  text = tok.apply_chat_template(messages, tokenize=False)
+  ids = [tok.convert_tokens_to_ids(t) for t in text.split()] + [tok.eos_token_id]
+  expected = [
+    tok.convert_tokens_to_ids("<start>"),
+    tok.convert_tokens_to_ids("user"),
+    tok.convert_tokens_to_ids("<sep>"),
+    tok.convert_tokens_to_ids("Hi"),
+    tok.convert_tokens_to_ids("<end>"),
+    tok.convert_tokens_to_ids("<start>"),
+    tok.convert_tokens_to_ids("assistant"),
+    tok.convert_tokens_to_ids("<sep>"),
+    tok.convert_tokens_to_ids("Hey"),
+    tok.convert_tokens_to_ids("<end>"),
+    tok.eos_token_id,
+  ]
+  assert ids == expected
 
 
 def test_local_json_prompt_completion(tmp_path: Path):
+  """Prompt/completion dataset tokenization.
+
+  The JSON file contains one record with ``{"prompt": "Hello", "completion": "World"}``.
+  Tokens ``Hello`` -> ``[8]`` and ``World`` -> ``[9]`` should appear in ``labels``
+  with an EOS token appended and an ``attention_mask`` marking the real tokens.
+  """
+
   data = [{"prompt": "Hello", "completion": "World"}]
   path = _write_json(tmp_path, "pc.json", data)
   tok = _tokenizer()
-  ds = make_sft_dataset(tok, 16, json_path=str(path), format="prompt_completion")
+  ds = make_sft_dataset(tok, 16, data_files=str(path), format="prompt_completion")
   assert isinstance(ds, Dataset)
-  assert ds[0]["labels"][0] == tok.encode("Hello", add_special_tokens=False)[0]
+  # "Hello" -> [8], "World" -> [9]
+  assert ds[0]["input_ids"][:2] == [8, 9]
+  assert ds[0]["labels"][0] == -100  # masked prompt
+  assert ds[0]["labels"][1] == tok.convert_tokens_to_ids("World")  # completion
+  mask = ds[0]["attention_mask"]
+  assert len(mask) == 16
+  assert mask[:3] == [1, 1, 1]
+  assert all(m == 0 for m in mask[3:])
 
 
 def test_gcp_json_chat_mask_last(tmp_path: Path):
+  """Chat dataset from GCP with last assistant masking.
+
+  The sample contains ``user: Hi`` followed by ``assistant: Hey``. All user
+  tokens should be ``-100`` in ``labels`` while the assistant tokens remain
+  unmasked.
+  """
+
   messages = [
     {"role": "user", "content": "Hi"},
     {"role": "assistant", "content": "Hey"},
@@ -62,20 +121,35 @@ def test_gcp_json_chat_mask_last(tmp_path: Path):
     ds = make_sft_dataset(
       tok,
       16,
-      json_path="gs://bucket/chat.json",
+      data_files="gs://bucket/chat.json",
       format="chat",
-      mask_mode="last",
+      compute_loss_on="last_assistant",
     )
   assert isinstance(ds, Dataset)
-  user_ids = tok.encode("Hi", add_special_tokens=False)
-  assistant_ids = tok.encode("Hey", add_special_tokens=False)
+  user_ids = [
+    tok.convert_tokens_to_ids("<start>"),
+    tok.convert_tokens_to_ids("user"),
+    tok.convert_tokens_to_ids("<sep>"),
+    *tok.encode("Hi", add_special_tokens=False),
+    tok.convert_tokens_to_ids("<end>"),
+  ]
+  assistant_ids = [
+    tok.convert_tokens_to_ids("<start>"),
+    tok.convert_tokens_to_ids("assistant"),
+    tok.convert_tokens_to_ids("<sep>"),
+    *tok.encode("Hey", add_special_tokens=False),
+    tok.convert_tokens_to_ids("<end>"),
+  ]
+  input_ids = ds[0]["input_ids"]
   labels = ds[0]["labels"]
-  assert labels[len(user_ids) : len(user_ids) + len(assistant_ids)] == [-100] * len(
-    assistant_ids
-  )
+  assert input_ids[: len(user_ids) + len(assistant_ids)] == user_ids + assistant_ids
+  assert labels[: len(user_ids)] == [-100] * len(user_ids)  # masked user tokens
+  assert labels[len(user_ids) : len(user_ids) + len(assistant_ids)] == assistant_ids
+  assert ds[0]["attention_mask"][len(user_ids) + len(assistant_ids)] == 1
 
 
 def test_hf_dataset_pack_mask_all(tmp_path: Path):
+  """HF dataset loading and packing with assistant-only loss."""
   data = [
     {
       "messages": [
@@ -95,20 +169,25 @@ def test_hf_dataset_pack_mask_all(tmp_path: Path):
     loader.return_value = Dataset.from_list(data)
     ds = make_sft_dataset(
       tok,
-      4,
-      hf_name="dummy",
+      16,
+      name="dummy",
       format="chat",
-      mask_mode="all",
+      compute_loss_on="assistant",
       pack_samples=True,
     )
   assert isinstance(ds, Dataset)
   assert len(ds) > 0
-  # Assistant tokens masked
+  # User tokens masked
   labels = [x for x in ds[0]["labels"] if x != tok.pad_token_id]
   assert -100 in labels and any(x != -100 for x in labels)
 
 
 def test_chat_multi_turn_mask_modes(tmp_path: Path):
+  """Multi-turn chat masking options.
+
+  Checks that masking ``none``, ``assistant`` and ``last_assistant`` behave as
+  expected on two user/assistant pairs.
+  """
   messages = [
     {"role": "user", "content": "Hi"},
     {"role": "assistant", "content": "Hey"},
@@ -119,32 +198,126 @@ def test_chat_multi_turn_mask_modes(tmp_path: Path):
   tok = _tokenizer()
 
   modes = {
-    "none": (False, False),
-    "last": (False, True),
-    "all": (True, True),
+    "all": (False, False, False),
+    "assistant": (False, False, True),
+    "last_assistant": (True, False, True),
   }
 
-  for mode, (mask_first, mask_second) in modes.items():
+  for mode, (mask_first, mask_second, mask_user) in modes.items():
     ds = make_sft_dataset(
       tok,
       32,
-      json_path=str(path),
+      data_files=str(path),
       format="chat",
-      mask_mode=mode,
+      compute_loss_on=mode,
     )
     labels = ds[0]["labels"]
-    hi = tok.encode("Hi", add_special_tokens=False)
-    hey = tok.encode("Hey", add_special_tokens=False)
-    hello = tok.encode("Hello", add_special_tokens=False)
-    world = tok.encode("World", add_special_tokens=False)
+    hi = [
+      tok.convert_tokens_to_ids("<start>"),
+      tok.convert_tokens_to_ids("user"),
+      tok.convert_tokens_to_ids("<sep>"),
+      *tok.encode("Hi", add_special_tokens=False),
+      tok.convert_tokens_to_ids("<end>"),
+    ]
+    hey = [
+      tok.convert_tokens_to_ids("<start>"),
+      tok.convert_tokens_to_ids("assistant"),
+      tok.convert_tokens_to_ids("<sep>"),
+      *tok.encode("Hey", add_special_tokens=False),
+      tok.convert_tokens_to_ids("<end>"),
+    ]
+    hello = [
+      tok.convert_tokens_to_ids("<start>"),
+      tok.convert_tokens_to_ids("user"),
+      tok.convert_tokens_to_ids("<sep>"),
+      *tok.encode("Hello", add_special_tokens=False),
+      tok.convert_tokens_to_ids("<end>"),
+    ]
+    world = [
+      tok.convert_tokens_to_ids("<start>"),
+      tok.convert_tokens_to_ids("assistant"),
+      tok.convert_tokens_to_ids("<sep>"),
+      *tok.encode("World", add_special_tokens=False),
+      tok.convert_tokens_to_ids("<end>"),
+    ]
     idx0 = len(hi)
     idx1 = idx0 + len(hey)
     idx2 = idx1 + len(hello)
     idx3 = idx2 + len(world)
+    assert labels[:idx0] == ([-100] * len(hi) if mask_user else hi)
     assert labels[idx0:idx1] == ([-100] * len(hey) if mask_first else hey)
+    assert labels[idx1:idx2] == ([-100] * len(hello) if mask_user else hello)
     assert labels[idx2:idx3] == ([-100] * len(world) if mask_second else world)
     eos_label = labels[idx3]
-    if mode == "none":
-      assert eos_label == tok.eos_token_id
-    else:
-      assert eos_label == -100
+    assert eos_label == tok.eos_token_id
+
+
+def test_truncation_modes(tmp_path: Path):
+  """Truncation of overlong prompt/completion pairs."""
+  data = [{"prompt": "Hello Hello Hello Hello", "completion": "World World"}]
+  path = _write_json(tmp_path, "trunc.json", data)
+  tok = _tokenizer()
+
+  right = make_sft_dataset(
+    tok,
+    5,
+    data_files=str(path),
+    format="prompt_completion",
+    truncation="right",
+  )
+  left = make_sft_dataset(
+    tok,
+    5,
+    data_files=str(path),
+    format="prompt_completion",
+    truncation="left",
+  )
+  dropped = make_sft_dataset(
+    tok,
+    5,
+    data_files=str(path),
+    format="prompt_completion",
+    truncation="drop",
+  )
+
+  assert len(dropped) == 0
+  assert right[0]["input_ids"] == [8, 8, 8, 8, 9]  # drop the last "World" and eos
+  assert left[0]["input_ids"][-1] == tok.eos_token_id
+
+
+def test_samplewise_packing(tmp_path: Path):
+  """Sample-wise packing without truncating individual examples."""
+  data = [
+    {"prompt": "Hello Hello Hello", "completion": "World World"},  # <-- sample 0
+    {"prompt": "Hi", "completion": "Hey"},  # <-- sample 1
+    {"prompt": "Bye", "completion": "See"},  # <-- sample 2
+  ]
+  path = _write_json(tmp_path, "pack.json", data)
+  tok = _tokenizer()
+  ds = make_sft_dataset(
+    tok,
+    8,
+    data_files=str(path),
+    format="prompt_completion",
+    pack_samples=True,
+  )
+  assert len(ds) == 2  # sample 1 and 2 are packed into one
+  ids_0 = (
+    tok.encode("Hello", add_special_tokens=False)
+    + tok.encode("Hello", add_special_tokens=False)
+    + tok.encode("Hello", add_special_tokens=False)
+    + tok.encode("World", add_special_tokens=False)
+    + tok.encode("World", add_special_tokens=False)
+    + [tok.eos_token_id]
+  )
+  assert ds[0]["input_ids"] == ids_0 + [tok.pad_token_id] * (8 - len(ids_0))
+
+  ids_1 = (
+    tok.encode("Hi", add_special_tokens=False)
+    + tok.encode("Hey", add_special_tokens=False)
+    + [tok.eos_token_id]
+    + tok.encode("Bye", add_special_tokens=False)
+    + tok.encode("See", add_special_tokens=False)
+    + [tok.eos_token_id]
+  )
+  assert ds[1]["input_ids"] == ids_1 + [tok.pad_token_id] * (8 - len(ids_1))

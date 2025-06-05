@@ -15,7 +15,7 @@ from transformers import (
   set_seed,
 )
 
-from torchprime.data.dataset import make_huggingface_dataset
+from torchprime.data.dataset import make_train_dataset
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.model.model_utils import (
   initialize_model_class,
@@ -67,7 +67,7 @@ def main(config: DictConfig):
   logger.info(f"Training new model from scratch - Total size={n_params} params")
 
   # Downloading and loading a dataset from the hub.
-  data = retry(lambda: make_huggingface_dataset(**config.dataset, tokenizer=tokenizer))
+  data = retry(lambda: make_train_dataset(**config.dataset, tokenizer=tokenizer))
   trainer = Trainer(
     model=model,
     config=config,

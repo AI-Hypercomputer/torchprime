@@ -2,7 +2,7 @@ from datasets import Dataset, DatasetDict, load_dataset
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
 
-def make_huggingface_dataset(
+def make_train_dataset(
   name: str,
   config_name: str,
   split: str,
