@@ -89,7 +89,9 @@ def test_local_json_prompt_completion(tmp_path: Path):
   data = [{"prompt": "Hello", "completion": "World"}]
   path = _write_json(tmp_path, "pc.json", data)
   tok = _tokenizer()
-  ds = make_sft_dataset(tok, 16, data_files=str(path), format="prompt_completion")
+  ds = make_sft_dataset(
+    data_files=str(path), format="prompt_completion", tokenizer=tok, block_size=16
+  )
   assert isinstance(ds, Dataset)
   # "Hello" -> [8], "World" -> [9]
   assert ds[0]["input_ids"][:2] == [8, 9]
@@ -119,11 +121,11 @@ def test_gcp_json_chat_mask_last(tmp_path: Path):
   with mock.patch("fsspec.open") as open_mock:
     open_mock.return_value.__enter__.return_value = local.open()
     ds = make_sft_dataset(
-      tok,
-      16,
       data_files="gs://bucket/chat.json",
       format="chat",
       compute_loss_on="last_assistant",
+      tokenizer=tok,
+      block_size=16,
     )
   assert isinstance(ds, Dataset)
   user_ids = [
@@ -165,15 +167,15 @@ def test_hf_dataset_pack_mask_all(tmp_path: Path):
     },
   ]
   tok = _tokenizer()
-  with mock.patch("torchprime.data.sft_dataset._load_hf_dataset") as loader:
+  with mock.patch("torchprime.data.dataset._load_hf_dataset") as loader:
     loader.return_value = Dataset.from_list(data)
     ds = make_sft_dataset(
-      tok,
-      16,
       name="dummy",
       format="chat",
       compute_loss_on="assistant",
       pack_samples=True,
+      tokenizer=tok,
+      block_size=16,
     )
   assert isinstance(ds, Dataset)
   assert len(ds) > 0
@@ -205,11 +207,11 @@ def test_chat_multi_turn_mask_modes(tmp_path: Path):
 
   for mode, (mask_first, mask_second, mask_user) in modes.items():
     ds = make_sft_dataset(
-      tok,
-      32,
       data_files=str(path),
       format="chat",
       compute_loss_on=mode,
+      tokenizer=tok,
+      block_size=32,
     )
     labels = ds[0]["labels"]
     hi = [
@@ -259,25 +261,25 @@ def test_truncation_modes(tmp_path: Path):
   tok = _tokenizer()
 
   right = make_sft_dataset(
-    tok,
-    5,
     data_files=str(path),
     format="prompt_completion",
     truncation="right",
+    tokenizer=tok,
+    block_size=5,
   )
   left = make_sft_dataset(
-    tok,
-    5,
     data_files=str(path),
     format="prompt_completion",
     truncation="left",
+    tokenizer=tok,
+    block_size=5,
   )
   dropped = make_sft_dataset(
-    tok,
-    5,
     data_files=str(path),
     format="prompt_completion",
     truncation="drop",
+    tokenizer=tok,
+    block_size=5,
   )
 
   assert len(dropped) == 0
@@ -295,11 +297,11 @@ def test_samplewise_packing(tmp_path: Path):
   path = _write_json(tmp_path, "pack.json", data)
   tok = _tokenizer()
   ds = make_sft_dataset(
-    tok,
-    8,
     data_files=str(path),
     format="prompt_completion",
     pack_samples=True,
+    tokenizer=tok,
+    block_size=8,
   )
   assert len(ds) == 2  # sample 1 and 2 are packed into one
   ids_0 = (

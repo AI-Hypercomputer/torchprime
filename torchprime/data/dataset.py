@@ -1,14 +1,100 @@
 """Utilities for preparing datasets for basic training tasks."""
 
+import json
+
+import fsspec
 from datasets import Dataset, DatasetDict, load_dataset
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
 
-def make_train_dataset(
+def _load_json_dataset(path: str, split: str) -> Dataset:
+  """Load a dataset from a JSON Lines file.
+
+  Args:
+    path: Local path or ``gs://`` URI to the JSONL file.
+    split: Unused but kept for API parity with HuggingFace loaders.
+
+  Returns:
+    Dataset containing all records from ``path``.
+  """
+
+  if path.startswith("gs://"):
+    with fsspec.open(path, "r") as f:
+      records = [json.loads(line) for line in f]
+    return Dataset.from_list(records)
+
+  data = load_dataset("json", data_files=path, split=split)
+  assert isinstance(data, Dataset)
+  return data
+
+
+def _load_hf_dataset(
   name: str,
-  config_name: str,
+  config: str | None,
   split: str,
-  cache_dir: str,
+  cache_dir: str | None,
+) -> Dataset:
+  """Download and return a dataset from Hugging Face Hub.
+
+  Args:
+    name: Name of the dataset on the hub.
+    config: Optional configuration name.
+    split: Split to load.
+    cache_dir: Directory where the dataset cache should live.
+
+  Returns:
+    The loaded ``Dataset`` instance for ``split``.
+  """
+
+  data = load_dataset(name, config, split=split, cache_dir=cache_dir)
+  assert isinstance(data, Dataset | DatasetDict)
+  if isinstance(data, DatasetDict):
+    data = data[split]
+  return data
+
+
+def load_hf_or_json_dataset(
+  name: str | None = None,
+  config_name: str | None = None,
+  data_files: str | None = None,
+  split: str = "train",
+  cache_dir: str | None = None,
+):
+  """Loads a dataset either from Hugging Face Hub or a local/remote JSONL file.
+
+  This function abstracts the logic for loading datasets from two sources:
+  1. Hugging Face Hub via `datasets.load_dataset`.
+  2. JSONL files (either local or `gs://`-hosted) using `fsspec`.
+
+  Args:
+    name: Optional name of the HF dataset.
+    config_name: Optional configuration name for the HF dataset.
+    data_files: Optional path to a JSONL file (local or remote).
+    split: Dataset split to load (default is "train").
+    cache_dir: Optional directory to use for dataset caching (HF only).
+
+  Returns:
+    A HuggingFace ``Dataset`` instance.
+  """
+  if name:
+    data = _load_hf_dataset(name, config_name, split, cache_dir)
+  elif data_files:
+    data = _load_json_dataset(data_files, split)
+  else:
+    raise ValueError("Either name or data_files must be provided")
+
+  assert isinstance(data, Dataset), "Loaded dataset must be a Dataset instance."
+
+  return data
+
+
+def make_train_dataset(
+  name: str | None = None,
+  config_name: str | None = None,
+  data_files: str | None = None,
+  split: str = "train",
+  cache_dir: str | None = None,
+  *,
   tokenizer: PreTrainedTokenizerBase,
   block_size: int,
 ) -> Dataset:
@@ -20,10 +106,11 @@ def make_train_dataset(
   for efficient language modeling, especially on accelerators like TPUs.
 
   Args:
-    name: Name of the dataset (e.g., "wikitext").
-    config_name: Specific configuration name of the dataset (e.g., "wikitext-103-raw-v1").
-    split: Which split to use from the dataset (e.g., "train", "validation").
-    cache_dir: Directory to cache the downloaded dataset.
+    name: Optional Hugging Face dataset name. (e.g., "wikitext").
+    config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
+    data_files: Optional path or ``gs://`` URI to a JSONL dataset.
+    split: Dataset split to load from HF. (e.g., "train", "validation").
+    cache_dir: Optional directory for HF dataset cache.
     tokenizer: A Hugging Face tokenizer used to tokenize the input text.
     block_size: The fixed length of each chunked training example.
 
@@ -31,9 +118,13 @@ def make_train_dataset(
     A `Dataset` object containing tokenized and block-wise grouped training examples,
     each with keys `"input_ids"` and `"labels"`.
   """
-  data = load_dataset(name, config_name, cache_dir=cache_dir)
-  assert isinstance(data, DatasetDict)
-  data = data[split]
+  data = load_hf_or_json_dataset(
+    name=name,
+    config_name=config_name,
+    data_files=data_files,
+    split=split,
+    cache_dir=cache_dir,
+  )
 
   column_names = list(data.features)
   data = data.map(

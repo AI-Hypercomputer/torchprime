@@ -2,62 +2,16 @@
 
 from __future__ import annotations
 
-import json
 from typing import Literal
 
-import fsspec
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset
 from transformers.tokenization_utils import PreTrainedTokenizerBase
+
+from .dataset import load_hf_or_json_dataset
 
 COMPUTE_OPTION = Literal["all", "completion", "assistant", "last_assistant"]
 FORMAT_OPTION = Literal["prompt_completion", "chat"]
 TRUNCATE_OPTION = Literal["right", "left", "drop"]
-
-
-def _read_json_dataset(path: str, split: str) -> Dataset:
-  """Load a dataset from a JSON Lines file.
-
-  Args:
-    path: Local path or ``gs://`` URI to the JSONL file.
-    split: Unused but kept for API parity with HuggingFace loaders.
-
-  Returns:
-    Dataset containing all records from ``path``.
-  """
-
-  if path.startswith("gs://"):
-    with fsspec.open(path, "r") as f:
-      records = [json.loads(line) for line in f]
-    return Dataset.from_list(records)
-
-  data = load_dataset("json", data_files=path, split=split)
-  assert isinstance(data, Dataset)
-  return data
-
-
-def _load_hf_dataset(
-  name: str,
-  config: str | None,
-  split: str,
-  cache_dir: str | None,
-) -> Dataset:
-  """Download and return a dataset from Hugging Face Hub.
-
-  Args:
-    name: Name of the dataset on the hub.
-    config: Optional configuration name.
-    split: Split to load.
-    cache_dir: Directory where the dataset cache should live.
-
-  Returns:
-    The loaded ``Dataset`` instance for ``split``.
-  """
-
-  data = load_dataset(name, config, split=split, cache_dir=cache_dir)
-  assert isinstance(data, Dataset | DatasetDict)
-  if isinstance(data, DatasetDict):
-    data = data[split]
-  return data
 
 
 def _tokenize_prompt_completion(
@@ -71,7 +25,23 @@ def _tokenize_prompt_completion(
   """Tokenize a prompt/completion record.
 
   Args:
-    example: Sample containing ``prompt`` and ``completion`` fields.
+    example: Sample containing ``prompt`` and ``completion`` fields,
+      where ``prompt`` is the input and ``completion`` is the target output.
+      Also supports ``question`` and ``answer``, or simple ``text`` as aliases.
+      EXAMPLE:
+        {
+          "prompt": "What is the capital of France?",
+          "completion": "The capital of France is Paris."
+        }
+        or
+        {
+          "question": "What is the capital of France?",
+          "answer": "The capital of France is Paris."
+        }
+        or
+        {
+          "text": "What is the capital of France? The capital of France is Paris."
+        }
     tokenizer: Tokenizer used for encoding.
     compute_loss_on: Which parts of the sample should contribute to the loss.
     max_length: Maximum sequence length.
@@ -81,9 +51,20 @@ def _tokenize_prompt_completion(
   Returns:
     Mapping with ``input_ids`` and ``labels`` suitable for training.
   """
+  if "prompt" in example or "question" in example:
+    prompt = example.get("prompt", "")
+    completion = example.get("completion", "")
+  elif "question" in example or "answer" in example:
+    prompt = example.get("question", "")
+    completion = example.get("answer", "")
+  elif "text" in example:
+    prompt = ""
+    completion = example["text"]
+  else:
+    raise ValueError(
+      "Invalid input format: must contain 'prompt'/'completion' or 'question'/'answer' or 'text' fields."
+    )
 
-  prompt = example["prompt"]
-  completion = example["completion"]
   prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
   completion_ids = tokenizer.encode(completion, add_special_tokens=False)
   input_ids = prompt_ids + completion_ids
@@ -120,7 +101,18 @@ def _tokenize_chat(
   """Tokenize a conversation in chat format.
 
   Args:
-    example: Sample with a ``messages`` list.
+    example: Sample with a ``messages`` field, containing a list of messages.
+      Each message is a dictionary with ``"role"`` (either "user" or "assistant"),
+      and ``"content"`` (the text of the message).
+      Example:
+        {
+          "messages": [
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."}
+            {"role": "user", "content": "What is the population?"}
+            {"role": "assistant", "content": "The population of France is about 67 million."}
+          ]
+        }
     tokenizer: Tokenizer used for encoding.
     compute_loss_on: Which messages should contribute to the loss.
     max_length: Maximum sequence length.
@@ -184,7 +176,7 @@ def _tokenize_chat(
 def _pad_and_maybe_pack_samples(
   examples: dict,
   tokenizer: PreTrainedTokenizerBase,
-  max_length: int,
+  block_size: int,
   *,
   pack: bool,
 ) -> dict:
@@ -195,9 +187,16 @@ def _pad_and_maybe_pack_samples(
   different number of examples, therefore it should be used outside ``map``.
 
   Args:
-    examples: Batch with ``input_ids`` and ``labels`` columns.
+    examples: Batch with ``input_ids`` and ``labels`` columns,
+      each columns contains a list token IDs for different examples.
+      Batched output from _tokenize_chat / _tokenize_prompt_completion methods.
+      EXAMPLE:
+        {
+          "input_ids": [[3,4,5,6,...], [...], ...],
+          "labels": [[-100,4,5,6,...], [...], ...]
+        }
     tokenizer: Tokenizer providing padding token information.
-    max_length: Target sequence length.
+    block_size: Target sequence/block length.
     pack: If ``True`` pack multiple samples together; otherwise pad each sample
       individually.
 
@@ -219,12 +218,12 @@ def _pad_and_maybe_pack_samples(
     out_labels = []
     out_mask = []
     for ids, labs in zip(ids_list, labels_list, strict=True):
-      ids = ids[:max_length]
-      labs = labs[:max_length]
+      ids = ids[:block_size]
+      labs = labs[:block_size]
       orig_len = len(ids)
-      ids = ids + [pad_id] * (max_length - orig_len)
-      labs = labs + [-100] * (max_length - len(labs))
-      mask = [1] * orig_len + [0] * (max_length - orig_len)
+      ids = ids + [pad_id] * (block_size - orig_len)
+      labs = labs + [-100] * (block_size - len(labs))
+      mask = [1] * orig_len + [0] * (block_size - orig_len)
       out_ids.append(ids)
       out_labels.append(labs)
       out_mask.append(mask)
@@ -238,29 +237,29 @@ def _pad_and_maybe_pack_samples(
   cur_ids: list[int] = []
   cur_labels: list[int] = []
   for ids, labs in zip(ids_list, labels_list, strict=True):
-    seq_ids = ids[:max_length]
-    seq_labels = labs[:max_length]
+    seq_ids = ids[:block_size]
+    seq_labels = labs[:block_size]
 
-    if len(cur_ids) + len(seq_ids) > max_length:
-      mask = [1] * len(cur_ids) + [0] * (max_length - len(cur_ids))
-      result_ids.append(cur_ids + [pad_id] * (max_length - len(cur_ids)))
-      result_labels.append(cur_labels + [-100] * (max_length - len(cur_labels)))
+    if len(cur_ids) + len(seq_ids) > block_size:
+      mask = [1] * len(cur_ids) + [0] * (block_size - len(cur_ids))
+      result_ids.append(cur_ids + [pad_id] * (block_size - len(cur_ids)))
+      result_labels.append(cur_labels + [-100] * (block_size - len(cur_labels)))
       result_mask.append(mask)
       cur_ids, cur_labels = [], []
 
     cur_ids.extend(seq_ids)
     cur_labels.extend(seq_labels)
 
-    if len(cur_ids) == max_length:
+    if len(cur_ids) == block_size:
       result_ids.append(cur_ids)
       result_labels.append(cur_labels)
-      result_mask.append([1] * max_length)
+      result_mask.append([1] * block_size)
       cur_ids, cur_labels = [], []
 
   if cur_ids:
-    mask = [1] * len(cur_ids) + [0] * (max_length - len(cur_ids))
-    result_ids.append(cur_ids + [pad_id] * (max_length - len(cur_ids)))
-    result_labels.append(cur_labels + [-100] * (max_length - len(cur_labels)))
+    mask = [1] * len(cur_ids) + [0] * (block_size - len(cur_ids))
+    result_ids.append(cur_ids + [pad_id] * (block_size - len(cur_ids)))
+    result_labels.append(cur_labels + [-100] * (block_size - len(cur_labels)))
     result_mask.append(mask)
 
   return {
@@ -271,9 +270,6 @@ def _pad_and_maybe_pack_samples(
 
 
 def make_sft_dataset(
-  tokenizer: PreTrainedTokenizerBase,
-  max_length: int,
-  *,
   name: str | None = None,
   config_name: str | None = None,
   data_files: str | None = None,
@@ -283,6 +279,9 @@ def make_sft_dataset(
   compute_loss_on: COMPUTE_OPTION = "completion",
   pack_samples: bool = False,
   truncation: TRUNCATE_OPTION = "right",
+  *,
+  tokenizer: PreTrainedTokenizerBase,
+  block_size: int,
 ) -> Dataset:
   """Create a dataset for supervised fine-tuning.
 
@@ -290,30 +289,31 @@ def make_sft_dataset(
   source. The data can be in plain prompt/completion form or chat format.
 
   Args:
-    tokenizer: Tokenizer used to encode text.
-    max_length: Length of padded or packed sequences.
-    name: Optional Hugging Face dataset name.
-    config_name: Optional dataset config name.
+    name: Optional Hugging Face dataset name. (e.g., "wikitext").
+    config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
     data_files: Optional path or ``gs://`` URI to a JSONL dataset.
-    split: Dataset split to load.
+    split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     format: ``"prompt_completion"`` or ``"chat"``.
     compute_loss_on: ``"all"``, ``"completion"``, ``"assistant"`` or
       ``"last_assistant"``.
     pack_samples: Whether to pack multiple samples into fixed-length blocks.
     truncation: Strategy for overlong sequences.
+    tokenizer: Tokenizer used to encode text.
+    block_size: Length of padded or packed sequences.
 
   Returns:
     Dataset of tokenized examples ready for model training.
   """
-  if name:
-    data = _load_hf_dataset(name, config_name, split, cache_dir)
-  elif data_files:
-    data = _read_json_dataset(data_files, split)
-  else:
-    raise ValueError("Either name or data_files must be provided")
+  data = load_hf_or_json_dataset(
+    name=name,
+    config_name=config_name,
+    data_files=data_files,
+    split=split,
+    cache_dir=cache_dir,
+  )
 
-  def _tok(batch):
+  def _tokenize(batch):
     ids = []
     labels = []
     for i in range(len(batch[list(batch.keys())[0]])):
@@ -323,7 +323,7 @@ def make_sft_dataset(
           ex,
           tokenizer,
           compute_loss_on=compute_loss_on,
-          max_length=max_length,
+          max_length=block_size,
           truncation=truncation,
         )
       else:
@@ -331,7 +331,7 @@ def make_sft_dataset(
           ex,
           tokenizer,
           compute_loss_on=compute_loss_on,
-          max_length=max_length,
+          max_length=block_size,
           truncation=truncation,
         )
       if out is None:
@@ -342,14 +342,14 @@ def make_sft_dataset(
         labels.append(out["labels"])
     return {"input_ids": ids, "labels": labels}
 
-  data = data.map(_tok, batched=True, remove_columns=data.column_names)
+  data = data.map(_tokenize, batched=True, remove_columns=data.column_names)
   data = data.filter(lambda x: x["input_ids"] is not None)
 
   if not pack_samples:
     data = data.map(
       _pad_and_maybe_pack_samples,
       batched=True,
-      fn_kwargs={"tokenizer": tokenizer, "max_length": max_length, "pack": False},
+      fn_kwargs={"tokenizer": tokenizer, "block_size": block_size, "pack": False},
     )
     return data
 
@@ -357,7 +357,7 @@ def make_sft_dataset(
     "input_ids": [ex["input_ids"] for ex in data],
     "labels": [ex["labels"] for ex in data],
   }
-  packed = _pad_and_maybe_pack_samples(tokenized, tokenizer, max_length, pack=True)
+  packed = _pad_and_maybe_pack_samples(tokenized, tokenizer, block_size, pack=True)
   records = [
     {"input_ids": ids, "labels": labs, "attention_mask": mask}
     for ids, labs, mask in zip(
