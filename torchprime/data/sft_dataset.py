@@ -51,6 +51,7 @@ def _tokenize_prompt_completion(
   Returns:
     Mapping with ``input_ids`` and ``labels`` suitable for training.
   """
+
   if "prompt" in example or "question" in example:
     prompt = example.get("prompt", "")
     completion = example.get("completion", "")
