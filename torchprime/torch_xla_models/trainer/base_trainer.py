@@ -198,10 +198,12 @@ class Trainer:
     max_step = self.config.task.max_steps
     train_loader = self._get_train_dataloader()
     train_iterator = iter(train_loader)
+    num_steps_per_epoch = len(train_loader)
 
     logger.info("Starting training")
     logger.info("    Max step: %d", max_step)
     logger.info("    Global batch size: %d", self.global_batch_size)
+    logger.info("    Num steps per epoch: %d", num_steps_per_epoch)
 
     epoch = 0
     for step in range(max_step):
@@ -212,6 +214,29 @@ class Trainer:
         epoch += 1
         train_iterator = iter(train_loader)
         batch = next(train_iterator)
+
+      # Log the current inputs to the output dir
+      def serialize_inputs(v):
+        """Serialize inputs to a JSON-compatible format for debugging."""
+        if isinstance(v, torch.Tensor):
+          return v.cpu().numpy().tolist()
+        elif isinstance(v, list | tuple):
+          return [serialize_inputs(i) for i in v]
+        elif isinstance(v, dict):
+          return {k: serialize_inputs(v) for k, v in v.items()}
+        else:
+          return str(v)
+
+      # Save the inputs into a debugging folder in the output directory.
+      debug_dir = os.path.join(self.config.output_dir, "debug_dataloader")
+      os.makedirs(debug_dir, exist_ok=True)
+      step_in_epoch = step % num_steps_per_epoch
+      with open(
+        os.path.join(debug_dir, f"inputs-{epoch}-{step_in_epoch}.json"), "w"
+      ) as f:
+        import json
+
+        json.dump(serialize_inputs(batch), f)
 
       trace_start_time = timer()
       loss = self.train_step(batch)
