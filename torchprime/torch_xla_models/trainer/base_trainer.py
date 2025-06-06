@@ -79,6 +79,7 @@ class Trainer:
     self.device = xm.xla_device()
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
+    self._trace_thread = None
 
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
@@ -263,6 +264,8 @@ class Trainer:
     logger.info("Finished training run")
 
     if self.config.profile_step >= 0:
+      if self._trace_thread is not None:
+        self._trace_thread.join()
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)
