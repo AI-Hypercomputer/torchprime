@@ -6,6 +6,7 @@ max_steps: 15
 optimizer:
   learning_rate: 5.e-5
   type: adafactor
+  max_grad_norm: 1.0
 
 lr_scheduler:
   type: linear

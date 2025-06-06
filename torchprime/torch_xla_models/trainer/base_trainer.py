@@ -18,6 +18,7 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import torch
+import torch.nn.utils as nn_utils
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
@@ -182,12 +183,13 @@ class Trainer:
     return loader
 
   def _log_to_tensorboard(
-    self, epoch: float, step: int, loss: float, learning_rate: float
+    self, epoch: float, step: int, loss: float, learning_rate: float, grad_norm: float
   ):
     """Log metrics to TensorBoard."""
     self.summary_writer.add_scalar("train/epoch", epoch, step)
     self.summary_writer.add_scalar("train/loss", loss, step)
     self.summary_writer.add_scalar("train/learning_rate", learning_rate, step)
+    self.summary_writer.add_scalar("train/grad_norm", grad_norm, step)
     self.summary_writer.flush()
 
   def train_loop(self, metrics_logger) -> None:
@@ -214,22 +216,26 @@ class Trainer:
         batch = next(train_iterator)
 
       trace_start_time = timer()
-      loss = self.train_step(batch)
+      loss, grad_norm = self.train_step(batch)
       trace_end_time = timer()
 
       if step % self.config.logging_steps == 0:
 
-        def step_closure(epoch, step, loss, trace_start_time, trace_end_time, lr):
+        def step_closure(
+          epoch, step, loss, grad_norm, trace_start_time, trace_end_time, lr
+        ):
           loss = loss.detach().item()
+          grad_norm = grad_norm.detach().item()
           logger.info(
-            "Epoch: %d, step: %d, loss: %.4f, lr: %.2e, trace time: %.2f ms",
+            "Epoch: %d, step: %d, loss: %.4f, grad_norm: %.4f, lr: %.2e, trace time: %.2f ms",
             epoch,
             step,
             loss,
+            grad_norm,
             lr,
             (trace_end_time - trace_start_time) * 1000,
           )
-          self._log_to_tensorboard(epoch, step, loss, lr)
+          self._log_to_tensorboard(epoch, step, loss, lr, grad_norm)
           if math.isnan(loss):
             raise ValueError(f"Loss is NaN at step {step}")
 
@@ -239,6 +245,7 @@ class Trainer:
             epoch,
             step,
             loss,
+            grad_norm,
             trace_start_time,
             trace_end_time,
             self.lr_scheduler.get_last_lr()[0],
@@ -301,10 +308,17 @@ class Trainer:
     OmegaConf.save(config=self.config, f=config_save_path)
 
   @torch_xla.compile(full_graph=True)
-  def train_step(self, batch: dict) -> torch.Tensor:
+  def train_step(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor]:
     _logits, loss = self.model(**batch)
     loss.backward()
+    max_grad_norm = self.config.task.optimizer.max_grad_norm
+    if max_grad_norm is None or max_grad_norm <= 0:
+      grad_norm = nn_utils.get_total_norm(self.model.parameters(), norm_type=2)
+    else:
+      grad_norm = nn_utils.clip_grad_norm_(
+        self.model.parameters(), max_norm=max_grad_norm, norm_type=2
+      )
     self.optimizer.step()
     self.lr_scheduler.step()
     self.model.zero_grad()
-    return loss
+    return loss, grad_norm
