@@ -71,9 +71,10 @@ def main(config: DictConfig):
   trainer_cls = TRAINERS.get(config.task.name, Trainer)
   data = retry(lambda: dataset_fn(**config.dataset, tokenizer=tokenizer))
 
-  logger.info(
-    "Loaded dataset `%s`, size=%d (packed) samples", config.dataset.name, len(data)
+  dataset_name = getattr(config.dataset, "hf_dataset_name", None) or getattr(
+    config.dataset, "file_dataset_path", "unknown"
   )
+  logger.info("Loaded dataset `%s`, size=%d (packed) samples", dataset_name, len(data))
 
   trainer = trainer_cls(
     model=model,

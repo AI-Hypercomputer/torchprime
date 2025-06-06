@@ -57,7 +57,7 @@ def _tokenize_prompt_completion(
     completion = example.get("completion", "")
   elif "question" in example and "answer" in example:
     prompt = example.get("question", "")
-    prompt = f"Question:\n{prompt}\n\n\nAnswer:\n"  # Add formate for question
+    prompt = f"Question:\n{prompt}\n\n\nAnswer:\n"  # Add format for q-a pair
     completion = example.get("answer", "")
   elif "text" in example:
     prompt = ""

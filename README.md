@@ -130,7 +130,7 @@ python3 torchprime/torch_xla_models/train.py \
 
 You may refer to the hydra docs for other ways to specify configs.
 
-To fine-tune a pretrained model using the Alpaca dataset, run
+To fine-tune a pretrained model using the gsm8k (Grade School Math question-answer) dataset, run
 
 ```sh
 python3 torchprime/torch_xla_models/train.py --config-name sft_w_gsm8k
