@@ -41,6 +41,13 @@ benchmarks:
     confidence_interval: 0.06967
     average: 3.9565
     sample_size: 169
+  llama-3-8b-sft:
+    name: Llama 3.0 8B SFT
+    step_time_lower_bound: 2.67793406 # copyed from llama-3-8b for now
+    step_time_upper_bound: 2.788876 # copyed from llama-3-8b for now
+    confidence_interval: 0.05547 # copyed from llama-3-8b for now
+    average: 2.7334 # copyed from llama-3-8b for now
+    sample_size: 123 # some random number
 metadata:
   query_start: 2025-05-29 17:52:00 America/Los_Angeles
   query_end: 2025-06-01 20:00:00 America/Los_Angeles
