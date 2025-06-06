@@ -1,6 +1,7 @@
 """Utility function(s) for model initialization."""
 
 import importlib
+import logging
 import re
 import sys
 from contextlib import contextmanager
@@ -77,3 +78,41 @@ def extract_model_size_from_model_name(model_name: str) -> int | float:
     except ValueError:
       return -1
   return -1
+
+
+def log_parameter_breakdown(model: torch.nn.Module, logger: logging.Logger) -> None:
+  """Logs the number of parameters in different components of the model.
+
+  Args:
+      model: The PyTorch model.
+      logger: A logger instance to write the output to.
+  """
+  total_params = sum(p.numel() for p in model.parameters())
+  logger.info("Model total size: {} parameters".format(f"{total_params:,}"))
+
+  param_groups = {
+    "mlp": 0,
+    "attention": 0,
+    "embedding": 0,
+    "lm_head": 0,
+    "norm": 0,
+    "other": 0,
+  }
+
+  for name, param in model.named_parameters():
+    if "mlp" in name:
+      param_groups["mlp"] += param.numel()
+    elif "self_attn" in name or "attention" in name:
+      param_groups["attention"] += param.numel()
+    elif "embed" in name:
+      param_groups["embedding"] += param.numel()
+    elif "lm_head" in name:
+      param_groups["lm_head"] += param.numel()
+    elif "norm" in name or "layernorm" in name:
+      param_groups["norm"] += param.numel()
+    else:
+      param_groups["other"] += param.numel()
+
+  for k, v in param_groups.items():
+    percentage = (v / total_params) * 100
+    logger.info("  {:10s}: {} params ({:.2f}%)".format(k, f"{v:,}", percentage))

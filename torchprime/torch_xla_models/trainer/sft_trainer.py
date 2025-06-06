@@ -24,21 +24,27 @@ class SFTTrainer(Trainer):
     config: DictConfig,
     train_dataset,
   ) -> None:
-    """Initialize trainer and optionally load weights.
+    """Initialize trainer and optionally load pretrained weights.
 
     Args:
-      model: Model to train.
+      model: Model instance to train.
       config: Hydra configuration object.
       train_dataset: Dataset used for training.
     """
-    super().__init__(model, config, train_dataset)
-    self.pretrained_model = getattr(config.task, "pretrained_model", None)
+
+    self.pretrained_model = getattr(config.model, "pretrained_model", None)
 
     if self.pretrained_model:
       if xr.process_index() == 0:
         logger.info("Loading model weights from %s", self.pretrained_model)
       model.from_pretrained(self.pretrained_model)
       xm.mark_step()
+    else:
+      logger.info(
+        "No pretrained model specified; training from scratch. \n\nIs this what you intended?\n"
+      )
+
+    super().__init__(model, config, train_dataset)
 
   def train_loop(self, metrics_logger) -> None:
     """Run the base training loop and export the model.

@@ -1,5 +1,6 @@
 model_id: llama-1b-random-for-test
 model_class: llama.LlamaForCausalLM  # Used to import the model from this class
+pretrained_model: hf-internal-testing/tiny-random-LlamaForCausalLM
 vocab_size: 32000
 hidden_size: 16
 intermediate_size: 64

@@ -1,11 +1,9 @@
 # Task configuration for supervised fine-tuning
 name: sft
-pretrained_model: hf-internal-testing/tiny-random-LlamaForCausalLM
-save_directory: trained_model
 global_batch_size: 4
-max_steps: 15
+max_steps: 20
 optimizer:
-  learning_rate: 5.e-5
+  learning_rate: 1.e-4
   type: adafactor
 lr_scheduler:
   type: linear

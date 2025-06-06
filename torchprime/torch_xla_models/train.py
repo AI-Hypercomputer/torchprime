@@ -19,6 +19,7 @@ from torchprime.data import DATASET_BUILDERS, make_train_dataset
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.model.model_utils import (
   initialize_model_class,
+  log_parameter_breakdown,
   set_default_dtype,
 )
 from torchprime.torch_xla_models.trainer import TRAINERS, Trainer
@@ -63,8 +64,7 @@ def main(config: DictConfig):
   with set_default_dtype(model_dtype), torch_xla.device():
     model = initialize_model_class(config.model)
 
-  n_params = sum([p.numel() for p in model.parameters()])
-  logger.info(f"Training new model from scratch - Total size={n_params} params")
+  log_parameter_breakdown(model, logger)
 
   # Select dataset builder and trainer based on the task name.
   dataset_fn = DATASET_BUILDERS.get(config.task.name, make_train_dataset)

@@ -73,11 +73,11 @@ def dummy_config():
           "offload_tensors": [],
         },
         "sharding": {"type": "spmd"},
+        "pretrained_model": "dummy",
       },
       "data": {"name": "dummy_dataset", "block_size": 4},
       "task": {
         "name": "sft",
-        "pretrained_model": "dummy",
         "global_batch_size": 4,
         "max_steps": 1,
         "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
