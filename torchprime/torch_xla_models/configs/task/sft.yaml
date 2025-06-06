@@ -1,9 +1,9 @@
 # Task configuration for supervised fine-tuning
 name: sft
 global_batch_size: 16
-max_steps: 100
+max_steps: 10
 optimizer:
-  learning_rate: 5.e-5
+  learning_rate: 4.e-5
   type: adafactor
 lr_scheduler:
   type: linear

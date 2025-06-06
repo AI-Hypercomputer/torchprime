@@ -71,6 +71,10 @@ def main(config: DictConfig):
   trainer_cls = TRAINERS.get(config.task.name, Trainer)
   data = retry(lambda: dataset_fn(**config.dataset, tokenizer=tokenizer))
 
+  logger.info(
+    "Loaded dataset `%s`, size=%d (packed) samples", config.dataset.name, len(data)
+  )
+
   trainer = trainer_cls(
     model=model,
     config=config,

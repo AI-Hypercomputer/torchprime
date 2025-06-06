@@ -133,10 +133,10 @@ You may refer to the hydra docs for other ways to specify configs.
 To fine-tune a pretrained model using the Alpaca dataset, run
 
 ```sh
-python3 torchprime/torch_xla_models/train.py --config-name sft_w_alpaca
+python3 torchprime/torch_xla_models/train.py --config-name sft_w_gsm8k
 ```
 
-This uses the `sft_w_alpaca.yaml` config which selects the SFT trainer and
+This uses the `sft_w_gsm8k.yaml` config which selects the SFT trainer and
 dataset automatically.
 
 ### Multi-VM distributed training
