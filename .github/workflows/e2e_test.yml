@@ -202,7 +202,7 @@ jobs:
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            --config-name sft_with_gsm8k \
+            --config-name sft_w_gsm8k \
             ici_mesh.fsdp=4 \
             task.max_steps=15 \
             profile_step=3
