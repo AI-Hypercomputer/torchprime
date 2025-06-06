@@ -204,7 +204,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             --config-name sft_w_gsm8k \
             ici_mesh.fsdp=4 \
-            task.max_steps=15 \
+            task.max_steps=45 \
             profile_step=3
 
   # Load reference step times
