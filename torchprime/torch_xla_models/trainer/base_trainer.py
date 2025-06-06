@@ -311,6 +311,14 @@ class Trainer:
   def train_step(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor]:
     _logits, loss = self.model(**batch)
     loss.backward()
+    grad_norm = self.clip_gradients()
+    self.optimizer.step()
+    self.lr_scheduler.step()
+    self.model.zero_grad()
+    return loss, grad_norm
+
+  def clip_gradients(self):
+    """Clip gradients by the specified max norm and/or max absolute value."""
     max_grad_norm = self.config.task.optimizer.max_grad_norm
     if max_grad_norm is None or max_grad_norm <= 0:
       grad_norm = nn_utils.get_total_norm(self.model.parameters(), norm_type=2)
@@ -318,7 +326,7 @@ class Trainer:
       grad_norm = nn_utils.clip_grad_norm_(
         self.model.parameters(), max_norm=max_grad_norm, norm_type=2
       )
-    self.optimizer.step()
-    self.lr_scheduler.step()
-    self.model.zero_grad()
-    return loss, grad_norm
+    max_grad_value = self.config.task.optimizer.max_grad_value
+    if max_grad_value is not None and max_grad_value > 0:
+      nn_utils.clip_grad_value_(self.model.parameters(), clip_value=max_grad_value)
+    return grad_norm
