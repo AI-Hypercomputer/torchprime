@@ -1,47 +1,47 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 2.67793406
-    step_time_upper_bound: 2.788876
-    confidence_interval: 0.05547
-    average: 2.7334
-    sample_size: 169
+    step_time_lower_bound: 2.68109009
+    step_time_upper_bound: 2.789223
+    confidence_interval: 0.05407
+    average: 2.7352
+    sample_size: 427
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.35485746
-    step_time_upper_bound: 2.457598
-    confidence_interval: 0.05137
-    average: 2.4062
-    sample_size: 169
+    step_time_lower_bound: 2.34653077
+    step_time_upper_bound: 2.467111
+    confidence_interval: 0.06029
+    average: 2.4068
+    sample_size: 428
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.73963398
-    step_time_upper_bound: 2.85849
-    confidence_interval: 0.05943
-    average: 2.7991
-    sample_size: 169
+    step_time_lower_bound: 2.74099553
+    step_time_upper_bound: 2.860302
+    confidence_interval: 0.05965
+    average: 2.8006
+    sample_size: 428
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.28863385
-    step_time_upper_bound: 3.38879529
+    step_time_lower_bound: 3.28827914
+    step_time_upper_bound: 3.38842977
     confidence_interval: 0.05008
-    average: 3.3387
-    sample_size: 169
+    average: 3.3384
+    sample_size: 428
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.09891705
-    step_time_upper_bound: 3.19330031
+    step_time_lower_bound: 3.09900735
+    step_time_upper_bound: 3.19339336
     confidence_interval: 0.04719
-    average: 3.1461
-    sample_size: 169
+    average: 3.1462
+    sample_size: 427
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 3.88681827
-    step_time_upper_bound: 4.026164
-    confidence_interval: 0.06967
-    average: 3.9565
-    sample_size: 169
+    step_time_lower_bound: 3.82985294
+    step_time_upper_bound: 4.087614
+    confidence_interval: 0.12888
+    average: 3.9587
+    sample_size: 416
 metadata:
-  query_start: 2025-05-29 17:52:00 America/Los_Angeles
-  query_end: 2025-06-01 20:00:00 America/Los_Angeles
+  query_start: '2025-05-26T18:37:58.674556-07:00'
+  query_end: '2025-06-05T18:37:58-07:00'
   confidence_level: 0.999
