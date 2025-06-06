@@ -82,7 +82,7 @@ def dummy_config():
         "name": "dummy_task",
         "global_batch_size": 4,
         "max_steps": 2,
-        "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
+        "optimizer": {"type": "adafactor", "learning_rate": 1e-3, "max_grad_norm": 1.0},
         "lr_scheduler": {"type": "constant", "warmup_steps": 0},
       },
       "run_name": None,
@@ -170,7 +170,9 @@ def test_trainer_train_step(monkeypatch, dummy_config):
   trainer = Trainer(model, dummy_config, dataset)
 
   batch = {k: v.unsqueeze(0).to(device) for k, v in dataset[0].items()}
-  loss = trainer.train_step(batch)
+  loss, grad_norm = trainer.train_step(batch)
 
   assert isinstance(loss, torch.Tensor)
   assert loss.ndim == 0  # scalar loss
+  assert isinstance(grad_norm, torch.Tensor)
+  assert grad_norm.ndim == 0  # scalar gradient norm
