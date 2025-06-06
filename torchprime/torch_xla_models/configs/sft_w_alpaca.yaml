@@ -8,7 +8,7 @@ defaults:
   - _self_
 
 seed: 42
-logging_steps: 5
+logging_steps: 2
 torch_dtype: bfloat16
 
 # This might be overwritten when using tp run to launch the run using XPK

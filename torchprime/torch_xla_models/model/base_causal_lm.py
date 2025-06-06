@@ -7,6 +7,7 @@ and methods for saving and loading model checkpoints using the `safetensors` for
 
 import json
 import os
+from collections import defaultdict
 
 import torch
 import torch.nn as nn
@@ -70,16 +71,32 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
   """
 
   os.makedirs(save_dir, exist_ok=True)
-  grouped = {}
+
+  def get_shard_key(param_name: str) -> str:
+    """Determine the shard key for a parameter based on its name."""
+    parts = param_name.split(".")
+    if parts[:2] == ["model", "layers"] and parts[2].isdigit():
+      return "_".join(parts[:3])  # model_layers_0, model_layers_1, etc.
+    elif parts[0] == "model":
+      return "model"
+    elif parts[0] == "lm_head":
+      return "lm_head"
+    else:
+      return "other"
+
+  grouped = defaultdict(dict)
   for k, v in state_dict.items():
-    prefix = k.split(".")[0]
-    grouped.setdefault(prefix, {})[k] = v
+    shard_key = get_shard_key(k)
+    grouped[shard_key][k] = v
+
   weight_map = {}
   for prefix, group in grouped.items():
     shard_file = f"{prefix}.safetensors"
     shard_path = os.path.join(save_dir, shard_file)
     save_file(group, shard_path)
-    weight_map.update({k: shard_file for k in group})
+    weight_map.update(
+      {k.replace("._orig_mod", ""): shard_file for k in group}
+    )  # remove _orig_mod due to sharding
   with open(os.path.join(save_dir, "model.safetensors.index.json"), "w") as f:
     json.dump({"weight_map": weight_map}, f, indent=2)
 

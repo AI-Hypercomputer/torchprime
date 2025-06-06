@@ -197,6 +197,7 @@ class Trainer:
     # For now we assume that we will never train for more than one epoch
     max_step = self.config.task.max_steps
     train_loader = self._get_train_dataloader()
+    steps_per_epoch = len(train_loader)
     train_iterator = iter(train_loader)
 
     logger.info("Starting training")
@@ -222,8 +223,8 @@ class Trainer:
         def step_closure(epoch, step, loss, trace_start_time, trace_end_time, lr):
           loss = loss.detach().item()
           logger.info(
-            "Epoch: %d, step: %d, loss: %.4f, lr: %.2e, trace time: %.2f ms",
-            epoch,
+            "Epoch: %.4f, step: %d, loss: %.4f, lr: %.2e, trace time: %.2f ms",
+            step / steps_per_epoch,
             step,
             loss,
             lr,
