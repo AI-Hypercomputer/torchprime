@@ -72,6 +72,7 @@ def match_llama_3_8b_2_slice(row):
     and config["ici_mesh"]["fsdp"] == 4
   )
 
+
 def match_llama_3_8b_sft(row):
   config = json.loads(row.configs_framework)
   return (
@@ -79,6 +80,7 @@ def match_llama_3_8b_sft(row):
     and config["dcn_mesh"]["fsdp"] == 1
     and config["ici_mesh"]["tensor"] == 1
   )
+
 
 BENCHMARKS = {
   "Llama 3.0 8B": match_llama3_8b,
