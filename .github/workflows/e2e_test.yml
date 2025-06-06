@@ -205,7 +205,8 @@ jobs:
             --config-name sft_w_gsm8k \
             ici_mesh.fsdp=4 \
             task.max_steps=100 \
-            profile_step=3
+            profile_step=3 \ 
+            profile_duration=5000
 
   # Load reference step times
   load-benchmarks:
