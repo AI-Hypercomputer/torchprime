@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.runtime as xr
 from omegaconf import DictConfig
@@ -53,7 +54,8 @@ class SFTTrainer(Trainer):
       metrics_logger: Instance used to record metrics during training.
     """
     super().train_loop(metrics_logger)
-    # self._save_model()
+    self._save_model()
+    # self._save_model_via_xla()
 
   def _save_model(self) -> None:
     """Save the fine-tuned model.
@@ -66,3 +68,17 @@ class SFTTrainer(Trainer):
       logger.info("Saving model to %s", save_dir)
       self.model.export(str(save_dir))
     xm.rendezvous("sft_save")
+
+  def _save_model_via_xla(self):
+    save_dir = Path(self.config.output_dir) / "trained_model_xla"
+    # Each host writes its slice; filenames get a replica suffix automatically
+    file_path = save_dir / "pytorch_model.pt"  # *.pt, *.bin, *.safetensors all fine
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("[%d] streaming checkpoint to %s", xr.process_index(), file_path)
+    xm.save(self.model.state_dict(), str(file_path))
+    # Consolidate on rank 0 if you want a single file
+    xm.rendezvous("sft_save")
+    if xr.process_index() == 0:
+      logger.info("[0] merging per-replica shards → combined file")
+      torch_xla.utils.serialization.merge_replica_shards(str(file_path))

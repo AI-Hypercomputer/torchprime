@@ -9,7 +9,7 @@ defaults:
 
 task:
   global_batch_size: 64
-  max_steps: 100 
+  max_steps: 100
 
 seed: 42
 logging_steps: 5
