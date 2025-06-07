@@ -60,7 +60,8 @@ class SFTTrainer(Trainer):
     """
     super().train_loop(metrics_logger)
     # self._save_model()
-    self._save_model_w_xm()
+    # self._save_model_w_xm()
+    self._save_model_2()
 
   def _save_model(self) -> None:
     """Save the fine-tuned model.
@@ -106,4 +107,59 @@ class SFTTrainer(Trainer):
       shard_pt.unlink(missing_ok=True)
 
     # 3. keep other ranks alive until rank 0 finishes file I/O
+    xm.rendezvous("sft_save_done")
+
+  def _save_model_2(self):
+    save_dir = Path(self.config.output_dir) / "trained_model"
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    if xr.process_index() == 0:  # <- only rank-0 does I/O
+      tmp_pt = save_dir / "pytorch_model.pt"
+      print("[0] streaming weights to", tmp_pt)
+      xm.save(self.model.state_dict(), str(tmp_pt))  # takes ~1–2 min for 8 B
+
+      print("[0] converting to sharded Safetensors")
+      import json
+      from collections import defaultdict
+
+      import torch
+      from safetensors.torch import save_file
+
+      state = torch.load(tmp_pt, map_location="cpu")  # one big CPU copy
+
+      # ----- regroup by layer prefix (your original logic) -----
+      def shard_key(name):
+        p = name.split(".")
+        if p[:2] == ["model", "layers"] and p[2].isdigit():
+          return f"model_layers_{p[2]}"
+        if p[0] == "model":
+          return "model"
+        if p[0] == "lm_head":
+          return "lm_head"
+        return "other"
+
+      groups = defaultdict(dict)
+      for k, v in state.items():
+        groups[shard_key(k)][k] = v
+
+      weight_map = {}
+      for prefix, tensors in groups.items():
+        shard_file = f"{prefix}.safetensors"
+        save_file(tensors, save_dir / shard_file)
+        weight_map.update({k.replace("._orig_mod", ""): shard_file for k in tensors})
+
+      (save_dir / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": weight_map}, indent=2)
+      )
+
+      # save config
+      from omegaconf import OmegaConf
+
+      (save_dir / "config.json").write_text(
+        json.dumps(OmegaConf.to_container(self.config, resolve=True), indent=2)
+      )
+
+      print("[0] checkpoint complete")
+
+    # everybody waits here, but only for rank-0’s single save
     xm.rendezvous("sft_save_done")
