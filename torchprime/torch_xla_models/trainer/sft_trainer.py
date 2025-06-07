@@ -74,37 +74,36 @@ class SFTTrainer(Trainer):
       self.model.export(str(save_dir))
     xm.rendezvous("sft_save")
 
+  def _save_model_w_xm(self) -> None:
+    """Save the fine-tuned model with xm
 
-def _save_model_w_xm(self) -> None:
-  """Save the fine-tuned model with xm
+    Stream a checkpoint from each replica to rank<N>.pt, then on rank 0 convert
+    it to layer-grouped Safetensors shards + index + config.json.
+    """
+    save_dir = Path(self.config.output_dir) / "trained_model"
+    save_dir.mkdir(parents=True, exist_ok=True)
 
-  Stream a checkpoint from each replica to rank<N>.pt, then on rank 0 convert
-  it to layer-grouped Safetensors shards + index + config.json.
-  """
-  save_dir = Path(self.config.output_dir) / "trained_model"
-  save_dir.mkdir(parents=True, exist_ok=True)
+    # 1. stream shard from TPU → host; filename is unique per rank
+    shard_pt = save_dir / f"rank{xr.process_index()}.pt"
+    xm.save(self.model.state_dict(), str(shard_pt))  # non-blocking, low RAM
+    xm.rendezvous("sft_save_stream")  # everyone arrives fast
 
-  # 1. stream shard from TPU → host; filename is unique per rank
-  shard_pt = save_dir / f"rank{xr.process_index()}.pt"
-  xm.save(self.model.state_dict(), str(shard_pt))  # non-blocking, low RAM
-  xm.rendezvous("sft_save_stream")  # everyone arrives fast
+    # 2. only rank 0 merges & converts to Safetensors
+    if xr.process_index() == 0:
+      # 2-a  load *one* shard (all identical in FSDP/SPMD)
+      state = torch.load(shard_pt, map_location="cpu")  # allocates RAM once
 
-  # 2. only rank 0 merges & converts to Safetensors
-  if xr.process_index() == 0:
-    # 2-a  load *one* shard (all identical in FSDP/SPMD)
-    state = torch.load(shard_pt, map_location="cpu")  # allocates RAM once
+      # 2-b  write layer-grouped Safetensors + index
+      save_sharded_safetensors_by_layer(state, str(save_dir))
 
-    # 2-b  write layer-grouped Safetensors + index
-    save_sharded_safetensors_by_layer(state, str(save_dir))
+      # 2-c  dump Hydrated config
+      config_path = save_dir / "config.json"
 
-    # 2-c  dump Hydrated config
-    config_path = save_dir / "config.json"
+      with open(config_path, "w") as f:
+        json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
 
-    with open(config_path, "w") as f:
-      json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
+      # (optional) remove the temporary pt shard to save disk space
+      shard_pt.unlink(missing_ok=True)
 
-    # (optional) remove the temporary pt shard to save disk space
-    shard_pt.unlink(missing_ok=True)
-
-  # 3. keep other ranks alive until rank 0 finishes file I/O
-  xm.rendezvous("sft_save_done")
+    # 3. keep other ranks alive until rank 0 finishes file I/O
+    xm.rendezvous("sft_save_done")
