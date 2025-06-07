@@ -53,7 +53,7 @@ class SFTTrainer(Trainer):
       metrics_logger: Instance used to record metrics during training.
     """
     super().train_loop(metrics_logger)
-    self._save_model()
+    # self._save_model()
 
   def _save_model(self) -> None:
     """Save the fine-tuned model.
