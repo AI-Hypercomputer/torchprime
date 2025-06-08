@@ -16,7 +16,9 @@ xla_flags = os.environ.get("LIBTPU_INIT_ARGS", "")
 xla_flags = f"{xla_flags} --megascale_grpc_enable_xor_tracer=false"
 
 # Workaround for MegaScale perf regression
-# TODO(b/NNN): Remove the `--megascale_grpc_num_channels` override
+#
+# TODO(b/423386767): Remove the `--megascale_grpc_num_channels` override
+# when the perf regression is fixed.
 xla_flags = f"{xla_flags} --megascale_grpc_num_channels=64"
 os.environ["LIBTPU_INIT_ARGS"] = xla_flags
 
