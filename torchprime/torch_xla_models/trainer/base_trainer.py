@@ -291,7 +291,7 @@ class Trainer:
 
   def finalize_training(self, metrics_logger) -> None:
     """Finalize training by processing profiling output and logging metrics."""
-    
+
     if self.config.profile_step >= 0:
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)

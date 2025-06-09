@@ -8,7 +8,6 @@ import torch_xla.core.xla_model as xm
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
-from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.trainer.sft_trainer import SFTTrainer
 
 
