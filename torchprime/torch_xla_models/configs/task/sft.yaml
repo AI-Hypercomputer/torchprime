@@ -11,4 +11,3 @@ optimizer:
 lr_scheduler:
   type: linear
   warmup_steps: 10
-
