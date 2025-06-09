@@ -12,6 +12,7 @@ def initialize_model_class(model_config):
   """Import and initialize model_class specified by the config."""
   full_model_class_string = model_config.model_class
   module_name, model_class_name = full_model_class_string.rsplit(".", 1)
+  module = None
 
   for candidate_module_name in [f"model.{module_name}", module_name]:
     # use full import path to avoid issues with relative imports

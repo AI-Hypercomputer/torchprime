@@ -33,10 +33,10 @@ assert xr.is_spmd() is True
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: DictConfig):
-  metrics_logger = (
-    MetricsLogger()
-  )  # Call metricslogger in the beginning to get correct start time.
-  print(OmegaConf.to_yaml(config))  # Print the config for debugging
+  # Call metrics logger in the beginning to get the correct start time.
+  metrics_logger = MetricsLogger()
+  # Print the config for debugging
+  print(OmegaConf.to_yaml(config))
   log_level = logging.INFO
   logger.setLevel(log_level)
   logger.setLevel(log_level)

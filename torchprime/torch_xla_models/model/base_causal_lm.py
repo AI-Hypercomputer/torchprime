@@ -11,7 +11,7 @@ import os
 import torch
 import torch.nn as nn
 from huggingface_hub import snapshot_download
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
@@ -92,6 +92,8 @@ class BaseCausalLM(nn.Module):
   Subclasses should implement the `forward` method.
   """
 
+  config: DictConfig
+
   def _init_weights(self, module: nn.Module):
     """Initialize weights for Linear and Embedding layers.
 
@@ -123,7 +125,7 @@ class BaseCausalLM(nn.Module):
     Args:
         input_ids: Input token IDs of shape (batch_size, sequence_length).
         labels (optional): Target labels for computing the loss.
-        attention_mask (toptional): Attention mask to avoid performing attention on padding token indices.
+        attention_mask (optional): Attention mask to avoid performing attention on padding token indices.
 
     Returns:
         tuple: A tuple containing the model's output logits and, optionally, the loss.
