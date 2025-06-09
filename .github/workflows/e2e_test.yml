@@ -188,7 +188,7 @@ jobs:
             task.max_steps=15 \
             dcn_mesh.fsdp=2 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_step=3
 
       - name: Run Llama 3.0 8B SFT
         id: run-llama-3-8b-sft
@@ -197,7 +197,7 @@ jobs:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
         # need to set export_checkpoint_path=None to avoid hanging on TPU
-        # somehow exporting and profiling causes issues
+        # somehow exporting and profiling causes issues, see issue #297
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-sft)
           echo "name=$name" >> "$GITHUB_OUTPUT"
@@ -208,7 +208,7 @@ jobs:
             ici_mesh.fsdp=4 \
             task.max_steps=20 \
             task.export_checkpoint_path=None \ 
-            profile_step=3 \ 
+            profile_step=3 \
             profile_duration=5000
 
   # Load reference step times
