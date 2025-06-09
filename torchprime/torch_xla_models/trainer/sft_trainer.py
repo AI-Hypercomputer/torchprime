@@ -53,7 +53,7 @@ class SFTTrainer(Trainer):
       metrics_logger: Instance used to record metrics during training.
     """
     super().train_loop()
-    self._maybe_save_model()
+    self._maybe_save_model_xla()
 
   def _maybe_save_model(self) -> None:
     """Save the fine-tuned model, if export_checkpoint_path is provided.
@@ -74,5 +74,28 @@ class SFTTrainer(Trainer):
     if xr.process_index() == 0:
       logger.info("Saving model to %s", save_dir)
       self.model.export(str(save_dir))
+    if xr.process_count() > 1:
+      xm.rendezvous("sft_save")
+
+  def _maybe_save_model_xla(self):
+    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
+    if folder_name is None:
+      return
+
+    save_dir = Path(self.config.output_dir) / folder_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Make sure any pending ops are flushed so tensors are current
+    xm.mark_step()
+    xm.wait_device_ops()
+
+    # Consolidate & save –  on device 0 only
+    if xr.process_index() == 0:
+      save_path = save_dir / "model.pt"
+      logger.info("Saving model with xm.save() to %s", save_path)
+      xm.save(self.model.state_dict(), str(save_path))
+
+    # No barrier needed for single-host jobs,
+    # but keep it for multi-host safety:
     if xr.process_count() > 1:
       xm.rendezvous("sft_save")
