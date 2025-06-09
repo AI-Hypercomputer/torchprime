@@ -18,7 +18,7 @@ torch_dtype: bfloat16
 # This might be overwritten when using tp run to launch the run using XPK
 profile_step: 3
 profile_dir: profile
-profile_duration: 10000
+profile_duration: 100000
 
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
