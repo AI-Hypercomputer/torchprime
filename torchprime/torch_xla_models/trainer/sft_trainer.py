@@ -67,6 +67,7 @@ class SFTTrainer(Trainer):
     """
     folder_name = getattr(self.config.task, "export_checkpoint_path", None)
     if folder_name is None:
+      logger.info("Skipping model export, no export_checkpoint_path provided.")
       return
 
     save_dir = Path(self.config.output_dir) / folder_name

@@ -311,7 +311,7 @@ class Trainer:
     config_save_path = Path(self.config.output_dir) / "train_config.json"
     OmegaConf.save(config=self.config, f=config_save_path)
 
-  @torch_xla.compile(full_graph=True)
+  # @torch_xla.compile(full_graph=True)
   def train_step(self, batch: dict) -> tuple[torch.Tensor, torch.Tensor]:
     _logits, loss = self.model(**batch)
     loss.backward()
