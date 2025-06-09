@@ -121,7 +121,7 @@ jobs:
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_step=3
 
       - name: Run Llama 3.0 8B (2D sharding)
         id: run-llama-3-8b-2d
@@ -143,7 +143,7 @@ jobs:
             task.max_steps=15 \
             ici_mesh.fsdp=2 \
             ici_mesh.tensor=2 \
-            profile_step=3 
+            profile_step=3
 
       - name: Run Mixtral 8x7B
         id: run-mixtral-8x7b

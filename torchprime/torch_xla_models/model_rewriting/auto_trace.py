@@ -1,5 +1,4 @@
-import functools
-from collections.abc import Callable
+from types import MethodType
 from typing import TypeVar
 
 import torch.nn as nn
@@ -20,18 +19,17 @@ def auto_trace(
   """
   for name, child in module.named_children():
     if isinstance(child, traced_types):
-      original_forward = child.forward
-      _patch_module_forward(child, original_forward, name)
+      _patch_module_forward(child, name)
     elif isinstance(child, nn.Module):
       auto_trace(child, traced_types)
 
   return module
 
 
-def _patch_module_forward(value: nn.Module, original_forward: Callable, name: str):
-  @functools.wraps(original_forward)
+def _patch_module_forward(module: nn.Module, name: str):
   def traced_forward(module_self, *args, **kwargs):
     with xp.Trace(name):
-      return original_forward(*args, **kwargs)
+      return module_self._auto_trace_forward_original(*args, **kwargs)  # type: ignore
 
-  value.forward = traced_forward.__get__(value, type(value))  # type: ignore
+  module._auto_trace_forward_original = module.forward  # type: ignore
+  module.forward = MethodType(traced_forward, module)
