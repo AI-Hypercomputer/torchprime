@@ -2,7 +2,7 @@
 hf_dataset_name: gsm8k
 hf_dataset_config_name: main
 split: train
-block_size: 512
+block_size: 256
 cache_dir: /tmp/
 format: prompt_completion
 compute_loss_on: completion

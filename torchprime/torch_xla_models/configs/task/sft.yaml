@@ -1,7 +1,7 @@
 # Task configuration for supervised fine-tuning
 name: sft
 global_batch_size: 16
-max_steps: 100
+max_steps: 20
 export_checkpoint_path: export
 max_grad_norm: 1.0
 max_grad_value: null
