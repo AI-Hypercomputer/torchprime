@@ -54,7 +54,7 @@ class SFTTrainer(Trainer):
     """
     super().train_loop(metrics_logger)
 
-    self._maybe_save_model()
+    # self._maybe_save_model()
 
   def _maybe_save_model(self) -> None:
     """Save the fine-tuned model, if export_checkpoint_path is provided.

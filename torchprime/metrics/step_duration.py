@@ -3,11 +3,14 @@ Parse a profile to determine the median duration of a training step.
 """
 
 import glob
+import logging
 import os
 import statistics
 import sys
 
 from torchprime.metrics.xplane_pb2 import XSpace  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 def step_duration_from_latest_profile(profile_dir: str) -> float:
@@ -66,9 +69,13 @@ def analyze_step_duration_from_pb(xspace: XSpace) -> float:
 
   # Confirm we have exactly one unique event name
   if len(unique_names) > 1:
-    raise ValueError(f"Ambiguous event names found in XSpace: {unique_names}")
+    logger.warning(
+      f"Multiple event names found in XSpace: {unique_names}. "
+      "Using the one with max graph nodes for duration calculation."
+    )
 
-  inferred_event_name = list(unique_names)[0]
+  inferred_event_name = max(unique_names)
+
   # Sort offsets to compute consecutive differences
   offsets.sort()
 

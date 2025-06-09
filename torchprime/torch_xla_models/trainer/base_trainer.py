@@ -193,6 +193,26 @@ class Trainer:
     self.summary_writer.add_scalar("train/grad_norm", grad_norm, step)
     self.summary_writer.flush()
 
+  def _maybe_save_model(self) -> None:
+    """Save the fine-tuned model, if export_checkpoint_path is provided.
+
+    The model is exported to ``output_dir/<export_checkpoint_path>`` on process 0 and the
+    rest wait on a rendezvous to ensure the write completes before exiting.
+
+    Note:
+      current exporting and profiling logic is somewhat incompatible, causing race
+      conditions if both are enabled. Need to resolve this in future. See issue #297
+    """
+    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
+    if folder_name is None:
+      return
+
+    save_dir = Path(self.config.output_dir) / folder_name
+    if xr.process_index() == 0:
+      logger.info("Saving model to %s", save_dir)
+      self.model.export(str(save_dir))
+    xm.rendezvous("sft_save")
+
   def train_loop(self, metrics_logger) -> None:
     self.model.train()
     self.model.zero_grad()
@@ -266,6 +286,8 @@ class Trainer:
           self.config.profile_dir,
           self.config.profile_duration,
         )
+
+    self._maybe_save_model()
 
     xm.wait_device_ops()
     logger.info("Finished training run")
