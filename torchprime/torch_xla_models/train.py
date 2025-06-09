@@ -84,7 +84,8 @@ def main(config: DictConfig):
 
   # TODO(https://github.com/pytorch/xla/issues/8954): Remove `jax_env_context`.
   with jax_env_context():
-    trainer.train_loop(metrics_logger)
+    trainer.train_loop()
+    trainer.finalize_training(metrics_logger)
 
 
 if __name__ == "__main__":

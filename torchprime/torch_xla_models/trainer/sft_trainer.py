@@ -46,15 +46,14 @@ class SFTTrainer(Trainer):
 
     super().__init__(model, config, train_dataset)
 
-  def train_loop(self, metrics_logger) -> None:
+  def train_loop(self) -> None:
     """Run the base training loop and export the model.
 
     Args:
       metrics_logger: Instance used to record metrics during training.
     """
-    super().train_loop(metrics_logger)
-
-    # self._maybe_save_model()
+    super().train_loop()
+    self._maybe_save_model()
 
   def _maybe_save_model(self) -> None:
     """Save the fine-tuned model, if export_checkpoint_path is provided.

@@ -213,7 +213,7 @@ class Trainer:
       self.model.export(str(save_dir))
     xm.rendezvous("sft_save")
 
-  def train_loop(self, metrics_logger) -> None:
+  def train_loop(self) -> None:
     self.model.train()
     self.model.zero_grad()
 
@@ -287,11 +287,11 @@ class Trainer:
           self.config.profile_duration,
         )
 
-    self._maybe_save_model()
-
     xm.wait_device_ops()
     logger.info("Finished training run")
 
+  def finalize_training(self, metrics_logger) -> None:
+    """Finalize training by processing profiling output and logging metrics."""
     if xr.process_index() == 0 and self._trace_thread:
       self._trace_thread.join(timeout=self.config.profile_duration / 1000 + 10)
 

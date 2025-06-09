@@ -70,7 +70,7 @@ def analyze_step_duration_from_pb(xspace: XSpace) -> float:
   # Confirm we have exactly one unique event name
   if len(unique_names) > 1:
     logger.warning(
-      f"Multiple event names found in XSpace: {unique_names}. "
+      f"Multiple event names found in XSpace: {unique_names}.\n"
       "Using the one with max graph nodes for duration calculation."
     )
 

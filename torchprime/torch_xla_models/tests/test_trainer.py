@@ -149,7 +149,7 @@ def test_trainer_train_loop(monkeypatch, dummy_config):
 
   monkeypatch.setattr(Trainer, "train_step", counting_train_step)
 
-  trainer.train_loop(metrics_logger=MetricsLogger())
+  trainer.train_loop()
   assert call_counter["steps"] == dummy_config.task.max_steps
 
 

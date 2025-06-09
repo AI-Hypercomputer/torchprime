@@ -117,5 +117,5 @@ def test_load_and_save(monkeypatch, dummy_config):
 
   assert model.loaded is True
 
-  trainer.train_loop(metrics_logger=MetricsLogger())
+  trainer.train_loop()
   assert model.saved is True
