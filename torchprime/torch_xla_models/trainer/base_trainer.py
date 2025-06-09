@@ -80,7 +80,6 @@ class Trainer:
     self.device = xm.xla_device()
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
-    self._trace_thread = None
 
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
@@ -276,12 +275,12 @@ class Trainer:
         )
 
       # Capture profile at the prefer step
-      if step == self.config.profile_step and xr.process_index() == 0:
+      if step == self.config.profile_step:
         # Wait until device execution catches up to tracing before triggering the profile. This will
         # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
         # for the step, the interruption will be minimal.
         xm.wait_device_ops()
-        self._trace_thread = xp.trace_detached(
+        xp.trace_detached(
           "127.0.0.1:9012",
           self.config.profile_dir,
           self.config.profile_duration,
@@ -292,12 +291,8 @@ class Trainer:
 
   def finalize_training(self, metrics_logger) -> None:
     """Finalize training by processing profiling output and logging metrics."""
-    if xr.process_index() == 0 and self._trace_thread:
-      self._trace_thread.join(timeout=self.config.profile_duration / 1000 + 10)
-
-    xm.rendezvous("profile_done")
-
-    if xr.process_index() == 0 and self.config.profile_step >= 0:
+    
+    if self.config.profile_step >= 0:
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)
