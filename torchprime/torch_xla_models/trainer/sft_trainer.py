@@ -73,4 +73,5 @@ class SFTTrainer(Trainer):
     if xr.process_index() == 0:
       logger.info("Saving model to %s", save_dir)
       self.model.export(str(save_dir))
-    xm.rendezvous("sft_save")
+    if xr.process_count() > 1:
+      xm.rendezvous("sft_save")
