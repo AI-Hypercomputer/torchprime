@@ -83,6 +83,8 @@ def dummy_config():
         "global_batch_size": 4,
         "max_steps": 2,
         "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
+        "max_grad_norm": None,
+        "max_grad_value": None,
         "lr_scheduler": {"type": "constant", "warmup_steps": 0},
       },
       "run_name": None,
@@ -170,7 +172,131 @@ def test_trainer_train_step(monkeypatch, dummy_config):
   trainer = Trainer(model, dummy_config, dataset)
 
   batch = {k: v.unsqueeze(0).to(device) for k, v in dataset[0].items()}
-  loss = trainer.train_step(batch)
+  loss, grad_norm = trainer.train_step(batch)
 
   assert isinstance(loss, torch.Tensor)
   assert loss.ndim == 0  # scalar loss
+  assert isinstance(grad_norm, torch.Tensor)
+  assert grad_norm.ndim == 0  # scalar gradient norm
+
+
+def test_trainer_clip_gradients_by_norm(monkeypatch, dummy_config):
+  """Test correctness of gradient clipping by norm in a train step."""
+  import torch_xla
+
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
+
+  # Arrange
+  monkeypatch.setattr(
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding_initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  class SumModel(nn.Module):
+    def __init__(self):
+      super().__init__()
+      self.linear = nn.Linear(4, 1, bias=False)
+
+    def forward(self, input_ids=None, attention_mask=None, **kwargs):
+      logits = self.linear(input_ids)
+      loss = logits.mean()
+      return logits, loss
+
+  dummy_config.task.max_grad_norm = 1.0
+  dummy_config.task.max_grad_value = None
+  model = SumModel().to("xla")
+  with torch.no_grad():
+    model.linear.weight.fill_(1.0)
+  dataset = DummyDataset()
+  trainer = Trainer(model, dummy_config, dataset)
+  torch_xla.sync()
+
+  # Act
+  batch = {k: v.unsqueeze(0).to("xla") for k, v in dataset[0].items()}
+  loss, grad_norm = trainer.train_step(batch)
+
+  # Assert
+  # Loss should be exactly 4.0 since we are summing 4 inputs of 1.0.
+  assert loss.item() == 4.0
+
+  # ∂L/∂W = 1.0 for each weight in the linear layer
+  # Expected gradient norm before clipping: sqrt(4 * 1^2) = 2.0
+  assert pytest.approx(grad_norm.item(), rel=1e-5) == 2.0
+
+  # Verify the actual gradients on the model
+  # The original gradient for each weight would be 1.0
+  # With clipping factor 0.5 (1.0/2.0), each gradient becomes 0.5
+  if hasattr(model.linear.weight, "grad") and model.linear.weight.grad is not None:
+    expected_clipped_grad = torch.full_like(model.linear.weight, 0.5)
+    torch.testing.assert_close(
+      model.linear.weight.grad, expected_clipped_grad, rtol=1e-5, atol=1e-5
+    )
+
+    # Also verify the gradient norm matches what we expect
+    actual_grad_norm = torch.norm(model.linear.weight.grad)
+    assert pytest.approx(actual_grad_norm.item(), rel=1e-5) == 1.0
+
+
+def test_trainer_clip_gradients_by_value(monkeypatch, dummy_config):
+  """Test correctness of gradient clipping by max absolute value in a train step."""
+  import torch_xla
+
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
+
+  # Arrange
+  monkeypatch.setattr(
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding_initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  class SumModel(nn.Module):
+    def __init__(self):
+      super().__init__()
+      self.linear = nn.Linear(4, 1, bias=False)
+
+    def forward(self, input_ids=None, attention_mask=None, **kwargs):
+      logits = self.linear(input_ids)
+      loss = logits.mean()
+      return logits, loss
+
+  dummy_config.task.max_grad_value = 0.5
+  dummy_config.task.max_grad_norm = None
+  model = SumModel().to("xla")
+  with torch.no_grad():
+    model.linear.weight.fill_(1.0)
+  dataset = DummyDataset()
+  trainer = Trainer(model, dummy_config, dataset)
+  torch_xla.sync()
+
+  # Act
+  batch = {k: v.unsqueeze(0).to("xla") for k, v in dataset[0].items()}
+  loss, grad_norm = trainer.train_step(batch)
+
+  # Assert
+  # Loss should be exactly 4.0 since we are summing 4 inputs of 1.0.
+  assert loss.item() == 4.0
+
+  # ∂L/∂W = 1.0 for each weight in the linear layer
+  # Expected gradient norm before clipping: sqrt(4 * 1^2) = 2.0
+  assert pytest.approx(grad_norm.item(), rel=1e-5) == 2.0
+
+  # Verify the actual gradients on the model
+  # The original gradient for each weight would be 1.0
+  # With value clipping at 0.5, each gradient becomes 0.5
+  if hasattr(model.linear.weight, "grad") and model.linear.weight.grad is not None:
+    expected_clipped_grad = torch.full_like(model.linear.weight, 0.5)
+    torch.testing.assert_close(
+      model.linear.weight.grad, expected_clipped_grad, rtol=1e-5, atol=1e-5
+    )
+
+    # Verify all gradient values are within [-max_grad_value, max_grad_value]
+    assert torch.all(model.linear.weight.grad <= dummy_config.task.max_grad_value)
+    assert torch.all(model.linear.weight.grad >= -dummy_config.task.max_grad_value)

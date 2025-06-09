@@ -2,6 +2,7 @@
 name: sft
 global_batch_size: 16
 max_steps: 10
+export_checkpoint_path: export
 optimizer:
   learning_rate: 4.e-5
   type: adafactor

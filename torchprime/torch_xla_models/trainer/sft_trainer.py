@@ -59,23 +59,28 @@ class SFTTrainer(Trainer):
       metrics_logger: Instance used to record metrics during training.
     """
     super().train_loop(metrics_logger)
-    # self._save_model()
+
+    self._maybe_save_model()
     # self._save_model_w_xm()
-    self._save_model_2()
+    # self._save_model_2()
 
-  def _save_model(self) -> None:
-    """Save the fine-tuned model.
+  def _maybe_save_model(self) -> None:
+    """Save the fine-tuned model, if export_checkpoint_path is provided.
 
-    The model is exported to ``output_dir/trained_model`` on process 0 and the
+    The model is exported to ``output_dir/<export_checkpoint_path>`` on process 0 and the
     rest wait on a rendezvous to ensure the write completes before exiting.
     """
-    save_dir = Path(self.config.output_dir) / "trained_model"
+    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
+    if folder_name is None:
+      return
+
+    save_dir = Path(self.config.output_dir) / folder_name
     if xr.process_index() == 0:
       logger.info("Saving model to %s", save_dir)
       self.model.export(str(save_dir))
     xm.rendezvous("sft_save")
 
-  def _save_model_w_xm(self) -> None:
+  def _save_model_w_xm(self, folder_name: str | None) -> None:
     """Save the fine-tuned model with xm
 
     Stream a checkpoint from each replica to rank<N>.pt, then on rank 0 convert
@@ -109,7 +114,7 @@ class SFTTrainer(Trainer):
     # 3. keep other ranks alive until rank 0 finishes file I/O
     xm.rendezvous("sft_save_done")
 
-  def _save_model_2(self):
+  def _save_model_2(self, folder_name: str | None):
     save_dir = Path(self.config.output_dir) / "trained_model"
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -153,8 +158,6 @@ class SFTTrainer(Trainer):
       )
 
       # save config
-      from omegaconf import OmegaConf
-
       (save_dir / "config.json").write_text(
         json.dumps(OmegaConf.to_container(self.config, resolve=True), indent=2)
       )

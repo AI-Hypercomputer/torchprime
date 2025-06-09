@@ -1,12 +1,22 @@
-# this is for basic training loop, i.e., forward/backward pass without any special task logic.
+# This is for basic training loop, i.e., forward/backward pass without any special task logic.
 name: train 
 global_batch_size: 4
 max_steps: 15
 
+# Optimizer configuration.
 optimizer:
   learning_rate: 5.e-5
   type: adafactor
 
+# Defaults to clip the L2 norm of gradients to 1.0.
+# Set to null to disable gradient clipping by norm.
+max_grad_norm: 1.0
+
+# Defaults to not clip gradients by their absolute value.
+# Set to a number to clip gradients by the specified max absolute value.
+max_grad_value: null
+
+# Learning rate scheduler configuration.
 lr_scheduler:
   type: linear
   warmup_steps: 0
