@@ -24,7 +24,8 @@ def auto_trace(
       _patch_module_forward(child, original_forward, name)
     elif isinstance(child, nn.Module) and _not_empty(child.children()):
       original_forward = child.forward
-      _patch_module_forward(child, original_forward, name)
+      if not isinstance(child, nn.ModuleList) and not isinstance(child, nn.Sequential):
+        _patch_module_forward(child, original_forward, name)
       auto_trace(child, traced_types)
 
   return module

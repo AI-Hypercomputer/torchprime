@@ -28,6 +28,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch.utils.tensorboard import SummaryWriter
+from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
 from transformers import (
   default_data_collator,
   get_scheduler,
@@ -85,8 +86,14 @@ class Trainer:
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
 
-    # Model transformations
+    # -- Model transformations --
+    # Recursively replace `nn.Linear` layers with einsum operations in the model.
+    # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
+    # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
+    model = apply_xla_patch_to_nn_linear(model)
+    # Add `xp.Trace` to the forward pass of the module tree.
     model = auto_trace(model)
+    # Setup SPMD mesh and shard the model.
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
     )
