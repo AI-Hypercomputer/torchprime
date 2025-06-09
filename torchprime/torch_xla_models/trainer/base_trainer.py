@@ -91,7 +91,7 @@ class Trainer:
     # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
     # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
     model = apply_xla_patch_to_nn_linear(model)
-    # Add `xp.Trace` to the forward pass of the module tree.
+    # Add `xp.Trace` to linear layers in the module tree.
     model = auto_trace(model)
     # Setup SPMD mesh and shard the model.
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(

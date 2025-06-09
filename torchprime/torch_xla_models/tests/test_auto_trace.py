@@ -142,9 +142,9 @@ class TestAutoTrace:
     _ = model(x)
 
     assert "fc" in mock_trace.calls
-    assert "sub" in mock_trace.calls
+    assert "sub" not in mock_trace.calls  # Only `Linear` layer should be traced
     assert "linear" in mock_trace.calls
-    assert len(mock_trace.calls) == 3
+    assert len(mock_trace.calls) == 2
 
   def test_original_functionality_preserved(self, mock_trace):
     """Test that the original forward functionality is preserved"""
