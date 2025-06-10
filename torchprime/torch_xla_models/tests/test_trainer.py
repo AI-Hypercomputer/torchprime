@@ -15,6 +15,7 @@ import pytest
 import torch
 import torch.nn as nn
 import torch_xla.core.xla_model as xm
+import torch_xla.debug.profiler as xp
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
@@ -90,7 +91,8 @@ def dummy_config():
       "run_name": None,
       "output_dir": "/tmp/test_output",
       "logging_steps": 1,
-      "profile_step": -1,
+      "profile_start_step": -1,
+      "profile_end_step": -1,
       "profile_dir": "/tmp/profile",
       "profile_duration": 5,
       "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
@@ -300,3 +302,41 @@ def test_trainer_clip_gradients_by_value(monkeypatch, dummy_config):
     # Verify all gradient values are within [-max_grad_value, max_grad_value]
     assert torch.all(model.linear.weight.grad <= dummy_config.task.max_grad_value)
     assert torch.all(model.linear.weight.grad >= -dummy_config.task.max_grad_value)
+
+
+def test_profiler_trace(monkeypatch, dummy_config):
+  """Verify profiler start_trace and stop_trace are invoked at configured steps."""
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
+
+  monkeypatch.setattr(
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding_initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  calls = {"start": 0, "stop": 0}
+
+  def fake_start(dir):
+    calls["start"] += 1
+
+  def fake_stop():
+    calls["stop"] += 1
+
+  monkeypatch.setattr(xp, "start_trace", fake_start)
+  monkeypatch.setattr(xp, "stop_trace", fake_stop)
+
+  dummy_config.profile_start_step = 0
+  dummy_config.profile_end_step = 1
+
+  device = xm.xla_device()
+  model = DummyModel().to(device)
+  dataset = DummyDataset()
+  trainer = Trainer(model, dummy_config, dataset)
+
+  trainer.train_loop(metrics_logger=MetricsLogger())
+
+  assert calls["start"] == 1
+  assert calls["stop"] == 1

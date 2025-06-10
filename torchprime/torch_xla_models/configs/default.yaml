@@ -14,7 +14,8 @@ logging_steps: 10
 torch_dtype: bfloat16
 
 # This might be overwritten when using tp run to launch the run using XPK
-profile_step: 2
+profile_start_step: 3
+profile_end_step: null
 profile_dir: profile
 profile_duration: 100000
 

@@ -46,6 +46,7 @@ from torchprime.torch_xla_models.model_rewriting.sharding_initialization import 
   setup_sharding_and_mesh,
 )
 from torchprime.torch_xla_models.topology import get_num_slices
+from torchprime.utils.profiling import ensure_profile_end_step
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class Trainer:
     train_dataset: Dataset | IterableDataset | None,
   ):
     self.config = config
+    ensure_profile_end_step(self.config)
     self.device = xm.xla_device()
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
@@ -260,22 +262,23 @@ class Trainer:
           run_async=True,
         )
 
-      # Capture profile at the prefer step
-      if step == self.config.profile_step:
-        # Wait until device execution catches up to tracing before triggering the profile. This will
-        # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
-        # for the step, the interruption will be minimal.
+      # Start profiler trace at the configured step
+      if step == self.config.profile_start_step:
+        # Wait until device execution catches up to tracing before triggering the profile.
+        # This will interrupt training slightly on the hosts which are capturing, but by waiting
+        # after tracing for the step, the interruption will be minimal.
         xm.wait_device_ops()
-        xp.trace_detached(
-          "127.0.0.1:9012",
-          self.config.profile_dir,
-          self.config.profile_duration,
-        )
+        xp.start_trace(self.config.profile_dir)
+
+      # Stop profiler trace at the configured step
+      if step == self.config.profile_end_step:
+        xm.wait_device_ops()
+        xp.stop_trace()
 
     xm.wait_device_ops()
     logger.info("Finished training run")
 
-    if self.config.profile_step >= 0:
+    if self.config.profile_end_step >= 0:
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)
