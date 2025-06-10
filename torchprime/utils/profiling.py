@@ -21,7 +21,7 @@ def ensure_profile_end_step(
   num_profile_steps = getattr(config, "num_profile_steps", num_profile_steps)
 
   max_steps = config.task.max_steps
-  if start < 0 or start >= max_steps:
+  if start < 0 or start >= max_steps - 1:  # at lease 2 steps are needed for profiling
     config.profile_start_step = -1
     config.profile_end_step = -1
     return config
