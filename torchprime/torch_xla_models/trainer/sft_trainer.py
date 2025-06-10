@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing as mp
 import time
 from pathlib import Path
 
@@ -61,57 +62,9 @@ class SFTTrainer(Trainer):
 
     t0 = time.perf_counter()
     logger.info("[SAVING] Starting distributed checkpoint …")
-    # self._maybe_save_model() # Local VM 45.74 s
-    # self._maybe_save_model_xla() # Local VM 28.31 s
-    self._maybe_save_model_xla_dist()  # Local VM 60.18 s
+    self._maybe_save_model_xla_dist()  # For LLAMA-3-8b: Local VM 60.18s |  xpk 356.57s
     dt = time.perf_counter() - t0
     logger.info("[SAVING] Finished in %.2f s", dt)
-
-  def _maybe_save_model(self) -> None:
-    """Save the fine-tuned model, if export_checkpoint_path is provided.
-
-    The model is exported to ``output_dir/<export_checkpoint_path>`` on process 0 and the
-    rest wait on a rendezvous to ensure the write completes before exiting.
-
-    Note:
-      current exporting and profiling logic is somewhat incompatible, causing race
-      conditions if both are enabled. Need to resolve this in future. See issue #297
-    """
-    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
-    if folder_name is None:
-      logger.info("Skipping model export, no export_checkpoint_path provided.")
-      return
-
-    save_dir = Path(self.config.output_dir) / folder_name
-    if xr.process_index() == 0:
-      logger.info("Saving model to %s", save_dir)
-      self.model.export(str(save_dir))
-    if xr.process_count() > 1:
-      xm.rendezvous("sft_save")
-
-  def _maybe_save_model_xla(self):
-    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
-    if folder_name is None:
-      return
-
-    save_dir = Path(self.config.output_dir) / folder_name
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    # Make sure any pending ops are flushed so tensors are current
-    xm.mark_step()
-    xm.wait_device_ops()
-
-    # Consolidate & save –  on device 0 only
-    if xr.process_index() == 0:
-      save_path = save_dir / "model.pt"
-      logger.info("Saving model with xm.save() to %s", save_path)
-      xm.save(self.model.state_dict(), str(save_path))
-      logger.info("Model saved successfully to %s", save_path)
-
-    # No barrier needed for single-host jobs,
-    # but keep it for multi-host safety:
-    if xr.process_count() > 1:
-      xm.rendezvous("sft_save")
 
   def _maybe_save_model_xla_dist(self) -> None:
     """Save a sharded checkpoint with torch.distributed.checkpoint.
@@ -145,8 +98,10 @@ class SFTTrainer(Trainer):
     # Synchronous distributed checkpoint
     dist_cp.save(
       state_dict=state_dict,
-      storage_writer=FileSystemWriter(str(save_dir), thread_count=4),
-      planner=xc.SPMDSavePlanner(),  # key bit: XLA-aware sharding
+      storage_writer=FileSystemWriter(
+        str(save_dir), thread_count=max(2, min(8, mp.cpu_count()))
+      ),
+      planner=xc.SPMDSavePlanner(),  # XLA-aware sharding
     )
 
     logger.info("Distributed checkpoint (sharded) written to %s", save_dir)

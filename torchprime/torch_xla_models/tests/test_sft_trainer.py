@@ -117,13 +117,14 @@ def test_load_and_save(monkeypatch, dummy_config):
   # Patch xm.save to track call
   saved = {}
 
-  def fake_save(state_dict, path, *args, **kwargs):
+  def fake_save(state_dict, *args, **kwargs):
     saved["called"] = True
-    saved["path"] = path
     saved["state_dict"] = state_dict
 
-  monkeypatch.setattr("torch_xla.core.xla_model.save", fake_save)
-
+  monkeypatch.setattr(
+    "torchprime.torch_xla_models.trainer.sft_trainer.dist_cp.save",
+    fake_save,
+  )
   # Initialize
   device = xm.xla_device()
   model = DummyModel().to(device)
