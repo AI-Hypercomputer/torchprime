@@ -100,6 +100,7 @@ def dummy_config():
 def test_load_and_save(monkeypatch, dummy_config):
   from torchprime.torch_xla_models.model_rewriting import sharding_initialization
 
+  # Patch mesh setup
   monkeypatch.setattr(
     sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
   )
@@ -109,12 +110,32 @@ def test_load_and_save(monkeypatch, dummy_config):
     lambda model, *args, **kwargs: model,
   )
 
+  # Patch process index and count
+  monkeypatch.setattr("torch_xla.runtime.process_index", lambda: 0)
+  monkeypatch.setattr("torch_xla.runtime.process_count", lambda: 1)
+
+  # Patch xm.save to track call
+  saved = {}
+
+  def fake_save(state_dict, path, *args, **kwargs):
+    saved["called"] = True
+    saved["path"] = path
+    saved["state_dict"] = state_dict
+
+  monkeypatch.setattr("torch_xla.core.xla_model.save", fake_save)
+
+  # Initialize
   device = xm.xla_device()
   model = DummyModel().to(device)
   dataset = DummyDataset()
   trainer = SFTTrainer(model, dummy_config, dataset)
 
+  # from_pretrained should mark model as loaded
   assert model.loaded is True
 
+  # Train (1 step), should trigger save
   trainer.train_loop()
-  assert model.saved is True
+
+  # Save should have occurred
+  assert "called" in saved and saved["called"] is True
+  assert isinstance(saved["state_dict"], dict)
