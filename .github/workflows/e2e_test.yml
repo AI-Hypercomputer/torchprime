@@ -196,8 +196,6 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
-        # need to set export_checkpoint_path=null to avoid hanging on TPU
-        # somehow exporting and profiling causes issues, see issue #297
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-sft)
           echo "name=$name" >> "$GITHUB_OUTPUT"
@@ -208,6 +206,7 @@ jobs:
             ici_mesh.fsdp=4 \
             task.max_steps=20 \
             task.global_batch_size=16 \
+            task.convert_to_safetensors=False \ 
             profile_step=3
 
   # Load reference step times

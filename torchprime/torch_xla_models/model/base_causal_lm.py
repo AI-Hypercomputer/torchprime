@@ -8,6 +8,7 @@ and methods for saving and loading model checkpoints using the `safetensors` for
 import json
 import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import torch.nn as nn
@@ -89,14 +90,21 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
     shard_key = get_shard_key(k)
     grouped[shard_key][k] = v
 
-  weight_map = {}
-  for prefix, group in grouped.items():
+  # enable parallel write
+  def _write_one(args):
+    prefix, group = args
     shard_file = f"{prefix}.safetensors"
-    shard_path = os.path.join(save_dir, shard_file)
-    save_file(group, shard_path)
-    weight_map.update(
-      {k.replace("._orig_mod", ""): shard_file for k in group}
-    )  # remove _orig_mod due to sharding
+    save_file(group, os.path.join(save_dir, shard_file))
+    # remove _orig_mod due to sharding
+    return {k.replace("._orig_mod", ""): shard_file for k in group}
+
+  max_workers = min(8, os.cpu_count())
+  weight_map = {}
+
+  with ThreadPoolExecutor(max_workers=max_workers) as tp:
+    for mapping in tp.map(_write_one, grouped.items()):
+      weight_map.update(mapping)
+
   with open(os.path.join(save_dir, "model.safetensors.index.json"), "w") as f:
     json.dump({"weight_map": weight_map}, f, indent=2)
 
