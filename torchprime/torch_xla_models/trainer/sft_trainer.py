@@ -63,7 +63,7 @@ class SFTTrainer(Trainer):
     logger.info("[SAVING] Starting distributed checkpoint …")
     # self._maybe_save_model() # Local VM 45.74 s
     # self._maybe_save_model_xla() # Local VM 28.31 s
-    self._maybe_save_model_xla_dist() # Local VM 60.18 s
+    self._maybe_save_model_xla_dist()  # Local VM 60.18 s
     dt = time.perf_counter() - t0
     logger.info("[SAVING] Finished in %.2f s", dt)
 
