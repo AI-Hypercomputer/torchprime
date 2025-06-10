@@ -10,4 +10,3 @@ def test_ensure_profile_end_step_sets_default():
   cfg = OmegaConf.create({"profile_start_step": 5, "profile_end_step": None})
   ensure_profile_end_step(cfg)
   assert cfg.profile_end_step == 15
-
