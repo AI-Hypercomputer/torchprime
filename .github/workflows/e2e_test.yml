@@ -17,7 +17,7 @@ on:
 jobs:
   tp-run:
     name: Submit workloads
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
