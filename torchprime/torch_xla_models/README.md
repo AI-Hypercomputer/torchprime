@@ -52,8 +52,6 @@ tp run torchprime/torch_xla_models/train.py \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
     profile_start_step=6 \
-    profile_end_step=16 \
-    profile_duration=20000 \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan \
     model.attention_kernel=splash_attention
@@ -73,8 +71,6 @@ tp run torchprime/torch_xla_models/train.py \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
     profile_start_step=6 \
-    profile_end_step=16 \
-    profile_duration=20000 \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan \
     model.attention_kernel=splash_attention
@@ -94,8 +90,6 @@ tp run torchprime/torch_xla_models/train.py \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
     profile_start_step=5 \
-    profile_end_step=15 \
-    profile_duration=250000  \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan-offload \
     model.attention_kernel=splash_attention
@@ -121,8 +115,6 @@ tp run torchprime/torch_xla_models/train.py \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
     profile_start_step=5 \
-    profile_end_step=15 \
-    profile_duration=240000 \
     logging_steps=10
 ```
 
@@ -146,8 +138,6 @@ tp run torchprime/torch_xla_models/train.py \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
     profile_start_step=15 \
-    profile_end_step=25 \
-    profile_duration=240000 \
     logging_steps=10
 ```
 

@@ -278,7 +278,7 @@ class Trainer:
     xm.wait_device_ops()
     logger.info("Finished training run")
 
-    if self.config.profile_end_step >= 0:
+    if self.config.profile_start_step >= 0 and self.config.profile_end_step >= 0:
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)
