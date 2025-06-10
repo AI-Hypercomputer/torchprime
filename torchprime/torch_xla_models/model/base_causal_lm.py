@@ -98,7 +98,7 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
     # remove _orig_mod due to sharding
     return {k.replace("._orig_mod", ""): shard_file for k in group}
 
-  max_workers = min(8, os.cpu_count())
+  max_workers = min(16, os.cpu_count())
   weight_map = {}
 
   with ThreadPoolExecutor(max_workers=max_workers) as tp:

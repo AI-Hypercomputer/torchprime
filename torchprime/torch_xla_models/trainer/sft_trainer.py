@@ -8,8 +8,6 @@ import time
 from pathlib import Path
 
 import torch
-
-# save_utils.py
 import torch.distributed as dist
 import torch.distributed.checkpoint as dist_cp
 import torch_xla.core.xla_model as xm

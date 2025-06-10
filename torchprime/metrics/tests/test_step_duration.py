@@ -91,7 +91,7 @@ def test_conflicting_step_names():
     # with pytest.raises(ValueError, match="Ambiguous"):
     #   analyze_step_duration(temp.name)
 
-    # Temperarily allow multiple profile names
+    # Temperarily allow multiple profile names, checkout issue #260
     assert analyze_step_duration(temp.name) == 1.0
 
 
