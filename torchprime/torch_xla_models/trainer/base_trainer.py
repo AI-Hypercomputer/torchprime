@@ -28,6 +28,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from torch.utils.tensorboard import SummaryWriter
+from torch_xla.distributed.spmd.xla_sharding import apply_xla_patch_to_nn_linear
 from transformers import (
   default_data_collator,
   get_scheduler,
@@ -36,6 +37,7 @@ from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
+from torchprime.torch_xla_models.model_rewriting.auto_trace import auto_trace
 from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   add_activation_checkpointing_and_scan,
   add_optimization_barriers,
@@ -44,6 +46,7 @@ from torchprime.torch_xla_models.model_rewriting.sharding_initialization import 
   setup_sharding_and_mesh,
 )
 from torchprime.torch_xla_models.topology import get_num_slices
+from torchprime.utils.profiling import ensure_profile_end_step
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,7 @@ class Trainer:
     train_dataset: Dataset | IterableDataset | None,
   ):
     self.config = config
+    ensure_profile_end_step(self.config)
     self.device = xm.xla_device()
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
@@ -84,12 +88,17 @@ class Trainer:
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
 
-    # Sharding setup
+    # -- Model transformations --
+    # Recursively replace `nn.Linear` layers with einsum operations in the model.
+    # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
+    # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
+    model = apply_xla_patch_to_nn_linear(model)
+    # Add `xp.Trace` to linear layers in the module tree.
+    model = auto_trace(model)
+    # Setup SPMD mesh and shard the model.
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
     )
-
-    # Model transformations
     model = add_activation_checkpointing_and_scan(model, config)
     model = add_optimization_barriers(model, config)
     self.model = model
@@ -254,17 +263,18 @@ class Trainer:
           run_async=True,
         )
 
-      # Capture profile at the prefer step
-      if step == self.config.profile_step:
-        # Wait until device execution catches up to tracing before triggering the profile. This will
-        # interrupt training slightly on the hosts which are capturing, but by waiting after tracing
-        # for the step, the interruption will be minimal.
+      # Start profiler trace at the configured step
+      if step == self.config.profile_start_step:
+        # Wait until device execution catches up to tracing before triggering the profile.
+        # This will interrupt training slightly on the hosts which are capturing, but by waiting
+        # after tracing for the step, the interruption will be minimal.
         xm.wait_device_ops()
-        xp.trace_detached(
-          "127.0.0.1:9012",
-          self.config.profile_dir,
-          self.config.profile_duration,
-        )
+        xp.start_trace(self.config.profile_dir)
+
+      # Stop profiler trace at the configured step
+      if step == self.config.profile_end_step:
+        xm.wait_device_ops()
+        xp.stop_trace()
 
     xm.wait_device_ops()
     logger.info("Finished training run")
@@ -272,7 +282,7 @@ class Trainer:
   def finalize_training(self, metrics_logger) -> None:
     """Finalize training by processing profiling output and logging metrics."""
 
-    if self.config.profile_step >= 0:
+    if self.config.profile_start_step >= 0 and self.config.profile_end_step >= 0:
       # Analyze the step duration from the latest profile
       step_duration = step_duration_from_latest_profile(self.config.profile_dir)
       metrics_logger.log_step_execution_time(step_duration)

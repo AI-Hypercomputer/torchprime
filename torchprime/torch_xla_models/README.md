@@ -51,8 +51,7 @@ tp run torchprime/torch_xla_models/train.py \
     task.global_batch_size=1024 \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
-    profile_step=6 \
-    profile_duration=20000 \
+    profile_start_step=6 \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan \
     model.attention_kernel=splash_attention
@@ -71,8 +70,7 @@ tp run torchprime/torch_xla_models/train.py \
     task.global_batch_size=1024 \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
-    profile_step=6 \
-    profile_duration=20000 \
+    profile_start_step=6 \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan \
     model.attention_kernel=splash_attention
@@ -91,8 +89,7 @@ tp run torchprime/torch_xla_models/train.py \
     task.global_batch_size=512 \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
-    profile_step=5 \
-    profile_duration=250000  \
+    profile_start_step=5 \
     ici_mesh.fsdp=256 \
     model/remat=llama-scan-offload \
     model.attention_kernel=splash_attention
@@ -117,8 +114,7 @@ tp run torchprime/torch_xla_models/train.py \
     dataset.block_size=8192 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
-    profile_step=5 \
-    profile_duration=240000 \
+    profile_start_step=5 \
     logging_steps=10
 ```
 
@@ -141,8 +137,7 @@ tp run torchprime/torch_xla_models/train.py \
     dcn_mesh.fsdp=2 \
     ici_mesh.fsdp=64 \
     ici_mesh.tensor=4 \
-    profile_step=15 \
-    profile_duration=240000 \
+    profile_start_step=15 \
     logging_steps=10
 ```
 
@@ -160,7 +155,8 @@ tp run torchprime/torch_xla_models/train.py \
     dataset=wikitext \
     dataset.hf_dataset_config_name=wikitext-103-raw-v1 \
     ici_mesh.fsdp=256 \
-    profile_step=5
+    profile_start_step=5 \
+    profile_end_step=15
 ```
 
 ## Key Components

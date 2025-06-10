@@ -3,6 +3,7 @@ name: sft
 global_batch_size: 16
 max_steps: 20
 export_checkpoint_path: export
+convert_to_safetensors: True
 max_grad_norm: 1.0
 max_grad_value: null
 optimizer:

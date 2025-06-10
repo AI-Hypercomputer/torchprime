@@ -14,6 +14,13 @@ from torchprime.launcher import upload_metrics_to_bq
 # `--megascale_grpc_enable_xor_tracer=false` flag when libtpu is updated
 xla_flags = os.environ.get("LIBTPU_INIT_ARGS", "")
 xla_flags = f"{xla_flags} --megascale_grpc_enable_xor_tracer=false"
+
+# Workaround for MegaScale perf regression
+#
+# TODO(https://github.com/AI-Hypercomputer/torchprime/issues/300):
+# Remove the `--megascale_grpc_num_channels` override when the perf
+# regression is fixed.
+xla_flags = f"{xla_flags} --megascale_grpc_num_channels=64"
 os.environ["LIBTPU_INIT_ARGS"] = xla_flags
 
 # Get the artifact dir from env var.

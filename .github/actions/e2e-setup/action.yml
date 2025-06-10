@@ -23,6 +23,22 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Install rootless docker AppArmor profile
+      run: |
+        filename=$(echo $HOME/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
+        cat <<EOF > ~/${filename}
+        abi <abi/4.0>,
+        include <tunables/global>
+        
+        "$HOME/bin/rootlesskit" flags=(unconfined) {
+          userns,
+        
+          include if exists <local/${filename}>
+        }
+        EOF
+        sudo mv ~/${filename} /etc/apparmor.d/${filename}
+        sudo systemctl restart apparmor.service
+      shell: bash
     - name: Use Docker in rootless mode
       uses: ScribeMD/rootless-docker@0.2.2
     - name: Add user to docker group

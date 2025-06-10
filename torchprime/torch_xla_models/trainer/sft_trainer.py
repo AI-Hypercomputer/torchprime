@@ -73,7 +73,7 @@ class SFTTrainer(Trainer):
     dt = time.perf_counter() - t0
     logger.info("[SAVING] Finished in %.2f s", dt)
 
-  def _maybe_save_model(self, convert_to_safetensors=False) -> None:
+  def _maybe_save_model(self) -> None:
     """Save a sharded checkpoint with torch.distributed.checkpoint.
 
     Call **once** on all TPU ranks at the end of training.
@@ -82,9 +82,6 @@ class SFTTrainer(Trainer):
       ``<output_dir>/<export_checkpoint_path>/``
     • Optionally, Rank-0 immediately reloads that checkpoint on CPU and emits
       Hugging-Face-compatible `*.safetensors` shards + index.
-
-    Args:
-      convert_to_safetensors: whether to convert checkpoint to Hugging-Face-compatible safetensors
     """
     folder_name = getattr(self.config.task, "export_checkpoint_path", None)
     if folder_name is None:

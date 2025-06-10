@@ -19,8 +19,9 @@ compute the time delta between the start of every training step on the
 accelerator, and the median value of those time delta will be used as the
 `step_execution_time`.
 
-To obtain the step execution time, set a non-negative value in the `profile_step`
-CLI argument to the trainer. Typically, you should use `profile_step` of at least
+To obtain the step execution time, set a non-negative value in the
+`profile_start_step` CLI argument to the trainer. Typically, you should use
+`profile_start_step` of at least
 2 to skip over the first two compilation steps, which introduces large idle gaps
 on the accelerator.
 

@@ -13,10 +13,16 @@ seed: 42
 logging_steps: 10
 torch_dtype: bfloat16
 
-# This might be overwritten when using tp run to launch the run using XPK
-profile_step: 2
+# set profile_start_step to a positive integer to enable profiling and start profiling 
+# at that step. If profile_end_step is not set, profiling will continue until for 
+# num_profile_steps (default 20) training steps or total step - 5 (to avoid issue #260)
+# Also, try to make number of profile profile steps >= 10
+profile_start_step: 3
+profile_end_step: null
+
+# The directory where profiling data will be stored. This might be overwritten 
+# when using tp run to launch the run using XPK
 profile_dir: profile
-profile_duration: 100000
 
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs

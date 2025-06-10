@@ -17,7 +17,7 @@ on:
 jobs:
   tp-run:
     name: Submit workloads
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
@@ -80,7 +80,7 @@ jobs:
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_start_step=3
 
       - name: Run Llama 3.1 8B (Splash Attention)
         id: run-llama-3_1-8b-SplashAttention
@@ -101,7 +101,7 @@ jobs:
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_start_step=3
 
       - name: Run Llama 3.1 8B (Scan + Offload)
         id: run-llama-3_1-8b-scan-offload
@@ -122,7 +122,7 @@ jobs:
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_start_step=3
 
       - name: Run Llama 3.0 8B (2D sharding)
         id: run-llama-3-8b-2d
@@ -144,7 +144,7 @@ jobs:
             task.max_steps=15 \
             ici_mesh.fsdp=2 \
             ici_mesh.tensor=2 \
-            profile_step=3 
+            profile_start_step=3
 
       - name: Run Mixtral 8x7B
         id: run-mixtral-8x7b
@@ -165,7 +165,7 @@ jobs:
             task.global_batch_size=8 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_step=3 
+            profile_start_step=3
 
       - name: Run Llama 3.0 8B (2 slice)
         id: run-llama-3-8b-2-slice
@@ -207,7 +207,7 @@ jobs:
             task.max_steps=20 \
             task.global_batch_size=16 \
             task.convert_to_safetensors=False \ 
-            profile_step=3
+            profile_start_step=3
 
   # Load reference step times
   load-benchmarks:
