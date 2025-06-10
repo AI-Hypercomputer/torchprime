@@ -11,7 +11,7 @@ def test_ensure_profile_end_step_sets_default():
     {"profile_start_step": 5, "profile_end_step": None, "task": {"max_steps": 40}}
   )
   ensure_profile_end_step(cfg)
-  assert cfg.profile_end_step == 15
+  assert cfg.profile_end_step == 25
 
   cfg = OmegaConf.create(
     {"profile_start_step": 5, "profile_end_step": None, "task": {"max_steps": 15}}
@@ -42,3 +42,9 @@ def test_ensure_profile_end_step_sets_default():
   )
   ensure_profile_end_step(cfg, num_profile_steps=3)
   assert cfg.profile_end_step == 8
+
+  cfg = OmegaConf.create(
+    {"profile_start_step": 5, "profile_end_step": 10, "task": {"max_steps": 8}}
+  )
+  ensure_profile_end_step(cfg)
+  assert cfg.profile_end_step == 6

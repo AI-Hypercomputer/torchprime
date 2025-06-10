@@ -334,6 +334,7 @@ def test_profiler_trace(monkeypatch, dummy_config):
 
   dummy_config.profile_start_step = 0
   dummy_config.profile_end_step = 1
+  dummy_config.task.max_steps = 6
 
   device = xm.xla_device()
   model = DummyModel().to(device)
@@ -342,5 +343,7 @@ def test_profiler_trace(monkeypatch, dummy_config):
 
   trainer.train_loop(metrics_logger=MetricsLogger())
 
+  assert dummy_config.profile_start_step == 0
+  assert dummy_config.profile_end_step == 1
   assert calls["start"] == 1
   assert calls["stop"] == 1

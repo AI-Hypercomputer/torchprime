@@ -15,7 +15,7 @@ torch_dtype: bfloat16
 
 # set profile_start_step to a positive integer to enable profiling and start profiling 
 # at that step. If profile_end_step is not set, profiling will continue until for 
-# num_profile_steps (default 10) training steps or total step - 5 (to avoid issue #260)
+# num_profile_steps (default 20) training steps or total step - 5 (to avoid issue #260)
 # Also, try to make number of profile profile steps >= 10
 profile_start_step: 3
 profile_end_step: null
