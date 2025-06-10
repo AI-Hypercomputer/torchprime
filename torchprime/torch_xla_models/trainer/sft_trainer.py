@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
+import torch.distributed as dist
+import torch.distributed.checkpoint as dist_cp
 import torch_xla.core.xla_model as xm
+import torch_xla.experimental.distributed_checkpoint as xc
 import torch_xla.runtime as xr
 from omegaconf import DictConfig
 from torch import nn
+from torch.distributed.checkpoint import FileSystemWriter
 
 from .base_trainer import Trainer
 
@@ -53,7 +58,14 @@ class SFTTrainer(Trainer):
       metrics_logger: Instance used to record metrics during training.
     """
     super().train_loop()
-    self._maybe_save_model_xla()
+
+    t0 = time.perf_counter()
+    logger.info("[SAVING] Starting distributed checkpoint …")
+    # self._maybe_save_model() # Local VM 45.74 s
+    # self._maybe_save_model_xla() # Local VM 28.31 s
+    self._maybe_save_model_xla_dist() # Local VM 60.18 s
+    dt = time.perf_counter() - t0
+    logger.info("[SAVING] Finished in %.2f s", dt)
 
   def _maybe_save_model(self) -> None:
     """Save the fine-tuned model, if export_checkpoint_path is provided.
@@ -94,8 +106,47 @@ class SFTTrainer(Trainer):
       save_path = save_dir / "model.pt"
       logger.info("Saving model with xm.save() to %s", save_path)
       xm.save(self.model.state_dict(), str(save_path))
+      logger.info("Model saved successfully to %s", save_path)
 
     # No barrier needed for single-host jobs,
     # but keep it for multi-host safety:
     if xr.process_count() > 1:
       xm.rendezvous("sft_save")
+
+  def _maybe_save_model_xla_dist(self) -> None:
+    """Save a sharded checkpoint with torch.distributed.checkpoint.
+
+    Each TPU core writes its own shard concurrently, avoiding the gather-to-host
+    and single-rank I/O bottleneck of ``xm.save()``.
+    """
+    folder_name = getattr(self.config.task, "export_checkpoint_path", None)
+    if folder_name is None:
+      logger.info("Skipping model export, no export_checkpoint_path provided.")
+      return
+
+    save_dir = Path(self.config.output_dir) / folder_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Flush pending XLA ops so all tensors are materialised
+    xm.mark_step()
+    xm.wait_device_ops()
+
+    # Initialise a (CPU) process-group exactly once.
+    if not dist.is_initialized():
+      xr.use_spmd()
+      dist.init_process_group("gloo", init_method="xla://")
+      print("Distributed process group initialized during saving.")
+
+    # Build the sharded state_dict you want to checkpoint
+    state_dict = {
+      "model": self.model.state_dict()
+    }  # add "optim": opt.state_dict() if desired
+
+    # Synchronous distributed checkpoint
+    dist_cp.save(
+      state_dict=state_dict,
+      storage_writer=FileSystemWriter(str(save_dir), thread_count=4),
+      planner=xc.SPMDSavePlanner(),  # key bit: XLA-aware sharding
+    )
+
+    logger.info("Distributed checkpoint (sharded) written to %s", save_dir)
