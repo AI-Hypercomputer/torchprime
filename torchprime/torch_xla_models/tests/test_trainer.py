@@ -327,6 +327,10 @@ def test_profiler_trace(monkeypatch, dummy_config):
 
   monkeypatch.setattr(xp, "start_trace", fake_start)
   monkeypatch.setattr(xp, "stop_trace", fake_stop)
+  monkeypatch.setattr(
+    "torchprime.torch_xla_models.trainer.base_trainer.step_duration_from_latest_profile",
+    lambda *_args, **_kwargs: 0.0,
+  )
 
   dummy_config.profile_start_step = 0
   dummy_config.profile_end_step = 1

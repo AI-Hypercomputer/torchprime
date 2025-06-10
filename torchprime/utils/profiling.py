@@ -3,7 +3,7 @@
 from omegaconf import DictConfig
 
 
-def ensure_profile_end_step(config: DictConfig, default_span: int = 10) -> None:
+def ensure_profile_end_step(config: DictConfig, default_span: int = 7) -> None:
   """Set ``profile_end_step`` based on ``profile_start_step`` if missing.
 
   Args:
