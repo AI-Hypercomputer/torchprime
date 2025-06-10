@@ -208,8 +208,7 @@ jobs:
             ici_mesh.fsdp=4 \
             task.max_steps=20 \
             task.global_batch_size=16 \
-            task.export_checkpoint_path=null \
-            profile_step=3
+            profile_step=-1
 
   # Load reference step times
   load-benchmarks:
