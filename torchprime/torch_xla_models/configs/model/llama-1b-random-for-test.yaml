@@ -18,3 +18,4 @@ attention_bias: false
 # choose attention_kernel from: [flash_attention, splash_attention, null]
 attention_kernel: null
 rope_theta: 10000.0
+pretrained_model: hf-internal-testing/tiny-random-LlamaForCausalLM
