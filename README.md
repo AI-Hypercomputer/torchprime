@@ -143,11 +143,12 @@ Example:
 ```sh
 tp use \
     --cluster <XPK CLUSTER NAME> \
-    --project my-gcp-project \
+    --project <my-gcp-project> \
+    --docker-project <my-docker-project-if-it-is-different-from-gcp-project> \
     --zone us-east5-b \
     --num-slices 1 \
     --tpu-type v6e-256 \
-    --artifact-dir <your-gs-bucket-dir>
+    --artifact-dir <my-gs-bucket-dir>
 ```
 
 `torchprime` natively supports [multi-slice or multi-pod][multi-slice] training.
