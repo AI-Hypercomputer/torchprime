@@ -154,7 +154,8 @@ def test_nested_spec_converted_to_tuple():
     captured_spec = spec
     return output
 
-  shard_model_from_config(model, config, shard_output, lambda x, _: x)
+  model = shard_model_from_config(model, config, shard_output, lambda x, _: x)
+  _ = model(torch.randn(1, 128))
   assert captured_spec == (("fsdp", "tp"), None)
 
 

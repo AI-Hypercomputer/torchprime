@@ -153,7 +153,9 @@ def shard_model_from_config(
     spec = config.get(name)
     if spec is not None:
       seen_modules.add(name)
-      return ShardedModule(mod, shard_output_fns.get(name, shard_output), _to_tuple(spec))
+      return ShardedModule(
+        mod, shard_output_fns.get(name, shard_output), _to_tuple(spec)
+      )
     return mod
 
   model = shard_model(model, shard_weight, shard_activation)
