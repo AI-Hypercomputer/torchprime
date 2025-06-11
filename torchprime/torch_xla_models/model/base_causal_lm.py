@@ -7,8 +7,11 @@ and methods for saving and loading model checkpoints using the `safetensors` for
 
 import json
 import os
+import shutil
+import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -59,7 +62,13 @@ def load_safetensors_to_state_dict(model_dir: str) -> dict:
   return state_dict
 
 
-def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
+def save_sharded_safetensors_by_layer(
+  state_dict: dict[str, "torch.Tensor"],
+  save_dir: str | os.PathLike,
+  *,
+  max_workers: int = 24,
+  tmp_dir: str | os.PathLike | None = None,
+):
   """Save a model state dict to sharded safetensors by layer prefix.
 
   This function saves the model's state dictionary into separate sharded files,
@@ -69,11 +78,22 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
   Args:
       state_dict (dict): The model's state dictionary to be saved.
       save_dir (str): Directory where the sharded safetensors and index file will be saved.
+      max_workers: Parallel writer threads.  24 saturates v6e-4 dual NVMe; tune as needed.
+      tmp_dir: If given, write shards to this *local* directory first, then
+        `gsutil -m cp` the results to ``save_dir``.  Handy when `save_dir` is a
+        Cloud-Storage mount and you want full NVMe speed.
   """
+  save_dir = Path(save_dir)
+  if tmp_dir:
+    tmp_dir = Path(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = tmp_dir
+  else:
+    save_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = save_dir
+  work_dir.mkdir(parents=True, exist_ok=True)
 
-  os.makedirs(save_dir, exist_ok=True)
-
-  def get_shard_key(param_name: str) -> str:
+  def _shard_key(param_name: str) -> str:
     """Determine the shard key for a parameter based on its name."""
     parts = param_name.split(".")
     if parts[:2] == ["model", "layers"] and parts[2].isdigit():
@@ -85,28 +105,55 @@ def save_sharded_safetensors_by_layer(state_dict: dict, save_dir: str):
     else:
       return "other"
 
-  grouped = defaultdict(dict)
+  grouped: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
+  sizes: dict[str, int] = {}
   for k, v in state_dict.items():
-    shard_key = get_shard_key(k)
-    grouped[shard_key][k] = v
+    p = _shard_key(k)
+    grouped[p][k] = v
+    sizes[p] = sizes.get(p, 0) + v.numel() * v.element_size()
 
-  # enable parallel write
-  def _write_one(args):
-    prefix, group = args
-    shard_file = f"{prefix}.safetensors"
-    save_file(group, os.path.join(save_dir, shard_file))
-    # remove _orig_mod due to sharding
-    return {k.replace("._orig_mod", ""): shard_file for k in group}
+  def _write_one(item: tuple[str, dict[str, "torch.Tensor"]]) -> dict[str, str]:
+    prefix, group = item
+    fname = f"{prefix}.safetensors"
+    save_file(group, str(work_dir / fname))
+    # strip FSDP suffix for HF compatibility
+    return {k.replace("._orig_mod", ""): fname for k in group}
 
-  max_workers = min(16, os.cpu_count())
-  weight_map = {}
+  # sort largest → smallest so threads finish together
+  items = sorted(grouped.items(), key=lambda kv: sizes[kv[0]], reverse=True)
 
-  with ThreadPoolExecutor(max_workers=max_workers) as tp:
-    for mapping in tp.map(_write_one, grouped.items()):
+  weight_map: dict[str, str] = {}
+  with ThreadPoolExecutor(max_workers=max_workers) as pool:
+    for mapping in pool.map(_write_one, items):
       weight_map.update(mapping)
 
-  with open(os.path.join(save_dir, "model.safetensors.index.json"), "w") as f:
-    json.dump({"weight_map": weight_map}, f, indent=2)
+  # ---------- dump index --------------------------------------------
+  (work_dir / "model.safetensors.index.json").write_text(
+    json.dumps({"weight_map": weight_map}, indent=2)
+  )
+
+  # ---------- optional gsutil sync ---------------------------------
+  if tmp_dir:
+    save_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+      "gsutil",
+      "-m",
+      "-q",
+      "cp",
+      "-n",  # don't clobber if file exists
+      *(str(p) for p in work_dir.glob("*.safetensors")),
+      str(save_dir) + "/",
+    ]
+    cmd_idx = [
+      "gsutil",
+      "-q",
+      "cp",
+      str(work_dir / "model.safetensors.index.json"),
+      str(save_dir) + "/",
+    ]
+    subprocess.check_call(cmd)
+    subprocess.check_call(cmd_idx)
+    shutil.rmtree(work_dir, ignore_errors=True)
 
 
 class BaseCausalLM(nn.Module):

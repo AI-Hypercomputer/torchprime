@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import tempfile
 import time
 from pathlib import Path
 
@@ -135,7 +136,16 @@ class SFTTrainer(Trainer):
       cpu_state = {
         k.replace("._orig_mod", ""): v for k, v in reload_sd["model"].items()
       }
-      save_sharded_safetensors_by_layer(cpu_state, str(save_dir))
+
+      try:
+        tmp_dir = tempfile.mkdtemp(dir="/mnt/localssd")
+        logger.info("Using local SSD for safetensors shards: %s", tmp_dir)
+      except (FileNotFoundError, PermissionError):
+        tmp_dir = tempfile.mkdtemp()
+        logger.info("Using default temp directory for safetensors shards: %s", tmp_dir)
+
+      save_sharded_safetensors_by_layer(cpu_state, str(save_dir), tmp_dir=tmp_dir)
+
       logger.info("Safetensors shards + index written to %s", save_dir)
 
     # -------------------------- 3 · barrier so other ranks wait --------
