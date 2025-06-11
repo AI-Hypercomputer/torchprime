@@ -13,5 +13,5 @@ model.norm.weight: [fsdp]
 lm_head.weight: [fsdp, null]
 
 # Activations
-model.layers.*: [fsdp, null, null]
-lm_head: [fsdp, null, null]
+model.layers.*: [[data, fsdp], null, null]
+lm_head: [[data, fsdp], null, null]
