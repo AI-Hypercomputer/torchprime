@@ -26,6 +26,7 @@ jobs:
       llama-3_1-8b-scan-offload-name: ${{ steps.run-llama-3_1-8b-scan-offload.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
       llama-3-8b-2-slice-name: ${{ steps.run-llama-3-8b-2-slice.outputs.name }}
+      llama-3-8b-ddp-fsdp-name: ${{ steps.run-llama-3-8b-ddp-fsdp.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
       artifact-dir: ${{ steps.artifacts.outputs.artifact_dir }}
     steps:
@@ -189,6 +190,29 @@ jobs:
             ici_mesh.fsdp=4 \
             profile_start_step=3
 
+      - name: Run Llama 3.0 8B (ddp + fsdp)
+        id: run-llama-3-8b-ddp-fsdp
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          XLA_IR_DEBUG: 1
+          XLA_HLO_DEBUG: 1
+        run: |
+          name=$(e2e_testing/gen_name.py llama-3-8b-ddp-fsdp)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          tp run ${{ steps.docker-url-option.outputs.value }} \
+            --name $name \
+            --num-slices 2 \
+            torchprime/torch_xla_models/train.py \
+            model=llama-3-8b \
+            model/sharding=llama-fsdp \
+            dataset=wikitext \
+            task=train \
+            task.global_batch_size=16 \
+            task.max_steps=15 \
+            dcn_mesh.data=2 \
+            ici_mesh.fsdp=4 \
+            profile_start_step=3
+
   # Load reference step times
   load-benchmarks:
     name: Load reference step times
@@ -232,7 +256,8 @@ jobs:
           matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
           matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||
           matrix.config.benchmark == 'mixtral-8x7b' && needs.tp-run.outputs.mixtral-8x7b-name ||
-          matrix.config.benchmark == 'llama-3-8b-2-slice' && needs.tp-run.outputs.llama-3-8b-2-slice-name
+          matrix.config.benchmark == 'llama-3-8b-2-slice' && needs.tp-run.outputs.llama-3-8b-2-slice-name ||
+          matrix.config.benchmark == 'llama-3-8b-ddp-fsdp' && needs.tp-run.outputs.llama-3-8b-ddp-fsdp-name
         }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       step_time_lower_bound: ${{ matrix.config.lower_bound }}

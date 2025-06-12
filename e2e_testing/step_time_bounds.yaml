@@ -41,6 +41,13 @@ benchmarks:
     confidence_interval: 0.12888
     average: 3.9587
     sample_size: 416
+  llama-3-8b-ddp-fsdp:
+    name: Llama 3.0 8B (ddp + fsdp)
+    step_time_lower_bound: 3.82985294 # copyed from llama-3-8b-2-slice
+    step_time_upper_bound: 4.087614 # copyed from llama-3-8b-2-slice
+    confidence_interval: 0.12888 # copyed from llama-3-8b-2-slice
+    average: 3.9587 # copyed from llama-3-8b-2-slice
+    sample_size: 416 # copyed from llama-3-8b-2-slice
 metadata:
   query_start: '2025-05-26T18:37:58.674556-07:00'
   query_end: '2025-06-05T18:37:58-07:00'
