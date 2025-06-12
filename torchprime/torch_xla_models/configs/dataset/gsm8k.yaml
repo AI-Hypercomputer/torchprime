@@ -1,4 +1,4 @@
-# Dataset configuration for supervised fine-tuning using the Alpaca dataset
+# Dataset configuration for supervised fine-tuning using the GSM8k dataset
 hf_dataset_name: gsm8k
 hf_dataset_config_name: main
 split: train

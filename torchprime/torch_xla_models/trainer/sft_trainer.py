@@ -94,7 +94,9 @@ class SFTTrainer(Trainer):
     xm.mark_step()
     xm.wait_device_ops()
 
-    # Ensure a torch.distributed PG exists (once per host)
+    # torch.distributed.checkpoint requires a torch.distributed process group
+    # even when used on TPUs
+    # Ensure a torch.distributed PG exists
     if not dist.is_initialized():
       xr.use_spmd()
 
