@@ -72,6 +72,7 @@ def match_llama_3_8b_2_slice(row):
     and config["ici_mesh"]["fsdp"] == 4
   )
 
+
 def match_llama_3_8b_ddp_fsdp(row):
   config = json.loads(row.configs_framework)
   return (
