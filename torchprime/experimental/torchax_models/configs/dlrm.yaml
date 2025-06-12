@@ -1,0 +1,65 @@
+in_memory_binary_criteo_path:
+synthetic_multi_hot_criteo_path:
+pin_memory: true
+
+limit_train_batches: 200
+limit_val_batches: 10
+limit_test_batches: 10
+num_generated_batches: 50
+
+batch_size: 1024
+test_batch_size: 128
+train_epochs: 1
+
+learning_rate: 0.1
+
+seed: 0
+
+# DLRMv2 benchmark data params
+feature_names: 
+# NOTE: last embedding shanged from 36->40 to be divisible by 8
+num_embeddings_per_feature: [40000000,39060,17295,7424,20265,3,7122,1543,63,40000000,3067956,405282,10,2209,11938,155,4,976,14,40000000,40000000,40000000,590152,12973,108,40]
+multi_hot_sizes:  [3,2,1,2,6,1,1,1,1,7,3,8,1,6,9,5,1,1,1,12,100,27,10,3,1,1]
+
+# if defined, will cause variable input embedding lookup tensors, otherwise it will always be multi_hot_sizes[feature_index]
+min_ids_per_features:
+#min_ids_per_features: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+
+# test config
+# feature_names: ["c1","c2","c3","c4","c5","c6","c7"]
+# num_embeddings_per_feature: [17295,7424,20265,3,7122,1543,68]
+# multi_hot_sizes:  [10,2,10,1,2,5,3]
+# min_ids_per_features:
+# min_ids_per_features: [1,1,1,1,1,1,1]
+
+model:
+  arch_type: "dlrm"
+  dense_features_num: 13 # number of dense features
+  sparse_feature_size: 128
+  num_embeddings_per_feature: ${num_embeddings_per_feature}
+
+  # enable original "butterfly shuffle" switching from model parallel to data parallel processing after features 
+  # inteact module experiments showed marginals speedups on v6-8 and dlmrv2 benchmark data sizes and 
+  # 32k global batch size but a bigger boost for smaller batch sizes: -25% train time for 1k batch size
+  do_butterfly_shuffle: True
+
+  dense_mlp:
+    layers: [512, 256, 128]
+    activation: "relu"
+  embedding_dim: 128
+  interact_module:
+    type: dcnv2  # ether dcnv2 or any other value which would use oroginal dot product interaction
+    dcnv2:
+      num_layers: 3
+      low_rank_dim: 512
+  top_mlp:
+    layers: [1024, 1024, 512, 256, 1]
+    activation: "relu"
+    last_layer_activation: "sigmoid"
+
+  sharding:
+    embedding:      
+      mesh:
+        devices: [all,]  # numeric values or 'all'
+        axis: [emb_split,]
+      partition_spec: [emb_split,]  
