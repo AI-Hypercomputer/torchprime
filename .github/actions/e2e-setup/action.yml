@@ -4,9 +4,6 @@ inputs:
   gcp_project:
     required: true
     type: string
-  gcp_docker_project:
-    required: true
-    type: string
   gcp_zone:
     required: true
     type: string
@@ -82,7 +79,6 @@ runs:
       run: >
         tp use
         --project '${{ inputs.gcp_project }}'
-        --docker-project '${{ inputs.gcp_docker_project }}'
         --zone '${{ inputs.gcp_zone }}'
         --cluster '${{ inputs.xpk_cluster_name }}'
         --num-slices 1
