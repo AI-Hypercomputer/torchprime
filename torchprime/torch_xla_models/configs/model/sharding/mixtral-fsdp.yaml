@@ -14,5 +14,5 @@ model.norm.weight: ['fsdp']
 lm_head.weight: ['fsdp', null]
 
 # Activations
-model.layers.*[0]: [fsdp, null, null]  # Shard the first output of the decoder layer
-lm_head: [fsdp, null, null]
+model.layers.*[0]: [[data, fsdp], null, null]  # Shard the first output of the decoder layer
+lm_head: [[data, fsdp], null, null]

@@ -143,6 +143,22 @@ def test_shard_model_from_config_mock():
   assert num_shard_output_calls == 6
 
 
+def test_nested_spec_converted_to_tuple():
+  model = SimpleLinear()
+  config = {"fc1": [["fsdp", "tp"], None]}
+
+  captured_spec = None
+
+  def shard_output(output, spec):
+    nonlocal captured_spec
+    captured_spec = spec
+    return output
+
+  model = shard_model_from_config(model, config, shard_output, lambda x, _: x)
+  _ = model(torch.randn(1, 128))
+  assert captured_spec == (("fsdp", "tp"), None)
+
+
 def test_shard_model_from_config_multi_output_mock():
   class Foo(nn.Module):
     def __init__(self) -> None:

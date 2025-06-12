@@ -87,6 +87,14 @@ def wrap_module(
 TAIL_INDEX_REGEX = re.compile(r"\[\d+\]$")
 
 
+def _to_tuple(obj):
+  """Recursively convert lists to tuples."""
+
+  if isinstance(obj, list):
+    return tuple(_to_tuple(x) for x in obj)
+  return obj
+
+
 def shard_model_from_config(
   model: torch.nn.Module,
   config: dict,
@@ -137,7 +145,7 @@ def shard_model_from_config(
     spec = config.get(name)
     if spec is not None:
       seen_params.add(name)
-      return shard_param(param, tuple(spec))
+      return shard_param(param, _to_tuple(spec))
     return param
 
   def shard_activation(mod, name):
@@ -145,7 +153,9 @@ def shard_model_from_config(
     spec = config.get(name)
     if spec is not None:
       seen_modules.add(name)
-      return ShardedModule(mod, shard_output_fns.get(name, shard_output), tuple(spec))
+      return ShardedModule(
+        mod, shard_output_fns.get(name, shard_output), _to_tuple(spec)
+      )
     return mod
 
   model = shard_model(model, shard_weight, shard_activation)
