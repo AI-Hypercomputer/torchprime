@@ -36,9 +36,10 @@ from transformers import (
 from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
-from torchprime.sharding.shard_model import wrap_module
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
-from torchprime.torch_xla_models.model_rewriting.assume_pure import PureModule
+from torchprime.torch_xla_models.model_rewriting.assume_pure import (
+  mark_pure_modules,
+)
 from torchprime.torch_xla_models.model_rewriting.auto_trace import auto_trace
 from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   add_activation_checkpointing_and_scan,
@@ -90,12 +91,11 @@ class Trainer:
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
 
-    use_assume_pure = True
     # -- Model transformations --
     # Recursively replace `nn.Linear` layers with einsum operations in the model.
     # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
     # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
-    if not use_assume_pure:
+    if not config.model.pure_modules:
       model = apply_xla_patch_to_nn_linear(model)
     # Add `xp.Trace` to linear layers in the module tree.
     model = auto_trace(model)
@@ -103,16 +103,7 @@ class Trainer:
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
     )
-    # Wrap linear layers with PureModule
-    if use_assume_pure:
-      # TODO: configurable (e.g. LlamaMLP)
-      def make_linear_pure(mod: nn.Module, _: str):
-        if isinstance(mod, nn.Linear):
-          return PureModule(mod)
-        return mod
-
-      model = wrap_module(model, make_linear_pure)
-
+    model = mark_pure_modules(model, config)
     model = add_activation_checkpointing_and_scan(model, config)
     model = add_optimization_barriers(model, config)
     self.model = model

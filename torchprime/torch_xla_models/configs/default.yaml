@@ -57,6 +57,9 @@ dcn_mesh:
 # They can be overridden on the command line or by importing one of the presets
 # in the `model/remat` directory.
 model:
+  # Name of classes in the module tree that are functionally pure.
+  pure_modules: []
+
   remat:
     # The class names of model layers whose intermediate activations should be
     # recomputed during the backward pass (i.e. activation checkpointing).
