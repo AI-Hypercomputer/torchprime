@@ -292,9 +292,9 @@ def main(config: DictConfig):
   partition = P("fsdp", "tp", None, None)
   attention = functools.partial(
     splash_attn.tpu_splash_attention,
-    mesh,
-    partition,
-    (config.model_impl != "scan_manual"),
+    mesh=mesh,
+    q_sharding=partition,
+    apply_shard_map=(config.model_impl != "scan_manual"),
   )
   attention = jax.jit(attention)
 
@@ -310,7 +310,7 @@ def main(config: DictConfig):
   ):
     #  batch, num of head, seq, dim
     jk, jq, jv = interop.jax_view((query, key, value))
-    res = attention(jk, jq, jv, None)
+    res = attention(query=jk, key=jq, value=jv, mask=None, decoder_segment_ids=None)
     return interop.torch_view(res)
 
   register_attention(custom_attention)
