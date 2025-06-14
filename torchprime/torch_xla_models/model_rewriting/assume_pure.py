@@ -3,6 +3,9 @@ from functools import partial
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
+from torch_xla.distributed.spmd.xla_sharding import (
+  apply_xla_patch_to_nn_linear,
+)
 from torch_xla.experimental.assume_pure import assume_pure
 
 from torchprime.sharding.shard_model import wrap_module
@@ -31,8 +34,6 @@ def mark_pure_modules(model: nn.Module, config: DictConfig) -> nn.Module:
   pure_module_config = config.model.pure_modules
   pure_module_classes = get_classes_by_names(model, pure_module_config)
 
-  # Change `xs.EinsumLinear` back to `nn.Linear`.
-
   def transform(mod: nn.Module, _: str):
     if isinstance(mod, pure_module_classes):
       return PureModule(mod)
@@ -55,3 +56,35 @@ class PureModule(nn.Module):
 
 def _pure_forward(module, params, buffers, args, kwargs):
   return torch.func.functional_call(module, (params, buffers), args, kwargs)
+
+
+def replace_nn_linear_with_einsum(module: torch.nn.Module, config: DictConfig):
+  """Recursively replace `nn.Linear` layers with `EinsumLinear` in the module.
+
+  Without this patch, an `nn.Linear` module in PyTorch/XLA will lower to reshapes
+  and transposes instead of einsum, thus compromising sharding propagation.
+
+  If a `nn.Linear` layer is a (transitive) child of the module class specified in
+  `config.model.pure_modules`, or if its type is exactly one of
+  `config.model.pure_modules`, then that layer will not be replaced. It is expected that
+  it will be traced with torchax via `mark_pure_modules`, which does not have the
+  dimension squashing problem.
+
+  TODO: we can teach PyTorch/XLA to always trace `nn.Linear` layer with torchax, in which
+  case this whole module patching won't be necessary and we will always get useful trace
+  scopes in the profile.
+  """
+  pure_module_config = config.model.pure_modules
+  pure_module_classes = get_classes_by_names(module, pure_module_config)
+
+  def recursive_transform(module: torch.nn.Module):
+    for child in module.children():
+      if not isinstance(child, pure_module_classes):
+        if isinstance(child, nn.Linear):
+          apply_xla_patch_to_nn_linear(child)
+        elif isinstance(child, nn.Module):
+          recursive_transform(child)
+
+  recursive_transform(module)
+
+  return module
