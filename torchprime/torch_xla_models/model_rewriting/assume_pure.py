@@ -31,6 +31,8 @@ def mark_pure_modules(model: nn.Module, config: DictConfig) -> nn.Module:
   pure_module_config = config.model.pure_modules
   pure_module_classes = get_classes_by_names(model, pure_module_config)
 
+  # Change `xs.EinsumLinear` back to `nn.Linear`.
+
   def transform(mod: nn.Module, _: str):
     if isinstance(mod, pure_module_classes):
       return PureModule(mod)

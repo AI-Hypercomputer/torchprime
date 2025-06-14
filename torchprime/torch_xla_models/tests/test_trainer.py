@@ -67,6 +67,7 @@ def dummy_config():
   return OmegaConf.create(
     {
       "model": {
+        "pure_modules": [],
         "remat": {
           "activation_checkpoint_layers": [],
           "optimization_barrier_layers": [],

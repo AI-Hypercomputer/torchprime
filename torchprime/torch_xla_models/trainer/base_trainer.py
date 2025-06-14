@@ -95,8 +95,7 @@ class Trainer:
     # Recursively replace `nn.Linear` layers with einsum operations in the model.
     # Without this patch, an `nn.Linear` module will flatten non-contracting dimensions
     # (e.g. batch and sequence), thus destroying the sharding constraints on those dimensions.
-    if not config.model.pure_modules:
-      model = apply_xla_patch_to_nn_linear(model)
+    model = apply_xla_patch_to_nn_linear(model)
     # Add `xp.Trace` to linear layers in the module tree.
     model = auto_trace(model)
     # Setup SPMD mesh and shard the model.
