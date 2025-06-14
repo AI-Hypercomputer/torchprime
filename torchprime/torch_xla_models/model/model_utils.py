@@ -129,7 +129,7 @@ def save_sharded_safetensors_by_layer(
     save_dir.mkdir(parents=True, exist_ok=True)
     if shutil.which("gsutil"):
       try:
-        # gsutil seems to give 3X speedup over shutil.copy2
+        # gsutil seems to give 8x speedup over shutil.copy2
         logger.info("Using gsutil for upload")
         copy_to_mounted_gcs_gsutil(work_dir, save_dir)
         return
