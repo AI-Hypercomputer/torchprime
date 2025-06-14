@@ -29,6 +29,9 @@ class DummyModel(nn.Module):
   def export(self, path):
     self.saved = True
 
+  def _maybe_save_checkpoint(self, config):
+    self.saved = True
+
 
 class DummyDataset(Dataset):
   def __init__(self):
@@ -114,17 +117,6 @@ def test_load_and_save(monkeypatch, dummy_config):
   monkeypatch.setattr("torch_xla.runtime.process_index", lambda: 0)
   monkeypatch.setattr("torch_xla.runtime.process_count", lambda: 1)
 
-  # Patch xm.save to track call
-  saved = {}
-
-  def fake_save(state_dict, *args, **kwargs):
-    saved["called"] = True
-    saved["state_dict"] = state_dict
-
-  monkeypatch.setattr(
-    "torchprime.torch_xla_models.trainer.sft_trainer.dist_cp.save",
-    fake_save,
-  )
   # Initialize
   device = xm.xla_device()
   model = DummyModel().to(device)
@@ -138,5 +130,4 @@ def test_load_and_save(monkeypatch, dummy_config):
   trainer.train_loop()
 
   # Save should have occurred
-  assert "called" in saved and saved["called"] is True
-  assert isinstance(saved["state_dict"], dict)
+  assert model.saved is True

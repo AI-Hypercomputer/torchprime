@@ -5,155 +5,24 @@ It includes a standard weight initialization method, a placeholder forward pass,
 and methods for saving and loading model checkpoints using the `safetensors` format.
 """
 
+from __future__ import annotations
+
 import json
+import logging
 import os
-import shutil
-import subprocess
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import huggingface_hub
 import torch
+import torch.distributed as dist
 import torch.nn as nn
-from huggingface_hub import snapshot_download
+import torch_xla.core.xla_model as xm
+import torch_xla.runtime as xr
 from omegaconf import DictConfig, OmegaConf
-from safetensors import safe_open
-from safetensors.torch import load_file, save_file
 
+from torchprime.torch_xla_models.model import model_utils
 
-def load_safetensors_to_state_dict(model_dir: str) -> dict:
-  """Load a model state dict from safetensors, supporting both sharded and single-file formats.
-
-  This function loads model weights from the specified directory. It supports both
-  sharded (`model.safetensors.index.json`) and single-file (`model.safetensors`) formats.
-
-  Args:
-      model_dir: Path to the directory containing the model files.
-
-  Returns:
-      dict: A state dictionary containing the model's parameters.
-
-  Raises:
-      FileNotFoundError: If neither the sharded nor single-file safetensors are found.
-  """
-
-  state_dict = {}
-  index_file = os.path.join(model_dir, "model.safetensors.index.json")
-  single_file = os.path.join(model_dir, "model.safetensors")
-
-  if os.path.exists(index_file):
-    # Load sharded safetensors
-    with open(index_file) as f:
-      index = json.load(f)
-    weight_map = index["weight_map"]
-    for filename in set(weight_map.values()):
-      path = os.path.join(model_dir, filename)
-      with safe_open(path, framework="pt", device="cpu") as f:
-        for key in f.keys():  # noqa: SIM118
-          state_dict[key] = f.get_tensor(key)
-  elif os.path.exists(single_file):
-    # Load single safetensor file
-    state_dict = load_file(single_file)
-  else:
-    raise FileNotFoundError(
-      f"No safetensors found in {model_dir}. Expected 'model.safetensors' or 'model.safetensors.index.json'."
-    )
-
-  return state_dict
-
-
-def save_sharded_safetensors_by_layer(
-  state_dict: dict[str, "torch.Tensor"],
-  save_dir: str | os.PathLike,
-  *,
-  max_workers: int = 24,
-  tmp_dir: str | os.PathLike | None = None,
-):
-  """Save a model state dict to sharded safetensors by layer prefix.
-
-  This function saves the model's state dictionary into separate sharded files,
-  grouped by the top-level layer prefix. It also creates an index file
-  (`model.safetensors.index.json`) mapping each parameter to its corresponding shard.
-
-  Args:
-      state_dict (dict): The model's state dictionary to be saved.
-      save_dir (str): Directory where the sharded safetensors and index file will be saved.
-      max_workers: Parallel writer threads.  24 saturates v6e-4 dual NVMe; tune as needed.
-      tmp_dir: If given, write shards to this *local* directory first, then
-        `gsutil -m cp` the results to ``save_dir``.  Handy when `save_dir` is a
-        Cloud-Storage mount and you want full NVMe speed.
-  """
-  save_dir = Path(save_dir)
-  if tmp_dir:
-    tmp_dir = Path(tmp_dir)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = tmp_dir
-  else:
-    save_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = save_dir
-  work_dir.mkdir(parents=True, exist_ok=True)
-
-  def _shard_key(param_name: str) -> str:
-    """Determine the shard key for a parameter based on its name."""
-    parts = param_name.split(".")
-    if parts[:2] == ["model", "layers"] and parts[2].isdigit():
-      return "_".join(parts[:3])  # model_layers_0, model_layers_1, etc.
-    elif parts[0] == "model":
-      return "model"
-    elif parts[0] == "lm_head":
-      return "lm_head"
-    else:
-      return "other"
-
-  grouped: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
-  sizes: dict[str, int] = {}
-  for k, v in state_dict.items():
-    p = _shard_key(k)
-    grouped[p][k] = v
-    sizes[p] = sizes.get(p, 0) + v.numel() * v.element_size()
-
-  def _write_one(item: tuple[str, dict[str, "torch.Tensor"]]) -> dict[str, str]:
-    prefix, group = item
-    fname = f"{prefix}.safetensors"
-    save_file(group, str(work_dir / fname))
-    # strip FSDP suffix for HF compatibility
-    return {k.replace("._orig_mod", ""): fname for k in group}
-
-  # sort largest → smallest so threads finish together
-  items = sorted(grouped.items(), key=lambda kv: sizes[kv[0]], reverse=True)
-
-  weight_map: dict[str, str] = {}
-  with ThreadPoolExecutor(max_workers=max_workers) as pool:
-    for mapping in pool.map(_write_one, items):
-      weight_map.update(mapping)
-
-  # ---------- dump index --------------------------------------------
-  (work_dir / "model.safetensors.index.json").write_text(
-    json.dumps({"weight_map": weight_map}, indent=2)
-  )
-
-  # ---------- optional gsutil sync ---------------------------------
-  if tmp_dir:
-    save_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
-      "gsutil",
-      "-m",
-      "-q",
-      "cp",
-      "-n",  # don't clobber if file exists
-      *(str(p) for p in work_dir.glob("*.safetensors")),
-      str(save_dir) + "/",
-    ]
-    cmd_idx = [
-      "gsutil",
-      "-q",
-      "cp",
-      str(work_dir / "model.safetensors.index.json"),
-      str(save_dir) + "/",
-    ]
-    subprocess.check_call(cmd)
-    subprocess.check_call(cmd_idx)
-    shutil.rmtree(work_dir, ignore_errors=True)
+logger = logging.getLogger(__name__)
 
 
 class BaseCausalLM(nn.Module):
@@ -226,7 +95,7 @@ class BaseCausalLM(nn.Module):
       k: v.cpu() if str(v.device).startswith("xla") else v
       for k, v in self.state_dict().items()
     }
-    save_sharded_safetensors_by_layer(state_dict, save_directory)
+    model_utils.save_sharded_safetensors_by_layer(state_dict, save_directory)
 
     with open(os.path.join(save_directory, "config.json"), "w") as f:
       json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
@@ -247,10 +116,52 @@ class BaseCausalLM(nn.Module):
     if os.path.isdir(model_path_or_repo):
       model_dir = model_path_or_repo
     else:
-      model_dir = snapshot_download(
+      model_dir = huggingface_hub.snapshot_download(
         repo_id=model_path_or_repo, allow_patterns=["*.safetensors*", "config.json"]
       )
 
     # Load weights
-    state_dict = load_safetensors_to_state_dict(model_dir)
+    state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)
+
+  def _maybe_save_checkpoint(self, config: DictConfig) -> None:
+    """Save a sharded checkpoint and optionally convert it to safetensors format.
+
+    This method performs the following steps:
+      1. Check if export is enabled via `export_checkpoint_path`.
+      2. Create the save directory and flush pending XLA device ops.
+      3. Initialize a torch.distributed process group if needed.
+      4. Save the model state using torch.distributed.checkpoint (DCP).
+      5. If `convert_to_safetensors` is enabled and current process is rank 0,
+        reload the checkpoint on CPU and export sharded safetensors + index.
+      6. Synchronize all processes using an XLA rendezvous barrier.
+    """
+    # Step 1: Check export path
+    folder_name = getattr(config.task, "export_checkpoint_path", None)
+    if folder_name is None:
+      logger.info("Skipping model export, no export_checkpoint_path provided.")
+      return
+
+    # Step 2: Prepare save directory and flush device ops
+    save_dir = Path(config.output_dir) / folder_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+    xm.mark_step()
+    xm.wait_device_ops()
+
+    # Step 3: Initialize torch.distributed process group
+    if not dist.is_initialized():
+      xr.use_spmd()
+      dist.init_process_group("gloo", init_method="xla://")
+
+    # Step 4: Save distributed checkpoint
+    model_utils.save_distributed_checkpoint(self, save_dir)
+
+    # Step 5: Convert to safetensors on rank-0 if enabled
+    if (
+      getattr(config.task, "convert_to_safetensors", False) and xr.process_index() == 0
+    ):
+      model_utils.convert_to_safetensors_on_cpu(self, save_dir)
+
+    # Step 6: Barrier to synchronize all ranks
+    if xr.process_count() > 1:
+      xm.rendezvous("sft_save")

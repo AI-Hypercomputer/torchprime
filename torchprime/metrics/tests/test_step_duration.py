@@ -88,11 +88,8 @@ def test_conflicting_step_names():
     event.duration_ps = int(2e12)
     temp.write(xspace.SerializeToString())
     temp.flush()
-    # with pytest.raises(ValueError, match="Ambiguous"):
-    #   analyze_step_duration(temp.name)
-
-    # Temperarily allow multiple profile names, checkout issue #260
-    assert analyze_step_duration(temp.name) == 1.0
+    with pytest.raises(ValueError, match="Ambiguous"):
+      analyze_step_duration(temp.name)
 
 
 def test_real_profile():

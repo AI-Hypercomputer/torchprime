@@ -25,6 +25,7 @@ dependencies = [
     "benchmark-db-writer @ git+https://github.com/AI-Hypercomputer/aotc.git@2ff16e670df20b497ddaf1f86920dbb5dd9f0c8f#subdirectory=src/aotc/benchmark_db_writer",
     "dacite==1.9.2",
     "click~=8.1.8",
+    "google-cloud-storage==3.1.0"
 ]
 
 [project.optional-dependencies]
