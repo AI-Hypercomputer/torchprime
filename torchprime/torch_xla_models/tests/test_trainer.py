@@ -35,13 +35,10 @@ class DummyModel(nn.Module):
 
 
 class DummyDataset(Dataset):
-  def __init__(self):
-    self.device = xm.xla_device()
-
   def __getitem__(self, idx):
     return {
-      "input_ids": torch.ones(4, device=self.device),
-      "attention_mask": torch.ones(4, device=self.device),
+      "input_ids": torch.ones(4),
+      "attention_mask": torch.ones(4),
     }
 
   def __len__(self):
