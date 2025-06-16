@@ -154,12 +154,14 @@ class BaseCausalLM(nn.Module):
       dist.init_process_group("gloo", init_method="xla://")
 
     # Step 4: Save distributed checkpoint
+    logger.info("Saving distributed checkpoint to %s", save_dir)
     model_utils.save_distributed_checkpoint(self, save_dir)
 
     # Step 5: Convert to safetensors on rank-0 if enabled
     if (
       getattr(config.task, "convert_to_safetensors", False) and xr.process_index() == 0
     ):
+      logger.info("Converting distributed checkpoint to safetensors")
       model_utils.convert_to_safetensors_on_cpu(self, save_dir)
 
     # Step 6: Barrier to synchronize all ranks
