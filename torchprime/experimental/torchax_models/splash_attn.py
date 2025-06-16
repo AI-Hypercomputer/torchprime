@@ -14,6 +14,7 @@ def tpu_splash_attention(
   query: jax.Array,
   key: jax.Array,
   value: jax.Array,
+  mask: splash_attention_mask._ComputableMask | None,
   decoder_segment_ids: jax.Array | None,
   attn_logits_soft_cap: float | None = None,
 ) -> jax.Array:
@@ -38,7 +39,7 @@ def tpu_splash_attention(
   global_k_layout = "HEAD_DIM_MINOR"
   global_v_layout = "HEAD_DIM_MINOR"
 
-  def wrap_flash_attention(query, key, value, decoder_segment_ids):
+  def wrap_flash_attention(mask, query, key, value, decoder_segment_ids):
     if decoder_segment_ids is not None:
       assert query.shape[2] == decoder_segment_ids.q.shape[1], (
         "Sharding along sequence dimension not allowed in tpu kernel attention"
@@ -50,19 +51,20 @@ def tpu_splash_attention(
       block_q_dkv=min(global_block_q_dkv, query.shape[2]),
       block_kv_dkv=min(global_block_kv_dkv, key.shape[2]),
       block_kv_dkv_compute=min(global_block_kv_dkv_compute, query.shape[2]),
-      block_q_dq=None
-      if global_use_fused_bwd_kernel
-      else min(global_block_q_dq, query.shape[2]),
-      block_kv_dq=None
-      if global_use_fused_bwd_kernel
-      else min(global_block_kv_dq, query.shape[2]),
+      block_q_dq=(
+        None if global_use_fused_bwd_kernel else min(global_block_q_dq, query.shape[2])
+      ),
+      block_kv_dq=(
+        None if global_use_fused_bwd_kernel else min(global_block_kv_dq, query.shape[2])
+      ),
       use_fused_bwd_kernel=global_use_fused_bwd_kernel,
       q_layout=splash_attention_kernel.QKVLayout[global_q_layout],
       k_layout=splash_attention_kernel.QKVLayout[global_k_layout],
       v_layout=splash_attention_kernel.QKVLayout[global_v_layout],
     )
 
-    mask = splash_attention_mask.CausalMask(shape=(query.shape[2], query.shape[2]))
+    if mask is not None:
+      mask = splash_attention_mask.CausalMask(shape=(query.shape[2], query.shape[2]))
 
     # Create multi-head mask
     multi_head_mask = splash_attention_mask.MultiHeadMask(
@@ -93,5 +95,5 @@ def tpu_splash_attention(
       check_rep=False,
     )
 
-  x = wrap_flash_attention(query, key, value, decoder_segment_ids)
+  x = wrap_flash_attention(query, key, value, mask, decoder_segment_ids)
   return x
