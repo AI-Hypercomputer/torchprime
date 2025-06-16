@@ -339,7 +339,7 @@ def convert_to_safetensors_on_cpu(model: torch.nn.Module, save_dir: Path) -> Non
 
 def maybe_copy_to_mounted_gcs(tmp_dir: Path | None, save_dir: str):
   """
-  If tmp_dir is provided, copy *.safetensors files and index file 
+  If tmp_dir is provided, copy *.safetensors files and index file
   from tmp_dir to save_dir using gsutil or shutil.
 
   Args:
