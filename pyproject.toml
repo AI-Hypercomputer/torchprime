@@ -20,7 +20,7 @@ dependencies = [
     "optax==0.2.4",
     "tensorboard==2.19.0",
     "tensorboard-plugin-profile==2.19.0",
-    "protobuf==4.25.5",
+    "protobuf==4.25.8",
     "dataclasses-json==0.6.7",
     "benchmark-db-writer @ git+https://github.com/AI-Hypercomputer/aotc.git@2ff16e670df20b497ddaf1f86920dbb5dd9f0c8f#subdirectory=src/aotc/benchmark_db_writer",
     "dacite==1.9.2",
