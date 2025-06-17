@@ -46,7 +46,10 @@ def setup_sharding_and_mesh(
   logger.info("Logical mesh device assignments: %s", mesh.device_ids)
 
   # TODO(https://github.com/pytorch/xla/issues/8696): Minibatch only works in 1D sharding.
-  minibatch = is_1d_sharding(tuple(config.ici_mesh.values()))
+  minibatch = (
+    is_1d_sharding(tuple(config.ici_mesh.values()))
+    and (config.ici_mesh.data * config.ici_mesh.fsdp) == mesh.size()
+  )
   logger.info("Minibatch dataloading: %s", minibatch)
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice

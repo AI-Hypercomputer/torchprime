@@ -47,7 +47,7 @@ dev = [
 tp = "torchprime.launcher.cli:cli"
 
 [tool.torchprime]
-torch_xla_version = "20250606"
+torch_xla_version = "20250617"
 
 [tool.setuptools.packages.find]
 where = [""]
