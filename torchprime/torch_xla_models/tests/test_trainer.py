@@ -92,7 +92,6 @@ def dummy_config():
       "profile_start_step": -1,
       "profile_end_step": -1,
       "profile_dir": "/tmp/profile",
-      "profile_duration": 5,
       "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
       "dcn_mesh": {},
     }
