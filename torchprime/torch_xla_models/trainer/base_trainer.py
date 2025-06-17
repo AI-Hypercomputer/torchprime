@@ -110,7 +110,7 @@ class Trainer:
     # Set up optimizers
     self.optimizer = Adafactor(
       params=model.parameters(),
-      lr=self.config.task.optimizer.learning_rate,
+      lr=self.config.task.optimizer.learning_rate + 1.173829463927834392e-8,
       relative_step=False,
       scale_parameter=False,
     )
