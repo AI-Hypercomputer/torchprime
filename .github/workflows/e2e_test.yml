@@ -22,6 +22,7 @@ jobs:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
+      llama-3-8b-pure-mlp-name: ${{ steps.run-llama-3-8b-pure-mlp.outputs.name }}
       llama-3_1-8b-sa-name: ${{ steps.run-llama-3_1-8b-SplashAttention.outputs.name }}
       llama-3_1-8b-scan-offload-name: ${{ steps.run-llama-3_1-8b-scan-offload.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
@@ -82,6 +83,27 @@ jobs:
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
             profile_start_step=3
+
+      - name: Run Llama 3.0 8B (@assume_pure)
+        id: run-llama-3-8b-pure-mlp
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          XLA_IR_DEBUG: 1
+          XLA_HLO_DEBUG: 1
+        run: |
+          name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          tp run ${{ steps.docker-url-option.outputs.value }} \
+            --name $name \
+            torchprime/torch_xla_models/train.py \
+            model=llama-3-8b \
+            dataset=wikitext \
+            task=train \
+            task.global_batch_size=8 \
+            task.max_steps=15 \
+            ici_mesh.fsdp=4 \
+            profile_start_step=3 \
+            model.pure_modules=[LlamaMLP,EinsumLinear]
 
       - name: Run Llama 3.1 8B (Splash Attention)
         id: run-llama-3_1-8b-SplashAttention
@@ -259,6 +281,7 @@ jobs:
       jobset_name: >-
         ${{
           matrix.config.benchmark == 'llama-3-8b' && needs.tp-run.outputs.llama-3-8b-name ||
+          matrix.config.benchmark == 'llama-3-8b-pure-mlp' && needs.tp-run.outputs.llama-3-8b-pure-mlp-name ||
           matrix.config.benchmark == 'llama-3_1-8b-sa' && needs.tp-run.outputs.llama-3_1-8b-sa-name ||
           matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
           matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||

@@ -29,6 +29,23 @@ def match_llama3_8b(row):
     and config["dcn_mesh"]["data"] == 1
     and config["dcn_mesh"]["fsdp"] == 1
     and config["ici_mesh"]["tensor"] == 1
+    and (
+      "pure_modules" not in config["model"] or len(config["model"]["pure_modules"]) == 0
+    )
+  )
+
+
+def match_llama3_8b_pure_mlp(row):
+  config = json.loads(row.configs_framework)
+  return (
+    row.run_id.startswith("llama-3-8b-pure-mlp")
+    and config["dcn_mesh"]["data"] == 1
+    and config["dcn_mesh"]["fsdp"] == 1
+    and config["ici_mesh"]["tensor"] == 1
+    and (
+      "pure_modules" in config["model"]
+      and config["model"]["pure_modules"] == ["LlamaMLP", "EinsumLinear"]
+    )
   )
 
 
@@ -86,6 +103,7 @@ def match_llama_3_8b_ddp_fsdp(row):
 
 BENCHMARKS = {
   "Llama 3.0 8B": match_llama3_8b,
+  "Llama 3.0 8B (@assume_pure)": match_llama3_8b_pure_mlp,
   "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
   "Llama 3.1 8B (Scan + Offload)": match_llama3_1_8b_scan_offload,
   "Llama 3.0 8B (2D sharding)": match_llama3_8b_2d,
@@ -96,6 +114,7 @@ BENCHMARKS = {
 
 STEP_ID_MAPPING = {
   "Llama 3.0 8B": "llama-3-8b",
+  "Llama 3.0 8B (@assume_pure)": "llama-3-8b-pure-mlp",
   "Llama 3.1 8B (Splash Attention)": "llama-3_1-8b-sa",
   "Llama 3.1 8B (Scan + Offload)": "llama-3_1-8b-scan-offload",
   "Llama 3.0 8B (2D sharding)": "llama-3-8b-2d",
