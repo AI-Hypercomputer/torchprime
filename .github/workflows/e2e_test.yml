@@ -100,6 +100,7 @@ jobs:
             dataset=wikitext \
             task=train \
             task.global_batch_size=8 \
+            task.lr_scheduler.type=constant \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
             profile_start_step=3 \
