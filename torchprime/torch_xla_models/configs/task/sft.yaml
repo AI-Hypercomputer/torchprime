@@ -1,0 +1,14 @@
+# Task configuration for supervised fine-tuning
+name: sft
+global_batch_size: 64
+max_steps: 100
+export_checkpoint_path: export
+convert_to_safetensors: True
+max_grad_norm: 1.0
+max_grad_value: null
+optimizer:
+  learning_rate: 4.e-5
+  type: adafactor
+lr_scheduler:
+  type: linear
+  warmup_steps: 10

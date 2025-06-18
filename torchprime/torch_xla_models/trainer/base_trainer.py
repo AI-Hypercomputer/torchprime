@@ -37,6 +37,9 @@ from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
+from torchprime.torch_xla_models.model_rewriting.assume_pure import (
+  mark_pure_modules,
+)
 from torchprime.torch_xla_models.model_rewriting.auto_trace import auto_trace
 from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   add_activation_checkpointing_and_scan,
@@ -99,6 +102,7 @@ class Trainer:
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
     )
+    model = mark_pure_modules(model, config)
     model = add_activation_checkpointing_and_scan(model, config)
     model = add_optimization_barriers(model, config)
     self.model = model
@@ -201,13 +205,14 @@ class Trainer:
     self.summary_writer.add_scalar("train/grad_norm", grad_norm, step)
     self.summary_writer.flush()
 
-  def train_loop(self, metrics_logger) -> None:
+  def train_loop(self) -> None:
     self.model.train()
     self.model.zero_grad()
 
     # For now we assume that we will never train for more than one epoch
     max_step = self.config.task.max_steps
     train_loader = self._get_train_dataloader()
+    steps_per_epoch = len(train_loader)
     train_iterator = iter(train_loader)
 
     logger.info("Starting training")
@@ -236,8 +241,8 @@ class Trainer:
           loss = loss.detach().item()
           grad_norm = grad_norm.detach().item()
           logger.info(
-            "Epoch: %d, step: %d, loss: %.4f, grad_norm: %.4f, lr: %.2e, trace time: %.2f ms",
-            epoch,
+            "Epoch: %.4f, step: %d, loss: %.4f, grad_norm: %.4f, lr: %.2e, trace time: %.2f ms",
+            step / steps_per_epoch,
             step,
             loss,
             grad_norm,
@@ -277,6 +282,9 @@ class Trainer:
 
     xm.wait_device_ops()
     logger.info("Finished training run")
+
+  def finalize_training(self, metrics_logger) -> None:
+    """Finalize training by processing profiling output and logging metrics."""
 
     if self.config.profile_start_step >= 0 and self.config.profile_end_step >= 0:
       # Analyze the step duration from the latest profile

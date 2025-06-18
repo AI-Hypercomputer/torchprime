@@ -19,7 +19,6 @@ import torch_xla.debug.profiler as xp
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
-from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.trainer.base_trainer import Trainer
 
 
@@ -67,6 +66,7 @@ def dummy_config():
   return OmegaConf.create(
     {
       "model": {
+        "pure_modules": [],
         "remat": {
           "activation_checkpoint_layers": [],
           "optimization_barrier_layers": [],
@@ -91,7 +91,6 @@ def dummy_config():
       "profile_start_step": -1,
       "profile_end_step": -1,
       "profile_dir": "/tmp/profile",
-      "profile_duration": 5,
       "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
       "dcn_mesh": {},
     }
@@ -148,7 +147,7 @@ def test_trainer_train_loop(monkeypatch, dummy_config):
 
   monkeypatch.setattr(Trainer, "train_step", counting_train_step)
 
-  trainer.train_loop(metrics_logger=MetricsLogger())
+  trainer.train_loop()
   assert call_counter["steps"] == dummy_config.task.max_steps
 
 
@@ -338,7 +337,7 @@ def test_profiler_trace(monkeypatch, dummy_config):
   dataset = DummyDataset()
   trainer = Trainer(model, dummy_config, dataset)
 
-  trainer.train_loop(metrics_logger=MetricsLogger())
+  trainer.train_loop()
 
   assert dummy_config.profile_start_step == 0
   assert dummy_config.profile_end_step == 1

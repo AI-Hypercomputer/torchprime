@@ -52,15 +52,19 @@ def _tokenize_prompt_completion(
     Mapping with ``input_ids`` and ``labels`` suitable for training.
   """
 
-  if "prompt" in example or "question" in example:
+  if "prompt" in example and "completion" in example:
     prompt = example.get("prompt", "")
     completion = example.get("completion", "")
-  elif "question" in example or "answer" in example:
+  elif "question" in example and "answer" in example:
     prompt = example.get("question", "")
+    prompt = f"Question:\n{prompt}\n\n\nAnswer:\n"  # Add format for q-a pair
     completion = example.get("answer", "")
   elif "text" in example:
     prompt = ""
     completion = example["text"]
+  elif "completion" in example:
+    prompt = ""
+    completion = example["completion"]
   else:
     raise ValueError(
       "Invalid input format: must contain 'prompt'/'completion' or 'question'/'answer' or 'text' fields."

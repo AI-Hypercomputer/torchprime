@@ -1,0 +1,17 @@
+# Configuration for supervised fine-tuning using the GSM8k dataset
+# Overrides the default dataset and task while reusing the default model
+
+defaults:
+  - default # Refers to configs/default.yaml
+  - override model: llama-3-8b
+  - override dataset: gsm8k
+  - override task: sft
+  - _self_
+
+task:
+  # don't convert the checkpoint to safetensors to save space/time
+  convert_to_safetensors: False
+
+model:
+  # pretrained checkpoint to use for supervised fine-tuning
+  pretrained_model: meta-llama/Meta-Llama-3-8B

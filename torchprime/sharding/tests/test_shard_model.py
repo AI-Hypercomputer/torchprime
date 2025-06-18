@@ -239,7 +239,8 @@ def test_shard_model_from_config_torchax():
     devices = mesh_utils.create_device_mesh((jax.device_count(),))
     mesh = Mesh(devices, ("fsdp",))
 
-    model = shard_torchax_model_from_config(model, config, mesh)
+    with torchax.default_env():
+      model = shard_torchax_model_from_config(model, config, mesh)
 
     # In order to shard activations, corresponding modules are
     # wrapped with ShardedModule.

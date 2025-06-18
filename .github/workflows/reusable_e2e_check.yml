@@ -47,13 +47,42 @@ jobs:
       - name: Get pod name
         id: get_pod_name
         run: |
-          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
-          echo "pod_name=$pod_name" >> $GITHUB_OUTPUT
+          # Wait for pod to exist
+          for i in {1..60}; do
+            pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -n "$pod_name" && "$pod_name" != "null" ]]; then
+              echo "pod_name=$pod_name" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "Waiting for pod to be created... (attempt $i/60)"
+            sleep 60
+          done
+          echo "❌ ERROR: Pod not found after 60 minutes"
+          exit 1
       - name: Wait for workload to start
         run: |
-          kubectl wait "pod/${{ steps.get_pod_name.outputs.pod_name }}" \
-              --for='jsonpath={.status.containerStatuses[?(@.name=="jax-tpu")].state.running}' \
-              --timeout="60m"
+          pod_name="${{ steps.get_pod_name.outputs.pod_name }}"
+          # Check if pod is already done or running
+          for i in {1..60}; do
+            phase=$(kubectl get pod "$pod_name" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+            case "$phase" in
+              "Running"|"Succeeded"|"Failed")
+                echo "Pod is in phase: $phase"
+                exit 0
+                ;;
+              "Unknown"|"Pending")
+                echo "Pod phase: $phase, waiting... (minute $i/60)"
+                sleep 60
+                ;;
+              *)
+                echo "Unexpected pod phase: $phase"
+                kubectl describe pod "$pod_name"
+                exit 1
+                ;;
+            esac
+          done
+          echo "❌ ERROR: Timeout waiting for pod to start"
+          exit 1
       - name: Stream logs
         run: |
           # Save logs to a file for later checks

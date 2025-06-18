@@ -186,7 +186,7 @@ def shard_torchax_model_from_config(
   """
   import jax
   from jax.sharding import NamedSharding, PartitionSpec
-  from torchax.interop import torch_view
+  from torchax.interop import jax_view, torch_view
 
   jax_mark_sharding = torch_view(jax.lax.with_sharding_constraint)
 
@@ -197,7 +197,7 @@ def shard_torchax_model_from_config(
     # and models are usually constructed eagerly in torchax.
     return torch_view(
       jax.make_array_from_callback(
-        tensor.shape, sharding, lambda slice_index: tensor[slice_index]
+        tensor.shape, sharding, lambda slice_index: jax_view(tensor[slice_index])
       )
     )
 

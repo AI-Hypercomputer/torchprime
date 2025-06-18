@@ -130,6 +130,15 @@ python3 torchprime/torch_xla_models/train.py \
 
 You may refer to the hydra docs for other ways to specify configs.
 
+To fine-tune a pretrained model using the gsm8k (Grade School Math question-answer) dataset, run
+
+```sh
+python3 torchprime/torch_xla_models/train.py --config-name llama-3-8b-sft-w-gsm8k
+```
+
+This uses the `llama-3-8b-sft-w-gsm8k.yaml` config which selects the SFT trainer and
+dataset automatically.
+
 ### Multi-VM distributed training
 
 `torchprime` uses [xpk][xpk] as the standard path for iterating on distributed

@@ -1,0 +1,10 @@
+# Dataset configuration for supervised fine-tuning using the Alpaca dataset
+hf_dataset_name: tatsu-lab/alpaca
+hf_dataset_config_name: null
+split: train
+block_size: 8192
+cache_dir: /tmp/
+format: prompt_completion
+compute_loss_on: completion
+pack_samples: true
+truncation: right

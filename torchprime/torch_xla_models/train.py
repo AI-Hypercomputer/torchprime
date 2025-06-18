@@ -15,13 +15,14 @@ from transformers import (
   set_seed,
 )
 
-from torchprime.data.dataset import make_train_dataset
+from torchprime.data import DATASET_BUILDERS, make_train_dataset
 from torchprime.metrics.metrics import MetricsLogger
 from torchprime.torch_xla_models.model.model_utils import (
   initialize_model_class,
+  log_parameter_breakdown,
   set_default_dtype,
 )
-from torchprime.torch_xla_models.trainer.base_trainer import Trainer
+from torchprime.torch_xla_models.trainer import TRAINERS, Trainer
 from torchprime.utils.retry import retry
 
 transformers.utils.check_min_version("4.39.3")
@@ -63,12 +64,19 @@ def main(config: DictConfig):
   with set_default_dtype(model_dtype), torch_xla.device():
     model = initialize_model_class(config.model)
 
-  n_params = sum([p.numel() for p in model.parameters()])
-  logger.info(f"Training new model from scratch - Total size={n_params} params")
+  log_parameter_breakdown(model, logger)
 
-  # Downloading and loading a dataset from the hub.
-  data = retry(lambda: make_train_dataset(**config.dataset, tokenizer=tokenizer))
-  trainer = Trainer(
+  # Select dataset builder and trainer based on the task name.
+  dataset_fn = DATASET_BUILDERS.get(config.task.name, make_train_dataset)
+  trainer_cls = TRAINERS.get(config.task.name, Trainer)
+  data = retry(lambda: dataset_fn(**config.dataset, tokenizer=tokenizer))
+
+  dataset_name = getattr(config.dataset, "hf_dataset_name", None) or getattr(
+    config.dataset, "file_dataset_path", "unknown"
+  )
+  logger.info("Loaded dataset `%s`, size=%d (packed) samples", dataset_name, len(data))
+
+  trainer = trainer_cls(
     model=model,
     config=config,
     train_dataset=data,
@@ -76,7 +84,8 @@ def main(config: DictConfig):
 
   # TODO(https://github.com/pytorch/xla/issues/8954): Remove `jax_env_context`.
   with jax_env_context():
-    trainer.train_loop(metrics_logger)
+    trainer.train_loop()
+    trainer.finalize_training(metrics_logger)
 
 
 if __name__ == "__main__":
