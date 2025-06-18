@@ -71,7 +71,6 @@ trainer = Trainer(
   args=training_args,
   train_dataset=dataset,
   tokenizer=tokenizer,
-  # data_collator = stack_collator
 )
 
 trainer.train()
