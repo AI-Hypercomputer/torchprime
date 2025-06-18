@@ -51,7 +51,7 @@ def add_activation_checkpointing_and_scan(
     NotImplementedError: If checkpointed layer does not match scanned layer.
   """
   remat_config = config.model.remat
-  remat_classes = _get_classes_by_names(
+  remat_classes = get_classes_by_names(
     model, remat_config.get("activation_checkpoint_layers", [])
   )
   layers_to_scan = remat_config.get("scan_layers", None)
@@ -112,7 +112,7 @@ def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module
     Modified model with optimization barriers.
   """
   remat_config = config.model.remat
-  classes = _get_classes_by_names(
+  classes = get_classes_by_names(
     model, remat_config.get("optimization_barrier_layers", [])
   )
   if not classes:
@@ -128,7 +128,7 @@ def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module
   return wrap_module(model, maybe_add_barrier)
 
 
-def _get_classes_by_names(
+def get_classes_by_names(
   model: nn.Module, class_names: list[str]
 ) -> tuple[type[nn.Module], ...]:
   """Helper to resolve string class names to actual model classes.

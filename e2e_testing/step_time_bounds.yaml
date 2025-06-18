@@ -6,6 +6,15 @@ benchmarks:
     confidence_interval: 0.05407
     average: 2.7352
     sample_size: 427
+  llama-3-8b-pure-mlp:
+    name: Llama 3.0 8B (@assume_pure)
+    # Bounds are copied from `llama-3-8b`. They will be overwritten the next time
+    # somebody runs `e2e_testing/update_step_time.py`.
+    step_time_lower_bound: 2.68109009
+    step_time_upper_bound: 2.789223
+    confidence_interval: 0.05407
+    average: 2.7352
+    sample_size: 1
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
     step_time_lower_bound: 2.34653077

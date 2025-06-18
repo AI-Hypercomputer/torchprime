@@ -57,6 +57,16 @@ dcn_mesh:
 # They can be overridden on the command line or by importing one of the presets
 # in the `model/remat` directory.
 model:
+  # Name of classes in the module tree that are functionally pure.
+  #
+  # There are a few advantages of wrapping a module whose forward pass you know is
+  # free of side-effects and whose behavior only depends on inputs in a `PureModule`:
+  # - `PureModule`s will only be traced once.
+  # - Framework profile scopes added via `xp.Trace` will show up in both the forward
+  #   and the backward pass.
+  pure_modules: []
+
+  # Options for controlling tensor rematerialization.
   remat:
     # The class names of model layers whose intermediate activations should be
     # recomputed during the backward pass (i.e. activation checkpointing).

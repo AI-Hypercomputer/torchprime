@@ -1,5 +1,5 @@
 # This is for basic training loop, i.e., forward/backward pass without any special task logic.
-name: train 
+name: train
 global_batch_size: 4
 max_steps: 15
 

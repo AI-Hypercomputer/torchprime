@@ -37,6 +37,9 @@ from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
+from torchprime.torch_xla_models.model_rewriting.assume_pure import (
+  mark_pure_modules,
+)
 from torchprime.torch_xla_models.model_rewriting.auto_trace import auto_trace
 from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   add_activation_checkpointing_and_scan,
@@ -99,6 +102,7 @@ class Trainer:
     model, self.input_sharding_spec, self.minibatch = setup_sharding_and_mesh(
       model, config
     )
+    model = mark_pure_modules(model, config)
     model = add_activation_checkpointing_and_scan(model, config)
     model = add_optimization_barriers(model, config)
     self.model = model
