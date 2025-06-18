@@ -218,7 +218,7 @@ jobs:
             task.max_steps=15 \
             dcn_mesh.fsdp=2 \
             ici_mesh.fsdp=4 \
-            profile_step=3
+            profile_start_step=3
 
       - name: Run Llama 3.0 8B SFT
         id: run-llama-3-8b-sft

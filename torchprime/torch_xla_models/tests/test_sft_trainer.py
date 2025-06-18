@@ -68,6 +68,7 @@ def dummy_config():
   return OmegaConf.create(
     {
       "model": {
+        "pure_modules": [],
         "remat": {
           "activation_checkpoint_layers": [],
           "optimization_barrier_layers": [],
@@ -93,7 +94,6 @@ def dummy_config():
       "logging_steps": 1,
       "profile_step": -1,
       "profile_dir": "/tmp/profile",
-      "profile_duration": 5,
       "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
       "dcn_mesh": {},
     }
