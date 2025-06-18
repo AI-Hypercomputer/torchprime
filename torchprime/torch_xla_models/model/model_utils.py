@@ -125,7 +125,7 @@ def save_sharded_safetensors_by_layer(
   )
 
   # ---------- sync to remote if needed ------------------------------
-  maybe_copy_to_mounted_gcs(tmp_dir, save_dir)
+  maybe_move_to_mounted_gcs(tmp_dir, save_dir)
 
 
 def initialize_model_class(model_config):
@@ -307,7 +307,7 @@ def convert_to_safetensors_on_cpu(model: torch.nn.Module, save_dir: Path) -> Non
     save_dir: Directory where the original checkpoint is saved.
               Safetensors files and index will also be written here.
   """
-  logger.info("Rank-0: reloading checkpoint for safetensors export …")
+  logger.info("Reloading checkpoint for safetensors export …")
 
   model_sd = model.state_dict()
   reload_sd = {
@@ -337,9 +337,9 @@ def convert_to_safetensors_on_cpu(model: torch.nn.Module, save_dir: Path) -> Non
   logger.info("Safetensors shards + index written to %s", save_dir)
 
 
-def maybe_copy_to_mounted_gcs(tmp_dir: Path | None, save_dir: str):
+def maybe_move_to_mounted_gcs(tmp_dir: Path | None, save_dir: str):
   """
-  If tmp_dir is provided, copy *.safetensors files and index file
+  If tmp_dir is provided, move *.safetensors files and index file
   from tmp_dir to save_dir using gsutil or shutil.
 
   Args:
@@ -352,20 +352,20 @@ def maybe_copy_to_mounted_gcs(tmp_dir: Path | None, save_dir: str):
       try:
         # gsutil seems to give 8x speedup over shutil.copy2
         logger.info("Using gsutil for upload")
-        copy_to_mounted_gcs_gsutil(tmp_dir, save_dir)
+        move_to_mounted_gcs_gsutil(tmp_dir, save_dir)
         return
       except subprocess.CalledProcessError as e:
         logger.warning("gsutil failed: %s. Falling back to shutil-based copy.", str(e))
     else:
       logger.info("gsutil not found. Falling back to shutil-based copy.")
-      copy_to_mounted_gcs_shutil(tmp_dir, save_dir)
+      move_to_mounted_gcs_shutil(tmp_dir, save_dir)
   else:
     logger.warning("No tmp_dir provided, checkpoint already saved in save_dir.")
 
 
-def copy_to_mounted_gcs_gsutil(work_dir: Path, save_dir: str):
+def move_to_mounted_gcs_gsutil(work_dir: Path, save_dir: str):
   """
-  Copies *.safetensors files and index file from work_dir to save_dir,
+  Moves *.safetensors files and index file from work_dir to save_dir,
   using gsutil for efficient upload to a mounted GCS bucket.
 
   Args:
@@ -375,28 +375,28 @@ def copy_to_mounted_gcs_gsutil(work_dir: Path, save_dir: str):
   save_dir.mkdir(parents=True, exist_ok=True)
   cmd = [
     "gsutil",
-    "-m",
-    "-q",
-    "cp",
-    "-n",  # don't clobber if file exists
-    *(str(p) for p in work_dir.glob("*.safetensors")),
-    str(save_dir) + "/",
+    "-m",  # Enables parallel (multi-threaded) execution for faster copying
+    "-q",  # Suppresses all output unless errors occur (quiet mode)
+    "cp",  # Copy command
+    "-n",  # No-clobber: skip files that already exist at the destination
+    *(str(p) for p in work_dir.glob("*.safetensors")),  # All .safetensors files to copy
+    str(save_dir) + "/",  # Destination directory in the GCS bucket
   ]
   cmd_idx = [
     "gsutil",
-    "-q",
-    "cp",
-    str(work_dir / "model.safetensors.index.json"),
-    str(save_dir) + "/",
+    "-q",  # Quiet mode
+    "cp",  # Copy command
+    str(work_dir / "model.safetensors.index.json"),  # Source index file
+    str(save_dir) + "/",  # Destination directory
   ]
   subprocess.check_call(cmd)
   subprocess.check_call(cmd_idx)
   shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def copy_to_mounted_gcs_shutil(work_dir: Path, save_dir: Path):
+def move_to_mounted_gcs_shutil(work_dir: Path, save_dir: Path):
   """
-  Copies *.safetensors files and index file from work_dir to save_dir,
+  Moves *.safetensors files and index file from work_dir to save_dir,
   where save_dir is a mounted GCS bucket (e.g. via gcsfuse).
 
   Args:

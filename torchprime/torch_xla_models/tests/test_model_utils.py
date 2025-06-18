@@ -11,13 +11,15 @@ from torchprime.torch_xla_models.model import model_utils
 from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 
 MODEL_CONFIG_DIR = os.path.join("torchprime", "torch_xla_models", "configs", "model")
+MAX_MODEL_SIZE = 10  # Only test models with size < 10B
 
 
 def get_model_config_files():
   models = glob.glob(os.path.join(MODEL_CONFIG_DIR, "*.yaml"))
-  # only test models with size < 10B
   models = [
-    m for m in models if 0 < model_utils.extract_model_size_from_model_name(m) < 10
+    m
+    for m in models
+    if 0 < model_utils.extract_model_size_from_model_name(m) < MAX_MODEL_SIZE
   ]
   return models
 
