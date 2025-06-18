@@ -84,6 +84,16 @@ def match_llama_3_8b_ddp_fsdp(row):
   )
 
 
+def match_llama_3_8b_fsdp_cp(row):
+  config = json.loads(row.configs_framework)
+  return (
+    row.run_id.startswith("llama-3-8b-fsdp-cp")
+    and config["ici_mesh"]["context"] == 2
+    and config["ici_mesh"]["fsdp"] == 2
+    and config["ici_mesh"]["tensor"] == 1
+  )
+
+
 BENCHMARKS = {
   "Llama 3.0 8B": match_llama3_8b,
   "Llama 3.1 8B (Splash Attention)": match_llama3_1_8b_sa,
@@ -92,6 +102,7 @@ BENCHMARKS = {
   "Mixtral 8x7B": match_mixtral,
   "Llama 3.0 8B (2 Slice)": match_llama_3_8b_2_slice,
   "Llama 3.0 8B (ddp + fsdp)": match_llama_3_8b_ddp_fsdp,
+  "Llama 3.0 8B (fsdp + cp)": match_llama_3_8b_fsdp_cp,
 }
 
 STEP_ID_MAPPING = {
@@ -102,6 +113,7 @@ STEP_ID_MAPPING = {
   "Mixtral 8x7B": "mixtral-8x7b",
   "Llama 3.0 8B (2 Slice)": "llama-3-8b-2-slice",
   "Llama 3.0 8B (ddp + fsdp)": "llama-3-8b-ddp-fsdp",
+  "Llama 3.0 8B (fsdp + cp)": "llama-3-8b-fsdp-cp",
 }
 """Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
 

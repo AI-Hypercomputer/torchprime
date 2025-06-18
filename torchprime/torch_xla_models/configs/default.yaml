@@ -39,6 +39,7 @@ ici_mesh:
   fsdp: 4
   tensor: 1
   expert: 1
+  context: 1
 
 # Shape of the logical mesh where each element is a TPU slice. This is called
 # "Data Center Network (DCN) mesh" because TPU slices are usually connected
@@ -52,6 +53,7 @@ dcn_mesh:
   fsdp: 1
   tensor: 1
   expert: 1
+  context: 1
 
 # These are default values for model activation rematerialization configuration.
 # They can be overridden on the command line or by importing one of the presets

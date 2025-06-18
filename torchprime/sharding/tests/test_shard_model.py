@@ -6,45 +6,14 @@ from torchprime.sharding.shard_model import (
   ShardedModule,
   shard_model,
   shard_model_from_config,
-  shard_torch_xla_model_from_config,
   shard_torchax_model_from_config,
 )
-
-
-class SimpleLinear(nn.Module):
-  def __init__(self):
-    super().__init__()
-    self.fc1 = nn.Linear(128, 64)
-    self.relu = nn.ReLU()
-    self.fc2 = nn.Linear(64, 128)
-
-  def forward(self, x):
-    y = self.relu(self.fc1(x))
-    z = self.fc2(y)
-    return z
-
-
-class MockShardedTensor(torch.Tensor):
-  """
-  This class simulates a sharded tensor.
-  """
-
-  def __init__(self, orig):
-    super().__init__()
-    self.orig = orig
-
-
-class MockShardedModule(nn.Module):
-  """
-  This class simulates an activation (output) sharded module.
-  """
-
-  def __init__(self, orig):
-    super().__init__()
-    self.orig = orig
-
-  def forward(self, x):
-    return self.orig(x)
+from torchprime.sharding.testutils import (
+  MockShardedModule,
+  MockShardedTensor,
+  SimpleLinear,
+  validate_shard_model_from_config_torch_xla_core,
+)
 
 
 def test_traverse_weights():
@@ -274,78 +243,127 @@ def test_shard_model_from_config_torchax():
     assert jax_view(output).sharding.spec == ("fsdp",)
 
 
-def test_shard_model_from_config_torch_xla():
-  import numpy as np
-  import torch_xla
+def test_shard_model_from_config_torch_xla_fsdp():
   import torch_xla.runtime as xr
-  from torch_xla.distributed.spmd import Mesh
 
-  # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
-  # work on PyTorch/XLA. We must run this on the TPU for now.
+  if xr.device_type() != "TPU":
+    pytest.skip("This test only works on TPU")
+  num_devices = xr.global_runtime_device_count()
+  validate_shard_model_from_config_torch_xla_core(
+    sharding_config={
+      "fc1": ["fsdp", None],
+      "fc1.weight": [None, "fsdp"],
+      "fc1.bias": [None],
+      "fc2": ["fsdp", None],
+      "fc2.weight": [None, "fsdp"],
+      "fc2.bias": [None],
+    },
+    mesh_shape=(num_devices,),
+    mesh_axis=("fsdp",),
+    weight_sharding=(
+      f"{{devices=[1,{num_devices}]{','.join(str(v) for v in range(num_devices))}}}"
+    ),
+    activation_sharding=(
+      f"{{devices=[{num_devices},1]{','.join(str(v) for v in range(num_devices))}}}"
+    ),
+  )
+
+
+def test_shard_model_from_config_torch_xla_cp():
+  import torch_xla.runtime as xr
+
+  if xr.device_type() != "TPU":
+    pytest.skip("This test only works on TPU")
+  context_parallel_size = 2
+  num_devices = xr.global_runtime_device_count()
+  validate_shard_model_from_config_torch_xla_core(
+    sharding_config={
+      "fc1": ["fsdp", "context"],
+      "fc1.weight": [None, "fsdp"],
+      "fc1.bias": [None],
+      "fc2": ["fsdp", "context"],
+      "fc2.weight": [None, "fsdp"],
+      "fc2.bias": [None],
+    },
+    mesh_shape=(num_devices // context_parallel_size, context_parallel_size),
+    mesh_axis=("fsdp", "context"),
+    weight_sharding=(
+      f"{{devices=[1,{num_devices // context_parallel_size},{context_parallel_size}]{','.join(str(v) for v in range(num_devices)) + ' last_tile_dim_replicate'}}}"
+    ),
+    activation_sharding=(
+      f"{{devices=[{num_devices // context_parallel_size},{context_parallel_size}]{','.join(str(v) for v in range(num_devices))}}}"
+    ),
+  )
+
+
+def test_shard_model_from_config_torch_xla_dp():
+  import torch_xla.runtime as xr
+
   if xr.device_type() != "TPU":
     pytest.skip("This test only works on TPU")
 
-  xr.use_spmd()
-
-  model = SimpleLinear().to(torch_xla.device())
-
-  config = {
-    "fc1": ["fsdp", None],
-    "fc1.weight": [None, "fsdp"],
-    "fc1.bias": [None],
-    "fc2": ["fsdp", None],
-    "fc2.weight": [None, "fsdp"],
-    "fc2.bias": [None],
-  }
-
-  # Define mesh for test
+  fsdp_size = 2
   num_devices = xr.global_runtime_device_count()
-  mesh_shape = (num_devices,)
-  assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
-  device_ids = np.array(range(num_devices))
-  mesh = Mesh(device_ids, mesh_shape, ("fsdp",))
+  device_arr = []
+  for i in range(num_devices):
+    if i % 2 == 0:
+      device_arr.append(i)
+  for i in range(num_devices):
+    if i % 2 != 0:
+      device_arr.append(i)
 
-  model = shard_torch_xla_model_from_config(model, config, mesh)
-  torch_xla.sync()
-
-  # In order to shard activations, corresponding modules are
-  # wrapped with ShardedModule.
-  assert isinstance(model.fc1, ShardedModule)
-  assert isinstance(model.fc2, ShardedModule)
-
-  # Check the sharding of weights.
-  state_dict = model.state_dict()
-  none_fsdp_sharded = (
-    f"{{devices=[1,{num_devices}]{','.join(str(v) for v in range(num_devices))}}}"
+  validate_shard_model_from_config_torch_xla_core(
+    sharding_config={
+      "fc1": [["data", "fsdp"], None],
+      "fc1.weight": [None, "fsdp"],
+      "fc1.bias": [None],
+      "fc2": [["data", "fsdp"], None],
+      "fc2.weight": [None, "fsdp"],
+      "fc2.bias": [None],
+    },
+    mesh_shape=(num_devices // fsdp_size, fsdp_size),
+    mesh_axis=("data", "fsdp"),
+    weight_sharding=(
+      f"{{devices=[1,{fsdp_size},{num_devices // fsdp_size}]{','.join(str(v) for v in device_arr) + ' last_tile_dim_replicate'}}}"
+    ),
+    activation_sharding=(
+      f"{{devices=[{num_devices},1]{','.join(str(v) for v in range(num_devices))}}}"
+    ),
   )
-  none_sharded = "{replicated}"
-  expected_sharding = {
-    "fc1._orig_mod.weight": none_fsdp_sharded,
-    "fc1._orig_mod.bias": none_sharded,
-    "fc2._orig_mod.weight": none_fsdp_sharded,
-    "fc2._orig_mod.bias": none_sharded,
-  }
-  seen_count = 0
-  for name, param in state_dict.items():
-    expectation = expected_sharding.get(name)
-    if expectation is None:
-      continue
-    sharding_spec = torch_xla._XLAC._get_xla_sharding_spec(param)
-    assert sharding_spec == expectation
-    seen_count += 1
-  assert seen_count == len(expected_sharding)
 
-  # Run the model and check the sharding of outputs.
-  inputs = torch.randn((32, 128), device=torch_xla.device())
-  torch_xla.sync()
-  output = model(inputs)
-  torch_xla.sync()
-  assert isinstance(output, torch.Tensor)
-  fsdp_none_sharded = (
-    f"{{devices=[{num_devices},1]{','.join(str(v) for v in range(num_devices))}}}"
+
+def test_shard_model_from_config_torch_xla_mixed():
+  import torch_xla.runtime as xr
+
+  if xr.device_type() != "TPU":
+    pytest.skip("This test only works on TPU")
+  fsdp_size = 2
+  cp_size = 2
+  num_devices = xr.global_runtime_device_count()
+  if num_devices != 8:
+    return  # only run the test when the num device is 8
+
+  validate_shard_model_from_config_torch_xla_core(
+    sharding_config={
+      "fc1": [["data", "fsdp"], "context"],
+      "fc1.weight": [None, "fsdp"],
+      "fc1.bias": [None],
+      "fc2": [["data", "fsdp"], "context"],
+      "fc2.weight": [None, "fsdp"],
+      "fc2.bias": [None],
+    },
+    mesh_shape=(num_devices // (fsdp_size * cp_size), fsdp_size, cp_size),
+    mesh_axis=("data", "fsdp", "context"),
+    # The fsdp is the second dimension of the device mesh, so the device idx that has the second dimension to be the same
+    # will hold the same chunk of the data, for example, num_device is 8, for a device mesh (a, b, c), if b is the same,
+    # then they hold the same chunk, in this case, 0, 1, 4, 5 hold the same chunk-0, and 2, 3, 6, 7 hold chunk-1
+    weight_sharding=(
+      f"{{devices=[1,{fsdp_size},{num_devices // fsdp_size}]{','.join(str(v) for v in [0, 1, 4, 5, 2, 3, 6, 7]) + ' last_tile_dim_replicate'}}}"
+    ),
+    activation_sharding=(
+      f"{{devices=[{num_devices // cp_size},{cp_size}]{','.join(str(v) for v in range(num_devices))}}}"
+    ),
   )
-  sharding_spec = torch_xla._XLAC._get_xla_sharding_spec(output)
-  assert sharding_spec == fsdp_none_sharded
 
 
 def temporary_env(env_dict):
@@ -368,3 +386,7 @@ def temporary_env(env_dict):
           os.environ[key] = value
 
   return _temporary_env(env_dict)
+
+
+if __name__ == "__main__":
+  test_shard_model_from_config_torch_xla_mixed()

@@ -71,12 +71,14 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
     config.ici_mesh.fsdp,
     config.ici_mesh.tensor,
     config.ici_mesh.expert,
+    config.ici_mesh.context,
   )
   dcn_mesh_shape = (
     config.dcn_mesh.data,
     config.dcn_mesh.fsdp,
     config.dcn_mesh.tensor,
     config.dcn_mesh.expert,
+    config.dcn_mesh.context,
   )
 
   # If there is a faster custom mesh available, use that instead.
@@ -88,7 +90,7 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
   )
   if devices is not None:
     mesh_shape = tuple(np.multiply(ici_mesh_shape, dcn_mesh_shape).tolist())
-    return xs.Mesh(devices, mesh_shape, ("data", "fsdp", "tensor", "expert"))
+    return xs.Mesh(devices, mesh_shape, ("data", "fsdp", "tensor", "expert", "context"))
 
   # TODO(https://github.com/pytorch/xla/issues/8683): When nightly torch_xla no longer crashes
   # during training, we will be able to remove this special case and always use `HybridMesh` in
@@ -97,7 +99,7 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
     mesh = xs.HybridMesh(
       ici_mesh_shape=ici_mesh_shape,
       dcn_mesh_shape=dcn_mesh_shape,
-      axis_names=("data", "fsdp", "tensor", "expert"),
+      axis_names=("data", "fsdp", "tensor", "expert", "context"),
     )
   else:
     for k, v in config.dcn_mesh.items():
@@ -109,8 +111,11 @@ def get_mesh(config: DictConfig, num_devices: int | None = None) -> xs.Mesh:
       config.ici_mesh.fsdp,
       config.ici_mesh.tensor,
       config.ici_mesh.expert,
+      config.ici_mesh.context,
     )
     mesh = xs.Mesh(
-      list(range(num_devices)), mesh_shape, ("data", "fsdp", "tensor", "expert")
+      list(range(num_devices)),
+      mesh_shape,
+      ("data", "fsdp", "tensor", "expert", "context"),
     )
   return mesh
