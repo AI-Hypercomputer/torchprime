@@ -50,10 +50,10 @@ benchmarks:
     sample_size: 47
   llama-3-8b-fsdp-cp:
     name: Llama 3.0 8B (fsdp + cp)
-    step_time_lower_bound: 3.82985294
-    step_time_upper_bound: 4.087614
-    confidence_interval: 0.12888
-    average: 3.9587
+    step_time_lower_bound: 1.2
+    step_time_upper_bound: 2.5
+    confidence_interval: 0.05
+    average: 1.6
     sample_size: 416
 metadata:
   query_start: '2025-05-26T18:37:58.674556-07:00'
