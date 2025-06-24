@@ -111,36 +111,7 @@ class Trainer:
     model = add_optimization_barriers(model, config)
     self.model = model
 
-    if self.config.task.optimizer.type not in (_ADAFACTOR, _ADAMW):
-      raise ValueError(
-        f"Supported optimizers are {[_ADAFACTOR, _ADAMW]}, "
-        f"but got {self.config.task.optimizer.type}"
-      )
-
-    # Setup optimizer
-    if self.config.task.optimizer.type == _ADAMW:
-      self.optimizer = torch.optim.AdamW(
-        params=model.parameters(),
-        lr=self.config.task.optimizer.learning_rate,
-        weight_decay=self.config.task.optimizer.weight_decay,
-      )
-    elif self.config.task.optimizer.type == _ADAFACTOR:
-      # Adafactor optimizer does not support weight decay.
-      assert "weight_decay" not in self.config.task.optimizer, (
-        "Adafactor does not support weight decay."
-      )
-
-      self.optimizer = Adafactor(
-        params=model.parameters(),
-        lr=self.config.task.optimizer.learning_rate,
-        relative_step=False,
-        scale_parameter=False,
-      )
-    else:
-      raise AssertionError
-
-    # TODO: this OOMs the TPU.
-    # self._prime_optimizer()
+    self._init_optimizer()
 
     self.lr_scheduler = get_scheduler(
       name=self.config.task.lr_scheduler.type,
@@ -151,6 +122,39 @@ class Trainer:
 
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
+
+  def _init_optimizer(self) -> None:
+    """Helper for optimizer initialization."""
+    if self.config.task.optimizer.type not in (_ADAFACTOR, _ADAMW):
+      raise ValueError(
+        f"Supported optimizers are {[_ADAFACTOR, _ADAMW]}, "
+        f"but got {self.config.task.optimizer.type}"
+      )
+
+    if self.config.task.optimizer.type == _ADAMW:
+      self.optimizer = torch.optim.AdamW(
+        params=self.model.parameters(),
+        lr=self.config.task.optimizer.learning_rate,
+        weight_decay=self.config.task.optimizer.weight_decay,
+      )
+    elif self.config.task.optimizer.type == _ADAFACTOR:
+      # Adafactor optimizer does not support weight decay.
+      if "weight_decay" in self.config.task.optimizer:
+        raise ValueError("Adafactor does not support weight decay.")
+
+      self.optimizer = Adafactor(
+        params=self.model.parameters(),
+        lr=self.config.task.optimizer.learning_rate,
+        relative_step=False,
+        scale_parameter=False,
+      )
+    else:
+      raise AssertionError("Impossible code branch reached.")
+
+    # TODO: this OOMs the TPU.
+    # self._prime_optimizer()
+
+    return
 
   def __del__(self):
     # Close TensorBoard writer on destruction.
