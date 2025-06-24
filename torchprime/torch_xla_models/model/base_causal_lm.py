@@ -101,7 +101,7 @@ class BaseCausalLM(nn.Module):
       json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
 
   def from_pretrained(
-    self, model_path_or_repo: str, *, save_dir: str | os.PathLike | None = None
+    self, model_path_or_repo: str, *, save_directory: str | os.PathLike | None = None
   ) -> None:
     """Load model weights and optionally save configs/tokenizer.
 
@@ -114,7 +114,7 @@ class BaseCausalLM(nn.Module):
 
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
-        save_dir: If provided, copy ``config.json``/``generation_config.json`` and
+        save_directory: If provided, copy ``config.json``/``generation_config.json`` and
           the tokenizer to this directory on rank-0.
     """
     if os.path.isdir(model_path_or_repo):
@@ -129,10 +129,10 @@ class BaseCausalLM(nn.Module):
     state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)
 
-    if save_dir and xr.process_index() == 0:
-      logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
-      model_utils.copy_hf_config_files(model_path_or_repo, Path(save_dir))
-      model_utils.save_hf_tokenizer(model_path_or_repo, Path(save_dir))
+    if save_directory and xr.process_index() == 0:
+      logger.info("Saving Hugging Face configs and tokenizer to %s", save_directory)
+      model_utils.copy_hf_config_files(model_path_or_repo, Path(save_directory))
+      model_utils.save_hf_tokenizer(model_path_or_repo, Path(save_directory))
 
   def _maybe_save_checkpoint(self, config: DictConfig) -> None:
     """Save a sharded checkpoint and optionally convert it to safetensors format.

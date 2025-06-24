@@ -40,7 +40,7 @@ class SFTTrainer(Trainer):
         logger.info("Loading model weights from %s", self.pretrained_model)
       folder_name = getattr(config.task, "export_checkpoint_path", None)
       save_dir = Path(config.output_dir) / folder_name if folder_name else None
-      model.from_pretrained(self.pretrained_model, save_dir=save_dir)
+      model.from_pretrained(self.pretrained_model, save_directory=save_dir)
       xm.mark_step()
     else:
       logger.warning(
