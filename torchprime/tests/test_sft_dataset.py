@@ -96,10 +96,11 @@ def test_local_json_prompt_completion(tmp_path: Path):
     block_size=16,
   )
   assert isinstance(ds, Dataset)
-  # "Hello" -> [8], "World" -> [9]
-  assert ds[0]["input_ids"][:2] == [8, 9]
+  # "Hello" -> [8], "World" -> [9], "eos" -> [2]
+  assert ds[0]["input_ids"][:3] == [8, 9, 2]
   assert ds[0]["labels"][0] == -100  # masked prompt
   assert ds[0]["labels"][1] == tok.convert_tokens_to_ids("World")  # completion
+  assert ds[0]["labels"][2] == 2  # eos
   mask = ds[0]["attention_mask"]
   assert len(mask) == 16
   assert mask[:3] == [1, 1, 1]
@@ -148,8 +149,16 @@ def test_gcp_json_chat_mask_last(tmp_path: Path):
   input_ids = ds[0]["input_ids"]
   labels = ds[0]["labels"]
   assert input_ids[: len(user_ids) + len(assistant_ids)] == user_ids + assistant_ids
+  assert input_ids[len(user_ids) + len(assistant_ids)] == 2  # eos token
+  assert all(
+    x == 0 for x in input_ids[(len(user_ids) + len(assistant_ids) + 1) :]
+  )  # pad to block size
   assert labels[: len(user_ids)] == [-100] * len(user_ids)  # masked user tokens
   assert labels[len(user_ids) : len(user_ids) + len(assistant_ids)] == assistant_ids
+  assert labels[len(user_ids) + len(assistant_ids)] == 2  # eos token
+  assert all(
+    x == -100 for x in labels[(len(user_ids) + len(assistant_ids) + 1) :]
+  )  # mask padding
   assert ds[0]["attention_mask"][len(user_ids) + len(assistant_ids)] == 1
 
 

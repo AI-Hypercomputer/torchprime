@@ -79,8 +79,9 @@ def _tokenize_prompt_completion(
     labels[: len(prompt_ids)] = [-100] * len(prompt_ids)
 
   if tokenizer.eos_token_id is not None:
+    # always add EOS token and compute loss on it
     input_ids.append(tokenizer.eos_token_id)
-    labels.append(tokenizer.eos_token_id if compute_loss_on == "all" else -100)
+    labels.append(tokenizer.eos_token_id)
 
   if len(input_ids) > max_length:
     if truncation == "drop":
@@ -153,17 +154,9 @@ def _tokenize_chat(
     labels.extend([-100] * len(msg_ids) if mask else msg_ids)
 
   if tokenizer.eos_token_id is not None:
+    # always add EOS token and compute loss on it
     input_ids.append(tokenizer.eos_token_id)
-    mask_last = False
-    if compute_loss_on == "assistant":
-      mask_last = messages[-1]["role"] != "assistant"
-    elif compute_loss_on == "last_assistant":
-      mask_last = not (
-        messages[-1]["role"] == "assistant" and last_assistant == len(messages) - 1
-      )
-    elif compute_loss_on == "completion":
-      mask_last = False
-    labels.append(tokenizer.eos_token_id if not mask_last else -100)
+    labels.append(tokenizer.eos_token_id)
 
   if len(input_ids) > max_length:
     if truncation == "drop":
