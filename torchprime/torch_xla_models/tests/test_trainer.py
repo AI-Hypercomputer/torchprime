@@ -143,8 +143,9 @@ def test_trainer_optimizer(monkeypatch, dummy_config):
   model = DummyModel().to(device)
 
   # Act #1
-  dummy_config.task.optimizer.type = "adafactor"  # Use AdamW for testing
+  dummy_config.task.optimizer.type = "adafactor"
   trainer = Trainer(model, dummy_config, dataset)
+
   # Assert #1
   assert isinstance(trainer.optimizer, transformers.optimization.Adafactor)
 
@@ -152,12 +153,14 @@ def test_trainer_optimizer(monkeypatch, dummy_config):
   dummy_config.task.optimizer.type = "adamw"
   dummy_config.task.optimizer.weight_decay = 1e-3
   trainer = Trainer(model, dummy_config, dataset)
+
   # Assert #2
   assert isinstance(trainer.optimizer, torch.optim.AdamW)
   assert trainer.optimizer.defaults["weight_decay"] == 1e-3
 
   # Act #3
-  dummy_config.task.optimizer.type = "sgd"  # Use SGD for testing
+  dummy_config.task.optimizer.type = "sgd"
+
   # Assert #3
   with pytest.raises(ValueError, match=r"Supported optimizers are *"):
     Trainer(model, dummy_config, dataset)
