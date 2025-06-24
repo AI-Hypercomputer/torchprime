@@ -4,11 +4,20 @@ from typing import Any
 import torch
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
+from jax.experimental.pallas.ops.tpu.splash_attention import (
+  splash_attention_kernel,
+  splash_attention_mask,
+)
 from torch import nn
 from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
 from torch_xla.experimental.splash_attention import (
   SplashAttentionConfig,
   splash_attention,
+)
+
+from torchprime.utils.parallelism_utils import (
+  LoadBalancedCausalMask,
+  reorder_sequence,
 )
 
 
@@ -35,9 +44,9 @@ class AttentionModule(nn.Module):
   @xp.trace_me("AttentionModule")
   def forward(
     self,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
+    query_states: torch.Tensor,  # (batch_size, num_heads, q_len, head_dim)
+    key_states: torch.Tensor,  # (batch_size, num_kv_heads, kv_len, head_dim)
+    value_states: torch.Tensor,  # (batch_size, num_kv_heads, kv_len, head_dim)
     attention_mask: torch.Tensor | None = None,
   ):
     if self.config.attention_kernel != "splash_attention":
@@ -60,8 +69,12 @@ class AttentionModule(nn.Module):
     self.partition_spec = None
     segment_ids_partition_spec = None
     if xs.get_global_mesh() is not None:
-      self.partition_spec = (("data", "fsdp"), "tensor", None, None)
-      segment_ids_partition_spec = (("data", "fsdp"), None)
+      if self.config.ici_mesh.context > 1:
+        self.partition_spec = (("data", "fsdp"), "tensor", "context", None)
+        segment_ids_partition_spec = (("data", "fsdp"), "context")
+      else:
+        self.partition_spec = (("data", "fsdp"), "tensor", None, None)
+        segment_ids_partition_spec = (("data", "fsdp"), None)
 
     match self.config.attention_kernel:
       case "splash_attention":
@@ -69,6 +82,29 @@ class AttentionModule(nn.Module):
         assert xs.get_global_mesh() is not None, (
           "Global mesh is required for Splash Attention"
         )
+        if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
+          cp_size = self.config.ici_mesh.context
+          # when CP and lbcp is enabled, we need to unpermute the kv in each attention layer
+          key_states = reorder_sequence(
+            tensor=key_states,
+            cp_size=cp_size,
+            seq_dim=2,
+            to_contiguous=True,
+          )
+          value_states = reorder_sequence(
+            tensor=value_states,
+            cp_size=cp_size,
+            seq_dim=2,
+            to_contiguous=True,
+          )
+          # TODO: need to unpermuet decoder_segment_ids when it is supported
+          q_len = query_states.shape[2]
+          mask_shape = (q_len, q_len)
+          custom_mask = LoadBalancedCausalMask(shape=mask_shape, cp_size=cp_size)
+          # 1. need to export splash attention mask class to pytorch
+          multi_head_mask = splash_attention_mask.MultiHeadMask(
+            masks=(custom_mask,) * query_states.shape[1]
+          )
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
           qkv_partition_spec=self.partition_spec,
@@ -79,9 +115,21 @@ class AttentionModule(nn.Module):
             if hasattr(sa_config, key):
               setattr(sa_config, key, value)
         query_states /= math.sqrt(head_dim)
-        attn_output = splash_attention(
-          query_states, key_states, value_states, sa_config.to_json()
-        )
+
+        if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
+          # TODO adjust sharding and add a customized wrapper
+          attn_output = splash_attention_kernel.make_splash_mha(
+            query_states=query_states,
+            key_states=key_states,
+            value_states=value_states,
+            # add shard map & block size
+            mask=multi_head_mask,
+            make_splash_mha=cp_size,
+          )
+        else:
+          attn_output = splash_attention(
+            query_states, key_states, value_states, sa_config.to_json()
+          )
       case "flash_attention":
         # Integrated with PyTorch/XLA Pallas Flash Attention:
         default_block_sizes = {
