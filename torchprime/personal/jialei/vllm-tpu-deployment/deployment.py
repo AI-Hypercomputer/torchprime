@@ -1,4 +1,3 @@
-from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
 MODEL = "ft"  # Choose the model type: "ft" for fine-tuned, "base" for base model
@@ -6,10 +5,6 @@ MODEL = "ft"  # Choose the model type: "ft" for fine-tuned, "base" for base mode
 
 if MODEL == "ft":
   model_path = "/home/jialeic_google_com/work/torchprime/outputs/export"
-  model_id = "meta-llama/Meta-Llama-3-8B"
-  tokenizer = AutoTokenizer.from_pretrained(model_id)
-  tokenizer.save_pretrained(model_path)
-
   llm = LLM(model=model_path, dtype="bfloat16")
 elif MODEL == "base":
   base_model_path = "/home/jialeic_google_com/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3-8B/snapshots/8cde5ca8380496c9a6cc7ef3a8b46a0372a1d920"
