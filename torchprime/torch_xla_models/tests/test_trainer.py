@@ -14,8 +14,10 @@ import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
+import transformers
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
@@ -99,6 +101,7 @@ def dummy_config():
 
 def test_trainer_initialization(monkeypatch, dummy_config):
   """Test Trainer initialization and mesh logic."""
+  # Arrange
   from torchprime.torch_xla_models.model_rewriting import sharding_initialization
 
   monkeypatch.setattr(
@@ -110,14 +113,55 @@ def test_trainer_initialization(monkeypatch, dummy_config):
     lambda model, *args, **kwargs: model,
   )
 
-  device = xm.xla_device()
-  model = DummyModel().to(device)
+  device = torch_xla.device()
   dataset = DummyDataset()
+
+  # Act
+  model = DummyModel().to(device)  
   trainer = Trainer(model, dummy_config, dataset)
 
+  # Assert
   assert isinstance(trainer.model, DummyModel)
   assert trainer.global_batch_size == 4
 
+
+def test_trainer_optimizer(monkeypatch, dummy_config):
+  # Arrange
+  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
+
+  monkeypatch.setattr(
+    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
+  )
+  monkeypatch.setattr(
+    sharding_initialization,
+    "shard_torch_xla_model_from_config",
+    lambda model, *args, **kwargs: model,
+  )
+
+  device = torch_xla.device()
+  dataset = DummyDataset()
+  model = DummyModel().to(device)  
+
+
+  # Act #1
+  dummy_config.task.optimizer.type = "adafactor"  # Use AdamW for testing
+  trainer = Trainer(model, dummy_config, dataset)
+  # Assert #1
+  assert isinstance(trainer.optimizer, transformers.optimization.Adafactor)
+
+  # Act #2
+  dummy_config.task.optimizer.type = "adamw"
+  dummy_config.task.optimizer.weight_decay = 1e-3
+  trainer = Trainer(model, dummy_config, dataset)
+  # Assert #2
+  assert isinstance(trainer.optimizer, torch.optim.AdamW)
+  assert trainer.optimizer.defaults["weight_decay"] == 1e-3  
+
+  # Act #3
+  dummy_config.task.optimizer.type = "sgd"  # Use SGD for testing
+  # Assert #3
+  with pytest.raises(ValueError, match=r"Supported optimizers are *"):
+    Trainer(model, dummy_config, dataset)
 
 def test_trainer_train_loop(monkeypatch, dummy_config):
   """Test full training loop execution and step count via wrapper."""
@@ -332,7 +376,7 @@ def test_profiler_trace(monkeypatch, dummy_config):
   dummy_config.profile_end_step = 1
   dummy_config.task.max_steps = 6
 
-  device = xm.xla_device()
+  device = torch_xla.device()
   model = DummyModel().to(device)
   dataset = DummyDataset()
   trainer = Trainer(model, dummy_config, dataset)

@@ -61,6 +61,10 @@ def get_model_dtype(module: nn.Module) -> torch.dtype:
   return dtypes.pop()
 
 
+_ADAFACTOR = "adafactor"
+_ADAMW = "adamw"
+
+
 class Trainer:
   """Trainer class for TPU-accelerated model training using PyTorch/XLA.
 
@@ -107,17 +111,33 @@ class Trainer:
     model = add_optimization_barriers(model, config)
     self.model = model
 
-    assert self.config.task.optimizer.type == "adafactor", (
-      "Currently only Adafactor optimizer is supported"
-    )
+    if self.config.task.optimizer.type not in (_ADAFACTOR, _ADAMW):
+      raise ValueError(
+        f"Supported optimizers are {[_ADAFACTOR, _ADAMW]}, "
+        f"but got {self.config.task.optimizer.type}"
+      )
 
-    # Set up optimizers
-    self.optimizer = Adafactor(
-      params=model.parameters(),
-      lr=self.config.task.optimizer.learning_rate,
-      relative_step=False,
-      scale_parameter=False,
-    )
+    # Setup optimizer
+    if self.config.task.optimizer.type == _ADAMW:
+      self.optimizer = torch.optim.AdamW(
+        params=model.parameters(),
+        lr=self.config.task.optimizer.learning_rate,
+        weight_decay=self.config.task.optimizer.weight_decay,
+      )
+    elif self.config.task.optimizer.type == _ADAFACTOR:
+      # Adafactor optimizer does not support weight decay.
+      assert "weight_decay" not in self.config.task.optimizer, (
+        "Adafactor does not support weight decay."
+      )
+
+      self.optimizer = Adafactor(
+        params=model.parameters(),
+        lr=self.config.task.optimizer.learning_rate,
+        relative_step=False,
+        scale_parameter=False,
+      )
+    else:
+      raise AssertionError
 
     # TODO: this OOMs the TPU.
     # self._prime_optimizer()
