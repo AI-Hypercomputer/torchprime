@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
+import huggingface_hub
 import safetensors
 import torch
 import torch.distributed.checkpoint as dist_cp
@@ -417,3 +418,34 @@ def move_to_mounted_gcs_shutil(work_dir: Path, save_dir: Path):
       shutil.copy2(index_file, dest)
 
   shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def copy_hf_config_files(model_path_or_repo: str, save_dir: Path) -> None:
+  """Copy config files from a Hugging Face model repository or directory."""
+  patterns = ["config.json", "generation_config.json"]
+
+  if os.path.isdir(model_path_or_repo):
+    model_dir = Path(model_path_or_repo)
+  else:
+    model_dir = Path(
+      huggingface_hub.snapshot_download(
+        repo_id=model_path_or_repo, allow_patterns=patterns
+      )
+    )
+
+  save_dir = Path(save_dir)
+  save_dir.mkdir(parents=True, exist_ok=True)
+  for name in patterns:
+    src = model_dir / name
+    if src.exists():
+      shutil.copy2(src, save_dir / name)
+
+
+def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
+  """Download or copy a Hugging Face tokenizer to ``save_dir``."""
+  from transformers import AutoTokenizer
+
+  tokenizer = AutoTokenizer.from_pretrained(model_path_or_repo)
+  save_dir = Path(save_dir)
+  save_dir.mkdir(parents=True, exist_ok=True)
+  tokenizer.save_pretrained(save_dir)

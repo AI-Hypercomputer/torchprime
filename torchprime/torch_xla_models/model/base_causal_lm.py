@@ -100,8 +100,10 @@ class BaseCausalLM(nn.Module):
     with open(os.path.join(save_directory, "config.json"), "w") as f:
       json.dump(OmegaConf.to_container(self.config, resolve=True), f, indent=2)
 
-  def from_pretrained(self, model_path_or_repo: str):
-    """Load model weights from local directory or Hugging Face Hub repo.
+  def from_pretrained(
+    self, model_path_or_repo: str, *, save_dir: str | os.PathLike | None = None
+  ) -> None:
+    """Load model weights and optionally save configs/tokenizer.
 
     This method loads the model's state dictionary from the specified path or repository.
     It supports both local directories and remote repositories hosted on the Hugging Face Hub.
@@ -112,17 +114,25 @@ class BaseCausalLM(nn.Module):
 
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
+        save_dir: If provided, copy ``config.json``/``generation_config.json`` and
+          the tokenizer to this directory on rank-0.
     """
     if os.path.isdir(model_path_or_repo):
       model_dir = model_path_or_repo
     else:
       model_dir = huggingface_hub.snapshot_download(
-        repo_id=model_path_or_repo, allow_patterns=["*.safetensors*", "config.json"]
+        repo_id=model_path_or_repo,
+        allow_patterns=["*.safetensors*", "config.json", "generation_config.json"],
       )
 
     # Load weights
     state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)
+
+    if save_dir and xr.process_index() == 0:
+      logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
+      model_utils.copy_hf_config_files(model_path_or_repo, Path(save_dir))
+      model_utils.save_hf_tokenizer(model_path_or_repo, Path(save_dir))
 
   def _maybe_save_checkpoint(self, config: DictConfig) -> None:
     """Save a sharded checkpoint and optionally convert it to safetensors format.

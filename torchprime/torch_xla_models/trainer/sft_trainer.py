@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
 import torch_xla.core.xla_model as xm
 import torch_xla.runtime as xr
@@ -37,7 +38,9 @@ class SFTTrainer(Trainer):
     if self.pretrained_model:
       if xr.process_index() == 0:
         logger.info("Loading model weights from %s", self.pretrained_model)
-      model.from_pretrained(self.pretrained_model)
+      folder_name = getattr(config.task, "export_checkpoint_path", None)
+      save_dir = Path(config.output_dir) / folder_name if folder_name else None
+      model.from_pretrained(self.pretrained_model, save_dir=save_dir)
       xm.mark_step()
     else:
       logger.warning(
