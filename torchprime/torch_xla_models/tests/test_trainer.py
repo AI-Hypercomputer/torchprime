@@ -117,7 +117,7 @@ def test_trainer_initialization(monkeypatch, dummy_config):
   dataset = DummyDataset()
 
   # Act
-  model = DummyModel().to(device)  
+  model = DummyModel().to(device)
   trainer = Trainer(model, dummy_config, dataset)
 
   # Assert
@@ -140,8 +140,7 @@ def test_trainer_optimizer(monkeypatch, dummy_config):
 
   device = torch_xla.device()
   dataset = DummyDataset()
-  model = DummyModel().to(device)  
-
+  model = DummyModel().to(device)
 
   # Act #1
   dummy_config.task.optimizer.type = "adafactor"  # Use AdamW for testing
@@ -155,13 +154,14 @@ def test_trainer_optimizer(monkeypatch, dummy_config):
   trainer = Trainer(model, dummy_config, dataset)
   # Assert #2
   assert isinstance(trainer.optimizer, torch.optim.AdamW)
-  assert trainer.optimizer.defaults["weight_decay"] == 1e-3  
+  assert trainer.optimizer.defaults["weight_decay"] == 1e-3
 
   # Act #3
   dummy_config.task.optimizer.type = "sgd"  # Use SGD for testing
   # Assert #3
   with pytest.raises(ValueError, match=r"Supported optimizers are *"):
     Trainer(model, dummy_config, dataset)
+
 
 def test_trainer_train_loop(monkeypatch, dummy_config):
   """Test full training loop execution and step count via wrapper."""
