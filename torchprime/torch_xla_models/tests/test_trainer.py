@@ -158,11 +158,10 @@ def test_trainer_optimizer(monkeypatch, dummy_config):
   assert isinstance(trainer.optimizer, torch.optim.AdamW)
   assert trainer.optimizer.defaults["weight_decay"] == 1e-3
 
-  # Act #3
-  dummy_config.task.optimizer.type = "sgd"
-
   # Assert #3
   with pytest.raises(ValueError, match=r"Supported optimizers are *"):
+    # Act #3
+    dummy_config.task.optimizer.type = "sgd"
     Trainer(model, dummy_config, dataset)
 
 
