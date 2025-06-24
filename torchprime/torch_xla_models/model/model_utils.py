@@ -325,6 +325,13 @@ def convert_to_safetensors_on_cpu(model: torch.nn.Module, save_dir: Path) -> Non
   )
   logger.info("Checkpoint fully materialised on CPU")
 
+  # delete the checkpoint dist_cp files `*.distcp` to save disk space
+  for file in save_dir.glob("*.distcp"):
+    try:
+      file.unlink()
+    except OSError as e:
+      logger.warning("Failed to delete %s: %s", file, str(e))
+
   cpu_state = {k.replace("._orig_mod", ""): v for k, v in reload_sd["model"].items()}
 
   try:
