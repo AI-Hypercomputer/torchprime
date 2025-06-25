@@ -111,7 +111,7 @@ class Trainer:
     model = add_optimization_barriers(model, config)
     self.model = model
 
-    self._init_optimizer()
+    self.optimizer = type(self)._create_optimizer(config, model.parameters())
 
     self.lr_scheduler = get_scheduler(
       name=self.config.task.lr_scheduler.type,
@@ -123,28 +123,29 @@ class Trainer:
     # Execute all initialization work queued so far before starting training.
     torch_xla.sync()
 
-  def _init_optimizer(self) -> None:
+  @staticmethod
+  def _create_optimizer(config, model_parameters) -> torch.optim.Optimizer:
     """Helper for optimizer initialization."""
-    if self.config.task.optimizer.type not in (_ADAFACTOR, _ADAMW):
+    if config.task.optimizer.type not in (_ADAFACTOR, _ADAMW):
       raise ValueError(
         f"Supported optimizers are {[_ADAFACTOR, _ADAMW]}, "
-        f"but got {self.config.task.optimizer.type}"
+        f"but got {config.task.optimizer.type}"
       )
 
-    if self.config.task.optimizer.type == _ADAMW:
-      self.optimizer = torch.optim.AdamW(
-        params=self.model.parameters(),
-        lr=self.config.task.optimizer.learning_rate,
-        weight_decay=self.config.task.optimizer.weight_decay,
+    if config.task.optimizer.type == _ADAMW:
+      optimizer = torch.optim.AdamW(
+        params=model_parameters,
+        lr=config.task.optimizer.learning_rate,
+        weight_decay=config.task.optimizer.weight_decay,
       )
-    elif self.config.task.optimizer.type == _ADAFACTOR:
+    elif config.task.optimizer.type == _ADAFACTOR:
       # Adafactor optimizer does not support weight decay.
-      if "weight_decay" in self.config.task.optimizer:
+      if "weight_decay" in config.task.optimizer:
         raise ValueError("Adafactor does not support weight decay.")
 
-      self.optimizer = Adafactor(
-        params=self.model.parameters(),
-        lr=self.config.task.optimizer.learning_rate,
+      optimizer = Adafactor(
+        params=model_parameters,
+        lr=config.task.optimizer.learning_rate,
         relative_step=False,
         scale_parameter=False,
       )
@@ -154,7 +155,7 @@ class Trainer:
     # TODO: this OOMs the TPU.
     # self._prime_optimizer()
 
-    return
+    return optimizer
 
   def __del__(self):
     # Close TensorBoard writer on destruction.

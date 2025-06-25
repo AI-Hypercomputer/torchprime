@@ -125,44 +125,32 @@ def test_trainer_initialization(monkeypatch, dummy_config):
   assert trainer.global_batch_size == 4
 
 
-def test_trainer_optimizer(monkeypatch, dummy_config):
+def test_trainer_optimizer(dummy_config):
   # Arrange
-  from torchprime.torch_xla_models.model_rewriting import sharding_initialization
-
-  monkeypatch.setattr(
-    sharding_initialization, "get_mesh", lambda *args, **kwargs: FakeMesh()
-  )
-  monkeypatch.setattr(
-    sharding_initialization,
-    "shard_torch_xla_model_from_config",
-    lambda model, *args, **kwargs: model,
-  )
-
   device = torch_xla.device()
-  dataset = DummyDataset()
   model = DummyModel().to(device)
 
   # Act #1
   dummy_config.task.optimizer.type = "adafactor"
-  trainer = Trainer(model, dummy_config, dataset)
+  opt = Trainer._create_optimizer(dummy_config, model.parameters())
 
   # Assert #1
-  assert isinstance(trainer.optimizer, transformers.optimization.Adafactor)
+  assert isinstance(opt, transformers.optimization.Adafactor)
 
   # Act #2
   dummy_config.task.optimizer.type = "adamw"
   dummy_config.task.optimizer.weight_decay = 1e-3
-  trainer = Trainer(model, dummy_config, dataset)
+  opt = Trainer._create_optimizer(dummy_config, model.parameters())
 
   # Assert #2
-  assert isinstance(trainer.optimizer, torch.optim.AdamW)
-  assert trainer.optimizer.defaults["weight_decay"] == 1e-3
+  assert isinstance(opt, torch.optim.AdamW)
+  assert opt.defaults["weight_decay"] == 1e-3
 
   # Assert #3
   with pytest.raises(ValueError, match=r"Supported optimizers are *"):
     # Act #3
     dummy_config.task.optimizer.type = "sgd"
-    Trainer(model, dummy_config, dataset)
+    opt = Trainer._create_optimizer(dummy_config, model.parameters())
 
 
 def test_trainer_train_loop(monkeypatch, dummy_config):
