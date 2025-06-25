@@ -152,9 +152,6 @@ class Trainer:
     else:
       raise AssertionError("Impossible code branch reached.")
 
-    # TODO: this OOMs the TPU.
-    # self._prime_optimizer()
-
     return optimizer
 
   def __del__(self):
@@ -169,14 +166,6 @@ class Trainer:
     tensorboard_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"TensorBoard logging to: {tensorboard_dir}")
     self.summary_writer = SummaryWriter(log_dir=str(tensorboard_dir))
-
-  def _prime_optimizer(self) -> None:
-    for group in self.optimizer.param_groups:
-      for p in group["params"]:
-        p.grad = torch.zeros_like(p)
-        p.grad.requires_grad_(False)
-    self.optimizer.step()
-    torch_xla.sync()
 
   def _get_train_dataloader(self) -> pl.MpDeviceLoader:
     if self.train_dataset is None:
