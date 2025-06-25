@@ -57,6 +57,13 @@ benchmarks:
     confidence_interval: 0.5 # some random number
     average: 0.5 # some random number
     sample_size: 123 # some random number
+  llama-3-8b-dpo:
+    name: Llama 3.0 8B DPO
+    step_time_lower_bound: 0
+    step_time_upper_bound: 1
+    confidence_interval: 0.5
+    average: 0.5
+    sample_size: 1
   llama-3-8b-ddp-fsdp:
     name: Llama 3.0 8B (ddp + fsdp)
     step_time_lower_bound: 3.22420277
