@@ -4,10 +4,6 @@ from typing import Any
 import torch
 import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
-from jax.experimental.pallas.ops.tpu.splash_attention import (
-  splash_attention_kernel,
-  splash_attention_mask,
-)
 from torch import nn
 from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
 from torch_xla.experimental.splash_attention import (
@@ -15,6 +11,7 @@ from torch_xla.experimental.splash_attention import (
   splash_attention,
 )
 
+from torchprime.utils.kernel_utils import tpu_splash_attention_jax_call_wrapper
 from torchprime.utils.parallelism_utils import (
   LoadBalancedCausalMask,
   reorder_sequence,
@@ -101,10 +98,7 @@ class AttentionModule(nn.Module):
           q_len = query_states.shape[2]
           mask_shape = (q_len, q_len)
           custom_mask = LoadBalancedCausalMask(shape=mask_shape, cp_size=cp_size)
-          # 1. need to export splash attention mask class to pytorch
-          multi_head_mask = splash_attention_mask.MultiHeadMask(
-            masks=(custom_mask,) * query_states.shape[1]
-          )
+
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
           qkv_partition_spec=self.partition_spec,
@@ -117,14 +111,12 @@ class AttentionModule(nn.Module):
         query_states /= math.sqrt(head_dim)
 
         if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
-          # TODO adjust sharding and add a customized wrapper
-          attn_output = splash_attention_kernel.make_splash_mha(
-            query_states=query_states,
-            key_states=key_states,
-            value_states=value_states,
-            # add shard map & block size
-            mask=multi_head_mask,
-            make_splash_mha=cp_size,
+          tpu_splash_attention_jax_call_wrapper(
+            mask=custom_mask,
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            config=sa_config.to_json(),
           )
         else:
           attn_output = splash_attention(

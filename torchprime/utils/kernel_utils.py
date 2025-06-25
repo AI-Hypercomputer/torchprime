@@ -12,6 +12,7 @@ from jax.experimental.pallas.ops.tpu.splash_attention import (
 from jax.experimental.pallas.ops.tpu.splash_attention import (
   splash_attention_mask as mask_lib,
 )
+from jax.sharding import PartitionSpec as P
 from torch_xla.core.xla_builder import call_jax
 from torch_xla.distributed.spmd import Mesh
 from torch_xla.experimental.splash_attention import (
@@ -70,13 +71,6 @@ def splash_attention_jax_wrapper(
   attn_logits_soft_cap,
   q_seq_shards,
 ):
-  """Splash attention kernel wrapper for JAX
-  Inside the function, everything is JAX specific. We convert the torch_xla mesh
-  and partition spec into jax specific format, and reuse the MaxText attention
-  call function from
-  https://github.com/AI-Hypercomputer/maxtext/blob/d8ffb5c4fc65e6832976226a8053236c2fe3164e/MaxText/layers/attentions.py#L336-L430.
-  """
-
   mesh = Mesh.from_str(config.mesh).get_jax_mesh()
   # input q,k,v shape: [batch, #head, seq_len, head_dim]
   if decoder_segment_ids is not None and not decoder_segment_ids.shape:
@@ -101,77 +95,99 @@ def splash_attention_jax_wrapper(
   global_k_layout = config.sa_k_layout
   global_v_layout = config.sa_v_layout
 
-  @functools.partial(
-    shard_map,
-    mesh=mesh,
-    in_specs=(
-      # TODO need to update
-      axis_names,
-      axis_names,
-      axis_names,
-      segment_axis_names,
-    ),
-    out_specs=axis_names,
-    check_rep=False,
-  )
-  def wrap_flash_attention(mask, query, key, value, decoder_segment_ids, q_seq_shards):
-    seq_len = query.shape[2]
-    if decoder_segment_ids is not None:
-      assert seq_len == decoder_segment_ids.q.shape[1], (
-        "Sharding along sequence dimension not allowed in tpu kernel attention"
-      )
-    block_sizes = splash_attention_kernel.BlockSizes(
-      block_q=min(global_block_q, seq_len),
-      block_kv=min(global_block_kv, key.shape[2]),
-      block_kv_compute=min(global_block_kv_compute, key.shape[2]),
-      block_q_dkv=min(global_block_q_dkv, seq_len),
-      block_kv_dkv=min(global_block_kv_dkv, key.shape[2]),
-      block_kv_dkv_compute=min(global_block_kv_dkv_compute, seq_len),
-      block_q_dq=None
-      if global_use_fused_bwd_kernel
-      else min(global_block_q_dq, seq_len),
-      block_kv_dq=None
-      if global_use_fused_bwd_kernel
-      else min(global_block_kv_dq, seq_len),
-      use_fused_bwd_kernel=global_use_fused_bwd_kernel,
-      q_layout=splash_attention_kernel.QKVLayout[global_q_layout],
-      k_layout=splash_attention_kernel.QKVLayout[global_k_layout],
-      v_layout=splash_attention_kernel.QKVLayout[global_v_layout],
+  seq_len = query.shape[2]
+  if decoder_segment_ids is not None:
+    assert seq_len == decoder_segment_ids.q.shape[1], (
+      "Sharding along sequence dimension not allowed in tpu kernel attention"
     )
-    if mask is None:
-      if causal:
-        mask = splash_attention_mask.CausalMask(shape=(seq_len, seq_len))
-      else:
-        mask = splash_attention_mask.FullMask(_shape=(seq_len, seq_len))
+  block_sizes = splash_attention_kernel.BlockSizes(
+    block_q=min(global_block_q, seq_len),
+    block_kv=min(global_block_kv, key.shape[2]),
+    block_kv_compute=min(global_block_kv_compute, key.shape[2]),
+    block_q_dkv=min(global_block_q_dkv, seq_len),
+    block_kv_dkv=min(global_block_kv_dkv, key.shape[2]),
+    block_kv_dkv_compute=min(global_block_kv_dkv_compute, seq_len),
+    block_q_dq=None if global_use_fused_bwd_kernel else min(global_block_q_dq, seq_len),
+    block_kv_dq=None
+    if global_use_fused_bwd_kernel
+    else min(global_block_kv_dq, seq_len),
+    use_fused_bwd_kernel=global_use_fused_bwd_kernel,
+    q_layout=splash_attention_kernel.QKVLayout[global_q_layout],
+    k_layout=splash_attention_kernel.QKVLayout[global_k_layout],
+    v_layout=splash_attention_kernel.QKVLayout[global_v_layout],
+  )
+  if mask is None:
+    if causal:
+      mask = splash_attention_mask.CausalMask(shape=(seq_len, seq_len))
+    else:
+      mask = splash_attention_mask.FullMask(_shape=(seq_len, seq_len))
 
-    # Apply local masking if local sliding attention is enabled.
-    if config.attentiontype_local_sliding:
-      if config.slide_window_size is None:
-        raise ValueError(
-          "Sliding_window_size must be set if Local Sliding attention type"
-        )
-      mask &= splash_attention_mask.LocalMask(
-        shape=(seq_len, seq_len),
-        window_size=(config.slide_window_size, config.slide_window_size),
-        offset=0,
+  # Apply local masking if local sliding attention is enabled.
+  if config.attentiontype_local_sliding:
+    if config.slide_window_size is None:
+      raise ValueError(
+        "Sliding_window_size must be set if Local Sliding attention type"
       )
+    mask &= splash_attention_mask.LocalMask(
+      shape=(seq_len, seq_len),
+      window_size=(config.slide_window_size, config.slide_window_size),
+      offset=0,
+    )
 
     # Create multi-head mask
     multi_head_mask = splash_attention_mask.MultiHeadMask(
       masks=(mask,) * query.shape[1]
     )
-    splash_kernel = splash_attention_kernel.make_splash_mha(
-      mask=multi_head_mask,
-      head_shards=1,
-      q_seq_shards=q_seq_shards,
-      block_sizes=block_sizes,
-      attn_logits_soft_cap=attn_logits_soft_cap,
+
+    @functools.partial(
+      jax.jit,
+      static_argnames=[
+        "multi_head_mask",
+        "shard_head_size",
+      ],
     )
+    def wrap_splash_kernel(multi_head_mask):
+      splash_kernel = splash_attention_kernel.make_splash_mha(
+        mask=multi_head_mask,
+        q_seq_shards=q_seq_shards,
+        block_sizes=block_sizes,
+        attn_logits_soft_cap=attn_logits_soft_cap,
+      )
+      return splash_kernel
+
+    # could add support for head sharding when needed
+    splash_kernel = wrap_splash_kernel(multi_head_mask)
+    kernel_sharding = P("context")
+    axis_names_splash_kernel = splash_kernel.manual_sharding_spec(kernel_sharding)
+
+  @functools.partial(
+    shard_map,
+    mesh=mesh,
+    in_specs=(
+      # update this to not only support context parallelism
+      P(("data", "fsdp"), "context", None),
+      axis_names,
+      axis_names,
+      # add support for segment id later
+      segment_axis_names,
+      axis_names_splash_kernel,
+    ),
+    out_specs=axis_names,
+    check_rep=False,
+  )
+  def wrap_flash_attention(query, key, value, decoder_segment_ids):
     return jax.vmap(splash_kernel)(query, key, value, segment_ids=decoder_segment_ids)
 
   devices_in_data_fsdp = mesh.shape["data"] * mesh.shape["fsdp"]
   assert (query.shape[0] / devices_in_data_fsdp).is_integer(), (
     "Batch dimension should be shardable among the devices in data and fsdp axis"
   )
-  x = wrap_flash_attention(query, key, value, decoder_segment_ids)
+  x = wrap_flash_attention(
+    mask=mask,
+    query=query,
+    key=key,
+    value=value,
+    decoder_segment_ids=decoder_segment_ids,
+    q_seq_shards=q_seq_shards,
+  )
   return x
