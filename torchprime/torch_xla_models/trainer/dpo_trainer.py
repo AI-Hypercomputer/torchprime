@@ -26,17 +26,28 @@ class DPOTrainer(SFTTrainer):
     config: DictConfig,
     train_dataset,
   ) -> None:
-    """Initialize the trainer and create the reference model."""
+    """Initialize the trainer and create the reference model.
+
+    Args:
+      model: The policy model to train.
+      config: Hydra configuration specifying optimizer and model options.
+      train_dataset: Dataset providing preference pairs.
+    """
     self.beta = getattr(config.task, "beta", 0.1)
     super().__init__(model, config, train_dataset)
 
-    model_dtype = getattr(torch, config.torch_dtype)
+    dtype_name = config.get("torch_dtype", "bfloat16")
+    model_dtype = getattr(torch, dtype_name)
     with model_utils.set_default_dtype(model_dtype), torch_xla.device():
+      # The reference model shares the same architecture as the policy model
+      # and is initialized from pretrained weights. It remains frozen during
+      # training.
       self.ref_model = model_utils.initialize_model_class(config.model)
       if getattr(config.model, "pretrained_model", None):
         self.ref_model.from_pretrained(config.model.pretrained_model)
     self.ref_model.to(self.device)
     self.ref_model.eval()
+    # Ensure the reference model does not receive gradient updates.
     for p in self.ref_model.parameters():
       p.requires_grad_(False)
 
@@ -55,6 +66,7 @@ class DPOTrainer(SFTTrainer):
     labels = labels[:, 1:].reshape(-1)
     log_probs = F.log_softmax(logits, dim=-1)
     labels_clipped = labels.clone()
+    # Use a dummy index for padding positions so ``gather`` does not crash.
     labels_clipped[labels_clipped == -100] = 0
     token_log_probs = log_probs.gather(1, labels_clipped.unsqueeze(-1)).squeeze(-1)
     # Ignore padding tokens when summing probabilities.
@@ -78,7 +90,7 @@ class DPOTrainer(SFTTrainer):
     Returns:
       A tuple with the loss and gradient norm.
     """
-    # Forward pass for the "chosen" and "rejected" completions.
+    # Forward pass for the policy model on both the preferred and rejected responses.
     c_logits = self.model(
       input_ids=batch["chosen_input_ids"],
       attention_mask=batch["chosen_attention_mask"],
@@ -88,6 +100,7 @@ class DPOTrainer(SFTTrainer):
       attention_mask=batch["rejected_attention_mask"],
     )[0]
 
+    # Reference model forward pass is executed without gradient tracking.
     with torch.no_grad():
       c_ref = self.ref_model(
         input_ids=batch["chosen_input_ids"],
@@ -103,7 +116,8 @@ class DPOTrainer(SFTTrainer):
     c_ref_logp = self._seq_log_prob(c_ref, batch["chosen_labels"])
     r_ref_logp = self._seq_log_prob(r_ref, batch["rejected_labels"])
 
-    # Compute the log-ratio difference between policy and reference models.
+    # DPO loss compares the advantage of the policy over the reference model
+    # for the preferred vs. rejected responses.
     pi_logratios = c_logp - r_logp
     ref_logratios = c_ref_logp - r_ref_logp
     losses = -F.logsigmoid(self.beta * (pi_logratios - ref_logratios))

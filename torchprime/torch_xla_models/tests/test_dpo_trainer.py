@@ -101,6 +101,7 @@ def dummy_config():
       "profile_dir": "/tmp/profile",
       "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
       "dcn_mesh": {},
+      "torch_dtype": "bfloat16",
     }
   )
 

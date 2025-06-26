@@ -73,6 +73,7 @@ def _tokenize_pair(
   def build(completion: str):
     """Encode completion and append EOS token if necessary."""
     ids = prompt_ids + tokenizer.encode(completion, add_special_tokens=False)
+    # Mask out the prompt portion so that only the completion contributes to the loss.
     labels = [-100] * len(prompt_ids) + tokenizer.encode(
       completion, add_special_tokens=False
     )
@@ -81,11 +82,14 @@ def _tokenize_pair(
       labels.append(tokenizer.eos_token_id)
     if len(ids) > max_length:
       if truncation == "drop":
+        # Skip examples that overflow the maximum length.
         return None
       if truncation == "left":
+        # Keep the last tokens when truncating from the left.
         ids = ids[-max_length:]
         labels = labels[-max_length:]
       else:
+        # Default to truncating from the right.
         ids = ids[:max_length]
         labels = labels[:max_length]
     return ids, labels
@@ -95,6 +99,7 @@ def _tokenize_pair(
   if built_c is None or built_r is None:
     return None
 
+  # Fall back to the EOS token when the tokenizer has no dedicated PAD token.
   pad_id = (
     tokenizer.pad_token_id
     if tokenizer.pad_token_id is not None
