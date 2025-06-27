@@ -134,37 +134,34 @@ def splash_attention_jax_wrapper(
       offset=0,
     )
 
-    # Create multi-head mask
-    multi_head_mask = splash_attention_mask.MultiHeadMask(
-      masks=(mask,) * query.shape[1]
-    )
+  # Create multi-head mask
+  multi_head_mask = splash_attention_mask.MultiHeadMask(masks=(mask,) * query.shape[1])
 
-    @functools.partial(
-      jax.jit,
-      static_argnames=[
-        "multi_head_mask",
-        "shard_head_size",
-      ],
+  @functools.partial(
+    jax.jit,
+    static_argnames=[
+      "multi_head_mask",
+      "shard_head_size",
+    ],
+  )
+  def wrap_splash_kernel(multi_head_mask):
+    splash_kernel = splash_attention_kernel.make_splash_mha(
+      mask=multi_head_mask,
+      q_seq_shards=q_seq_shards,
+      block_sizes=block_sizes,
+      attn_logits_soft_cap=attn_logits_soft_cap,
     )
-    def wrap_splash_kernel(multi_head_mask):
-      splash_kernel = splash_attention_kernel.make_splash_mha(
-        mask=multi_head_mask,
-        q_seq_shards=q_seq_shards,
-        block_sizes=block_sizes,
-        attn_logits_soft_cap=attn_logits_soft_cap,
-      )
-      return splash_kernel
+    return splash_kernel
 
-    # could add support for head sharding when needed
-    splash_kernel = wrap_splash_kernel(multi_head_mask)
-    kernel_sharding = P("context")
-    axis_names_splash_kernel = splash_kernel.manual_sharding_spec(kernel_sharding)
+  # could add support for head sharding when needed
+  splash_kernel = wrap_splash_kernel(multi_head_mask)
+  kernel_sharding = P("context")
+  axis_names_splash_kernel = splash_kernel.manual_sharding_spec(kernel_sharding)
 
   @functools.partial(
     shard_map,
     mesh=mesh,
     in_specs=(
-      # update this to not only support context parallelism
       P(("data", "fsdp"), "context", None),
       axis_names,
       axis_names,

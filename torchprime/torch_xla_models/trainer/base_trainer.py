@@ -49,7 +49,7 @@ from torchprime.torch_xla_models.model_rewriting.sharding_initialization import 
   setup_sharding_and_mesh,
 )
 from torchprime.torch_xla_models.topology import get_num_slices
-from torchprime.utils.parallelism_utils import reorder_sequence
+from torchprime.utils.parallelism_utils import lb_cp_enabled, reorder_sequence
 from torchprime.utils.profiling import ensure_profile_end_step
 
 logger = logging.getLogger(__name__)
@@ -246,7 +246,7 @@ class Trainer:
 
       # when context parallel and load balance context parallel is enabled,
       # we will reorder the sequence here for each batch
-      if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
+      if lb_cp_enabled(self.config):
         return {
           key: reorder_sequence(
             tensor=value,

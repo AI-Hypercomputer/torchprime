@@ -1,5 +1,6 @@
 import torch
 from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
+from omegaconf import DictConfig
 
 
 def reorder_sequence(
@@ -142,3 +143,17 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
         self.q_sequence.tobytes() if self.q_sequence is not None else None,
       )
     )
+
+
+def cp_enabled(config: DictConfig):
+  """
+  Check if context parallelism is enabled
+  """
+  return "context" in config.ici_mesh and config.ici_mesh.context > 1
+
+
+def lb_cp_enabled(config: DictConfig):
+  """
+  Check if load balanced context parallelism is enabled
+  """
+  return cp_enabled(config) and config.load_balance_cp

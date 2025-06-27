@@ -14,6 +14,8 @@ from torch_xla.experimental.splash_attention import (
 from torchprime.utils.kernel_utils import tpu_splash_attention_jax_call_wrapper
 from torchprime.utils.parallelism_utils import (
   LoadBalancedCausalMask,
+  cp_enabled,
+  lb_cp_enabled,
   reorder_sequence,
 )
 
@@ -66,7 +68,7 @@ class AttentionModule(nn.Module):
     self.partition_spec = None
     segment_ids_partition_spec = None
     if xs.get_global_mesh() is not None:
-      if self.config.ici_mesh.context > 1:
+      if cp_enabled(self.config):
         self.partition_spec = (("data", "fsdp"), "tensor", "context", None)
         segment_ids_partition_spec = (("data", "fsdp"), "context")
       else:
@@ -79,7 +81,7 @@ class AttentionModule(nn.Module):
         assert xs.get_global_mesh() is not None, (
           "Global mesh is required for Splash Attention"
         )
-        if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
+        if lb_cp_enabled(self.config):
           cp_size = self.config.ici_mesh.context
           # when CP and lbcp is enabled, we need to unpermute the kv in each attention layer
           key_states = reorder_sequence(
@@ -110,7 +112,7 @@ class AttentionModule(nn.Module):
               setattr(sa_config, key, value)
         query_states /= math.sqrt(head_dim)
 
-        if self.config.ici_mesh.context > 1 and self.config.load_balance_cp:
+        if lb_cp_enabled(self.config):
           tpu_splash_attention_jax_call_wrapper(
             mask=custom_mask,
             query=query_states,

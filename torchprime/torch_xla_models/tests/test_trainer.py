@@ -93,7 +93,7 @@ def dummy_config():
       "profile_start_step": -1,
       "profile_end_step": -1,
       "profile_dir": "/tmp/profile",
-      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
+      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1, "context": 1},
       "dcn_mesh": {},
     }
   )
@@ -377,3 +377,7 @@ def test_profiler_trace(monkeypatch, dummy_config):
   assert dummy_config.profile_end_step == 1
   assert calls["start"] == 1
   assert calls["stop"] == 1
+
+
+if __name__ == "__main__":
+  test_trainer_initialization()
