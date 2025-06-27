@@ -23,7 +23,7 @@ class DummyModel(nn.Module):
     loss = logits.mean()
     return logits, loss
 
-  def from_pretrained(self, path, save_directory):
+  def from_pretrained(self, path):
     self.loaded = True
 
   def export(self, path):
