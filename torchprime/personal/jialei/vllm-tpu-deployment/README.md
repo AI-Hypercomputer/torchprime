@@ -12,5 +12,5 @@ VLLM_TARGET_DEVICE="tpu" python -m pip install -e .
 
 - Deploy the local checkpoint via vllm and do batch inference
 ```
-python torchprime/personal/jialei/vllm-tpu-deployment/smock_test.py
+python torchprime/personal/jialei/vllm-tpu-deployment/deployment.py
 ```
