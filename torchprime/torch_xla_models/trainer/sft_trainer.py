@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 import torch_xla.core.xla_model as xm
 import torch_xla.runtime as xr
