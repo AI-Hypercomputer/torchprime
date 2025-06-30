@@ -6,7 +6,7 @@ pipeline.
 ### GPU run with transformers
 Set up a GPU VM on GCP and run:
 ```
-torchrun --nproc_per_node=4 torchprime/personal/jialei/gpu-scripts/run-sft-gsm8k.py
+torchrun --nproc_per_node=4 torchprime/personal/jialei/gpu-scripts/run_sft_gsm8k.py
 ```
 
 ### TPU run with torchprime
