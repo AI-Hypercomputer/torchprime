@@ -1,16 +1,16 @@
-#!/usr/bin/env python3
-"""
-combined_metrics_plot.py
-------------------------
-Draw loss, gradient-norm, and learning-rate curves from
+"""Visualize GPU and TPU training metrics.
 
-  • data_tp.txt : TorchPrime step-style log lines
-  • data_hf.txt : one Python-dict per line
+This script combines metrics logged by the TPU training job (``data_tp.txt``)
+and a GPU run (``data_hf.txt``) into a single matplotlib figure. The GPU file is
+expected to contain one Python ``dict`` per line. For that file the x-axis is
+the line number, whereas the TPU file uses the ``step`` index extracted from the
+log line.
 
-For the HF file, x-axis = line number (row index) rather than the 'epoch' value.
+Run this script in the same directory as the two data files:
 
-Run in the same folder as the two data files:
-    python combined_metrics_plot.py
+```
+python draw_figure.py
+```
 """
 
 import ast
@@ -24,9 +24,11 @@ import matplotlib.pyplot as plt
 script_dir = Path(__file__).resolve().parent
 tp_path = script_dir / "data_tp.txt"
 hf_path = script_dir / "data_hf.txt"
-for p in (tp_path, hf_path):
-  if not p.exists():
-    sys.exit(f"File not found: {p}")
+
+# Ensure the required log files are present.
+for path in (tp_path, hf_path):
+  if not path.exists():
+    sys.exit(f"File not found: {path}")
 
 # ---------- parse TorchPrime step log ----------
 step_re = re.compile(
@@ -51,7 +53,7 @@ if not tp_step:
 # ---------- parse HF dict-per-line log (x-axis = row number) ----------
 hf_step, hf_loss, hf_grad, hf_lr = [], [], [], []
 with hf_path.open("r", encoding="utf-8") as fh:
-  for idx, raw in enumerate(fh, start=0):  # <- row index = step
+  for idx, raw in enumerate(fh, start=0):  # row index = step
     raw = raw.strip()
     if not raw:
       continue
