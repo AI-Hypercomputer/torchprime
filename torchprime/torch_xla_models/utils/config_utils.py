@@ -1,4 +1,4 @@
-from torchprime.utils.parallelism_utils import lb_cp_enabled
+from torchprime.utils.parallelism_utils import cp_enabled, lb_cp_enabled
 
 
 def config_vaidator(config: dict):
@@ -7,6 +7,15 @@ def config_vaidator(config: dict):
   in advance, thus avoiding unnecessary unclear failure or misuses,
   improving usability.
   """
+  if (
+    "load_balance_cp" in config.model
+    and config.model.load_balance_cp
+    and not cp_enabled
+  ):
+    raise RuntimeError(
+      "Load balanced context parallelism can only be used when cp is enabled"
+    )
+
   if lb_cp_enabled(config) and config.attention_kernel != "splash_attention":
     raise RuntimeError(
       "Load balanced context parallelism is only supported with splash attention kernel"

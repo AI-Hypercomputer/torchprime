@@ -47,6 +47,7 @@ def custom_config_creator(ici_mesh, lb_cp_enabled=False, attention_kernel=None):
           "offload_tensors": [],
         },
         "sharding": {"type": "spmd"},
+        "load_balance_cp": lb_cp_enabled,
       },
       "data": {"name": "dummy_dataset", "block_size": 4},
       "task": {
@@ -66,7 +67,6 @@ def custom_config_creator(ici_mesh, lb_cp_enabled=False, attention_kernel=None):
       "profile_dir": "/tmp/profile",
       "ici_mesh": ici_mesh,
       "dcn_mesh": {},
-      "load_balance_cp": lb_cp_enabled,
       "attention_kernel": attention_kernel,
     }
   )

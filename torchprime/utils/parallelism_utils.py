@@ -156,4 +156,8 @@ def lb_cp_enabled(config: DictConfig):
   """
   Check if load balanced context parallelism is enabled
   """
-  return cp_enabled(config) and config.load_balance_cp
+  return (
+    cp_enabled(config)
+    and "load_balance_cp" in config.model
+    and config.model.load_balance_cp
+  )

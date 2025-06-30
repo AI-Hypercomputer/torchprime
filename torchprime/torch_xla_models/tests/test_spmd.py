@@ -66,6 +66,7 @@ class TestConfigSpmd(unittest.TestCase):
         "attention_bias": False,
         "flash_attention": True,
         "rope_theta": 500000.0,
+        "attention_kernel": None,
       }
     )
     # Place model on CPU device first
@@ -92,6 +93,106 @@ class TestConfigSpmd(unittest.TestCase):
       # Weights
       "model.embed_tokens.weight": ["fsdp", None],
       "model.layers.*.self_attn.q_proj.weight": ["fsdp", None],
+      "model.layers.*.self_attn.k_proj.weight": [None, "fsdp"],
+      "model.layers.*.self_attn.v_proj.weight": [None, "fsdp"],
+      "model.layers.*.self_attn.o_proj.weight": ["fsdp", None],
+      "model.layers.*.mlp.gate_proj.weight": ["fsdp", None],
+      "model.layers.*.mlp.up_proj.weight": ["fsdp", None],
+      "model.layers.*.mlp.down_proj.weight": [None, "fsdp"],
+      "model.layers.*.input_layernorm.weight": ["fsdp"],
+      "model.layers.*.post_attention_layernorm.weight": ["fsdp"],
+      "model.norm.weight": ["fsdp"],
+      "lm_head.weight": ["fsdp", None],
+      # Activations
+      "model.layers.*": ["fsdp", None, None],
+      "lm_head": ["fsdp", None, None],
+    }
+    from torchprime.sharding.shard_model import shard_torch_xla_model_from_config
+
+    model_config_sharded = shard_torch_xla_model_from_config(
+      copy.deepcopy(model).to("xla"), config=sharding_config
+    )
+    torch_xla.sync()
+
+    # Shard model with FSDPv2
+    from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
+    from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
+      SpmdFullyShardedDataParallel as FSDPv2,
+    )
+
+    auto_wrap_policy = functools.partial(
+      transformer_auto_wrap_policy,
+      # Transformer layer class to wrap
+      transformer_layer_cls={LlamaDecoderLayer},
+    )
+    model_fsdp_v2_sharded = FSDPv2(
+      copy.deepcopy(model),
+      shard_output=shard_output,
+      auto_wrap_policy=auto_wrap_policy,
+    )
+    torch_xla.sync()
+
+    assert_same_output_weights_grad(
+      model_config_sharded, model_fsdp_v2_sharded, input, labels
+    )
+
+  def test_llama_confg_sharding_against_fsdp_cp(self):
+    import numpy as np
+    import torch_xla.runtime as xr
+    from torch_xla.distributed.spmd import Mesh
+
+    # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
+    # work on PyTorch/XLA. We must run this on the TPU for now.
+    if xr.device_type() != "TPU":
+      pytest.skip("This test only works on TPU")
+
+    super().setUp()
+    vocab_size = 128256
+    torchprime_config = OmegaConf.create(
+      {
+        "vocab_size": 128256,
+        "hidden_size": 4096,
+        "intermediate_size": 14336,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 32,
+        "num_key_value_heads": 8,
+        "hidden_act": "silu",
+        "max_position_embeddings": 131072,
+        "initializer_range": 0.02,
+        "rms_norm_eps": 1.0e-05,
+        "attention_dropout": False,
+        "attention_bias": False,
+        "attention_kernel": "splash_attention",
+        "flash_attention": True,
+        "rope_theta": 500000.0,
+        "context": 2,
+        "load_balance_cp": False,
+      }
+    )
+    # Place model on CPU device first
+    with torch.device("cpu"):
+      model = LlamaForCausalLM(torchprime_config)
+
+    # Define mesh for test
+    num_devices = xr.global_runtime_device_count()
+    assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
+    mesh_shape = (1, num_devices // 2, 1, 1, 2)
+    device_ids = np.array(range(num_devices))
+    mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp", "tensor", "expert", "context"))
+    xs.set_global_mesh(mesh)
+
+    # Create random input and label of batch size 8, sequence length 256.
+    input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    xs.mark_sharding(input, mesh, ("fsdp", "context"))
+    labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    xs.mark_sharding(labels, mesh, ("fsdp", "context"))
+    torch_xla.sync()
+
+    # Shard our model with config based sharding
+    sharding_config = {
+      # Weights
+      "model.embed_tokens.weight": ["fsdp", None],
+      "model.layers.*.self_attn.q_proj.weight": ["fsdp", "context"],
       "model.layers.*.self_attn.k_proj.weight": [None, "fsdp"],
       "model.layers.*.self_attn.v_proj.weight": [None, "fsdp"],
       "model.layers.*.self_attn.o_proj.weight": ["fsdp", None],
