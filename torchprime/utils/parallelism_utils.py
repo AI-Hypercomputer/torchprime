@@ -1,4 +1,5 @@
 import torch
+import torch_xla
 from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
 from omegaconf import DictConfig
 
@@ -19,6 +20,8 @@ def reorder_sequence(
   it to couple the chunks of largest & smallest computation
   intensity
   """
+
+  device = torch_xla.device()
 
   if tensor is None:
     return tensor
@@ -41,15 +44,15 @@ def reorder_sequence(
     2 * cp_size,
     group_size,
     *ori_tensor_shape[seq_dim + 1 :],
-  )
+  ).to(device)
 
   if not to_contiguous:
     # Create first and second halves
-    first_half = torch.arange(cp_size)
-    second_half = torch.arange(2 * cp_size - 1, cp_size - 1, -1)
+    first_half = torch.arange(cp_size).to(device)
+    second_half = torch.arange(2 * cp_size - 1, cp_size - 1, -1).to(device)
 
     # Stack and reshape to interleave
-    src_indices = torch.stack([first_half, second_half], axis=1).reshape(-1)
+    src_indices = torch.stack([first_half, second_half], axis=1).reshape(-1).to(device)
 
   else:
     half = cp_size // 2
@@ -65,12 +68,14 @@ def reorder_sequence(
     second_block = second_pair + fourth_pair
 
     # Stack into shape (2*cp_size//2, 2) → then flatten → length=2*cp_size
-    src_indices = torch.stack(
-      [torch.tensor(first_block), torch.tensor(second_block)], axis=1
-    ).reshape(-1)
+    src_indices = (
+      torch.stack([torch.tensor(first_block), torch.tensor(second_block)], axis=1)
+      .reshape(-1)
+      .to(device)
+    )
 
   # One gather and one reshape
-  reordered = torch.index_select(reshaped, dim=seq_dim, index=src_indices)
+  reordered = torch.index_select(reshaped, dim=seq_dim, index=src_indices).to(device)
 
   # Reshape back to original dimensions
   return reordered.reshape(ori_tensor_shape)
