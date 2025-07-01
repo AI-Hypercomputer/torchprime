@@ -18,7 +18,7 @@ VLLM_TARGET_DEVICE="tpu" python -m pip install -e .
 After installing vLLM, run:
 
 ```
-python torchprime/personal/jialei/vllm-tpu-deployment/deploy.py
+python torchprime/experimental/vllm_tpu_deployment/deploy.py
 ```
 
 The script loads the model checkpoint and prints the generated outputs for a

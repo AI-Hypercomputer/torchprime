@@ -12,9 +12,11 @@ MODEL = "ft"  # ``ft`` for fine-tuned, ``base`` for the pretrained checkpoint
 
 def main() -> None:
   if MODEL == "ft":
+    # update the path to the your sft export location
     model_path = "/home/jialeic_google_com/work/torchprime/outputs/export"
     llm = LLM(model=model_path, dtype="bfloat16")
   elif MODEL == "base":
+    # update the path to the base model checkpoint
     base_model_path = "/home/jialeic_google_com/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3-8B/snapshots/8cde5ca8380496c9a6cc7ef3a8b46a0372a1d920"
     llm = LLM(model=base_model_path, dtype="bfloat16")
   else:

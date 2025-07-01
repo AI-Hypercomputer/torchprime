@@ -6,7 +6,7 @@ pipeline.
 ### GPU run with transformers
 Set up a GPU VM on GCP and run:
 ```
-torchrun --nproc_per_node=4 torchprime/personal/jialei/gpu-scripts/run_sft_gsm8k.py
+torchrun --nproc_per_node=4 torchprime/experimental/torchrun_gpu_sft/run_sft_gsm8k.py
 ```
 
 ### TPU run with torchprime
@@ -18,7 +18,7 @@ python torchprime/torch_xla_models/train.py --config-name llama-3-8b-sft-w-gsm8k
 ### Compare the training metrics
 Update metrics to ``data_hf.txt`` and ``data_tp.txt`` and then run:
 ```
-python torchprime/personal/jialei/gpu-scripts/draw_figure.py
+python torchprime/experimental/torchrun_gpu_sft/draw_figure.py
 ```
 And you will get a figure like this:
 ![Training Curve](./figure_combined.png)
