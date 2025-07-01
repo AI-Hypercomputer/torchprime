@@ -117,11 +117,10 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
     arr = np.arange(shape[0])
     # we reorder the mask to be load balanced following the same approach as
     # used to reorder the input tokens
-    out = reorder_sequence(
+    out = reorder_mask(
       tensor=arr[np.newaxis, :, np.newaxis, np.newaxis],
       cp_size=cp_size,
       seq_dim=1,
-      to_contiguous=False,
     )
     q_sequence = out[0, :, 0, 0]
 
@@ -150,8 +149,7 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
         type(self),
         self.shape,
         self.offset,
-        # hash the q sequence's data_ptr instead of content
-        self.q_sequence.data_ptr() if self.q_sequence is not None else None,
+        self.q_sequence.tobytes() if self.q_sequence is not None else None,
       )
     )
 
@@ -172,3 +170,38 @@ def lb_cp_enabled(config: DictConfig):
     and "load_balance_cp" in config.model
     and config.model.load_balance_cp
   )
+
+
+def reorder_mask(tensor, cp_size: int, seq_dim: int):
+  seq_len = tensor.shape[seq_dim]
+  group_size = seq_len // (2 * cp_size)
+
+  if cp_size % 2 != 0:
+    raise ValueError(f"{cp_size=} must be a multiple of 2.")
+
+  # Need to ensure we have 2 pairs to swap for balancing between cp ranks
+  if seq_len % (cp_size * 2) != 0:
+    raise ValueError(f"{tensor.shape=} is not a multiple of {cp_size*2=}")
+
+  # [B, S, H, D]: [B, 2*cp_size, S/2*cp_size, H, D] -> [B, 2, S/2*cp_size, H, D]
+  # [S, B, H, D]: [2*cp_size, S/2*cp_size, B, H, D] -> [2, S/2*cp_size, B, H, D]
+  ori_tensor_shape = tensor.shape
+  reshaped = tensor.reshape(
+    *ori_tensor_shape[:seq_dim],
+    2 * cp_size,
+    group_size,
+    *ori_tensor_shape[seq_dim + 1 :],
+  )
+
+  # Create first and second halves
+  first_half = np.arange(cp_size)
+  second_half = np.arange(2 * cp_size - 1, cp_size - 1, -1)
+
+  # Stack and reshape to interleave
+  src_indices = np.stack([first_half, second_half], axis=1).reshape(-1)
+
+  # One gather and one reshape
+  reordered = np.take(reshaped, src_indices, axis=seq_dim)
+
+  # Reshape back to original dimensions
+  return reordered.reshape(ori_tensor_shape)
