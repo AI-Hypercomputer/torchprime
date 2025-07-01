@@ -113,6 +113,8 @@ class AttentionModule(nn.Module):
             key=key_states,
             value=value_states,
             config=sa_config.to_json(),
+            decoder_segment_ids=None,
+            causal=False,
           )
         else:
           attn_output = splash_attention(

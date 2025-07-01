@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch_xla
 from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
@@ -44,7 +45,7 @@ def reorder_sequence(
     2 * cp_size,
     group_size,
     *ori_tensor_shape[seq_dim + 1 :],
-  ).to(device)
+  )
 
   if not to_contiguous:
     # Create first and second halves
@@ -74,8 +75,12 @@ def reorder_sequence(
       .to(device)
     )
 
+  input_reshaped = torch.tensor(reshaped).to(device)
+
   # One gather and one reshape
-  reordered = torch.index_select(reshaped, dim=seq_dim, index=src_indices).to(device)
+  reordered = torch.index_select(
+    input=input_reshaped, dim=seq_dim, index=src_indices
+  ).to(device)
 
   # Reshape back to original dimensions
   return reordered.reshape(ori_tensor_shape)
@@ -109,11 +114,11 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
       else:
         return q_ids + self.offset >= kv_ids
 
-    arr = torch.arange(shape[0])
+    arr = np.arange(shape[0])
     # we reorder the mask to be load balanced following the same approach as
     # used to reorder the input tokens
     out = reorder_sequence(
-      tensor=torch.tensor(arr[None, :, None, None]),
+      tensor=arr[np.newaxis, :, np.newaxis, np.newaxis],
       cp_size=cp_size,
       seq_dim=1,
       to_contiguous=False,
@@ -136,7 +141,7 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
     return (
       self.shape == other.shape
       and self.offset == other.offset
-      and torch.equal(self.q_sequence, other.q_sequence)
+      and np.array_equal(self.q_sequence, other.q_sequence)
     )
 
   def __hash__(self):
@@ -145,7 +150,8 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
         type(self),
         self.shape,
         self.offset,
-        self.q_sequence.tobytes() if self.q_sequence is not None else None,
+        # hash the q sequence's data_ptr instead of content
+        self.q_sequence.data_ptr() if self.q_sequence is not None else None,
       )
     )
 

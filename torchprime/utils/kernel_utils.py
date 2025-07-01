@@ -26,7 +26,7 @@ def tpu_splash_attention_jax_call_wrapper(
   query: torch.Tensor,
   key: torch.Tensor,
   value: torch.Tensor,
-  config: SplashAttentionConfig,
+  config: str,
   decoder_segment_ids: torch.Tensor | None,
   causal: bool,
   attn_logits_soft_cap: float | None = None,
@@ -38,6 +38,7 @@ def tpu_splash_attention_jax_call_wrapper(
   query = query.contiguous()
   key = key.contiguous()
   value = value.contiguous()
+  config = SplashAttentionConfig.from_json(config)
   input_args = [
     mask,
     query,
@@ -141,12 +142,12 @@ def splash_attention_jax_wrapper(
     jax.jit,
     static_argnames=[
       "multi_head_mask",
-      "shard_head_size",
     ],
   )
   def wrap_splash_kernel(multi_head_mask):
     splash_kernel = splash_attention_kernel.make_splash_mha(
       mask=multi_head_mask,
+      head_shards=1,
       q_seq_shards=q_seq_shards,
       block_sizes=block_sizes,
       attn_logits_soft_cap=attn_logits_soft_cap,
