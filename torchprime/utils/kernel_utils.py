@@ -156,7 +156,7 @@ def splash_attention_jax_wrapper(
 
   # could add support for head sharding when needed
   splash_kernel = wrap_splash_kernel(multi_head_mask)
-  kernel_sharding = P("context")
+  kernel_sharding = P("context")  # noqa: F841
   # axis_names_splash_kernel = splash_kernel.manual_sharding_spec(kernel_sharding)
 
   @functools.partial(
@@ -168,24 +168,24 @@ def splash_attention_jax_wrapper(
       axis_names,
       # add support for segment id later
       segment_axis_names,
-      kernel_sharding,
+      None,
+      # kernel_sharding,
     ),
-    out_specs=axis_names,
+    out_specs=P(("data", "fsdp"), "context", None),
     check_rep=False,
   )
-  def wrap_flash_attention(query, key, value, decoder_segment_ids):
+  def wrap_attention_kernel(query, key, value, decoder_segment_ids, splash_kernel):
     return jax.vmap(splash_kernel)(query, key, value, segment_ids=decoder_segment_ids)
 
   devices_in_data_fsdp = mesh.shape["data"] * mesh.shape["fsdp"]
   assert (query.shape[0] / devices_in_data_fsdp).is_integer(), (
     "Batch dimension should be shardable among the devices in data and fsdp axis"
   )
-  x = wrap_flash_attention(
-    mask=mask,
-    query=query,
-    key=key,
-    value=value,
-    decoder_segment_ids=decoder_segment_ids,
-    q_seq_shards=q_seq_shards,
+  x = wrap_attention_kernel(
+    query,
+    key,
+    value,
+    decoder_segment_ids,
+    splash_kernel,
   )
   return x

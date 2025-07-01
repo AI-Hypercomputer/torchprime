@@ -75,12 +75,10 @@ def reorder_sequence(
       .to(device)
     )
 
-  input_reshaped = torch.tensor(reshaped).to(device)
-
   # One gather and one reshape
-  reordered = torch.index_select(
-    input=input_reshaped, dim=seq_dim, index=src_indices
-  ).to(device)
+  reordered = torch.index_select(input=reshaped, dim=seq_dim, index=src_indices).to(
+    device
+  )
 
   # Reshape back to original dimensions
   return reordered.reshape(ori_tensor_shape)

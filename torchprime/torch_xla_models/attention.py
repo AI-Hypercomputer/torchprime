@@ -107,7 +107,7 @@ class AttentionModule(nn.Module):
         query_states /= math.sqrt(head_dim)
 
         if self.config.load_balance_cp:
-          tpu_splash_attention_jax_call_wrapper(
+          attn_output = tpu_splash_attention_jax_call_wrapper(
             mask=custom_mask,
             query=query_states,
             key=key_states,
@@ -115,7 +115,7 @@ class AttentionModule(nn.Module):
             config=sa_config.to_json(),
             decoder_segment_ids=None,
             causal=False,
-          )
+          )[0]
         else:
           attn_output = splash_attention(
             query_states, key_states, value_states, sa_config.to_json()
