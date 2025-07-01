@@ -258,7 +258,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             --config-name llama-3-8b-sft-w-gsm8k \
             ici_mesh.fsdp=4 \
-            task.max_steps=20 \
+            task.max_steps=50 \
             task.global_batch_size=16 \
             task.lr_scheduler.type=constant \
             task.convert_to_safetensors=False \ 
@@ -304,7 +304,9 @@ jobs:
             "benchmark": .key,
             "name": .value.name,
             "lower_bound": .value.step_time_lower_bound,
-            "upper_bound": .value.step_time_upper_bound
+            "upper_bound": .value.step_time_upper_bound,
+            "target_loss": .value.target_loss,
+            "loss_tolerance": .value.loss_tolerance
           })' e2e_testing/step_time_bounds.yaml)
           echo "Benchmark matrix JSON: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -340,4 +342,6 @@ jobs:
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       step_time_lower_bound: ${{ matrix.config.lower_bound }}
       step_time_upper_bound: ${{ matrix.config.upper_bound }}
+      target_loss: ${{ matrix.config.target_loss }}
+      loss_tolerance: ${{ matrix.config.loss_tolerance }}
     secrets: inherit
