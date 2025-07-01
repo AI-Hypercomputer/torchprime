@@ -57,8 +57,8 @@ benchmarks:
     confidence_interval: 0.5 # some random number
     average: 0.5 # some random number
     sample_size: 123 # some random number
-    target_loss: 0.6
-    loss_tolerance: 0.2
+    target_loss: 0.47
+    loss_tolerance: 0.01
   llama-3-8b-ddp-fsdp:
     name: Llama 3.0 8B (ddp + fsdp)
     step_time_lower_bound: 3.22420277
