@@ -282,25 +282,6 @@ class TestConfigSpmd(unittest.TestCase):
     mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp", "tensor", "expert", "context"))
     xs.set_global_mesh(mesh)
 
-    # Create random input and label of batch size 8, sequence length 256.
-    input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
-    input = reorder_sequence(
-      tensor=input,
-      cp_size=2,
-      seq_dim=1,
-      to_contiguous=False,
-    )
-    xs.mark_sharding(input, mesh, ("fsdp", "context"))
-    labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
-    labels = reorder_sequence(
-      tensor=labels,
-      cp_size=2,
-      seq_dim=1,
-      to_contiguous=False,
-    )
-    xs.mark_sharding(labels, mesh, ("fsdp", "context"))
-    torch_xla.sync()
-
     # Shard our model with config based sharding
     sharding_config = {
       # Weights
@@ -346,10 +327,29 @@ class TestConfigSpmd(unittest.TestCase):
     torch_xla.sync()
 
     # Create random input and label of batch size 8, sequence length 256.
-    unpermuted_input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    input = reorder_sequence(
+      tensor=input,
+      cp_size=2,
+      seq_dim=1,
+      to_contiguous=False,
+    )
     xs.mark_sharding(input, mesh, ("fsdp", "context"))
-    unpermuted_labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    labels = reorder_sequence(
+      tensor=labels,
+      cp_size=2,
+      seq_dim=1,
+      to_contiguous=False,
+    )
     xs.mark_sharding(labels, mesh, ("fsdp", "context"))
+    torch_xla.sync()
+
+    # Create random input and label of batch size 8, sequence length 256.
+    unpermuted_input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    xs.mark_sharding(unpermuted_input, mesh, ("fsdp", "context"))
+    unpermuted_labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
+    xs.mark_sharding(unpermuted_labels, mesh, ("fsdp", "context"))
     torch_xla.sync()
 
     # check output are the same
@@ -359,10 +359,11 @@ class TestConfigSpmd(unittest.TestCase):
     )
     config_loss.backward()
     torch_xla.sync()
-    print(config_logits.shape)
 
     fsdp_logits, fsdp_loss = model_fsdp_v2_sharded(
-      input, labels=unpermuted_labels, attention_mask=torch.ones_like(unpermuted_input)
+      unpermuted_input,
+      labels=unpermuted_labels,
+      attention_mask=torch.ones_like(unpermuted_input),
     )
     fsdp_loss.backward()
     torch_xla.sync()
