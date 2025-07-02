@@ -90,10 +90,13 @@ class AttentionModule(nn.Module):
             seq_dim=2,
             to_contiguous=True,
           )
+          print(key_states)
           # TODO: need to unpermuet decoder_segment_ids when it is supported
           q_len = query_states.shape[2]
           mask_shape = (q_len, q_len)
           custom_mask = LoadBalancedCausalMask(shape=mask_shape, cp_size=cp_size)
+        else:
+          print(key_states)
 
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
@@ -116,10 +119,15 @@ class AttentionModule(nn.Module):
             decoder_segment_ids=None,
             causal=False,
           )[0]
+          unpermuted_output = reorder_sequence(  # noqa: F841
+            tensor=attn_output, cp_size=2, seq_dim=2, to_contiguous=True
+          )
+          # print(unpermuted_output[0, 0, :, 0])
         else:
           attn_output = splash_attention(
             query_states, key_states, value_states, sa_config.to_json()
           )
+          # print(attn_output[0, 0, :, 0])
       case "flash_attention":
         # Integrated with PyTorch/XLA Pallas Flash Attention:
         default_block_sizes = {
