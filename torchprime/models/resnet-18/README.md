@@ -1,7 +1,8 @@
 # TPU vs. GPU: Accuracy Equivalence Despite the Precision Difference
 
-This `README.md` compares the numerical results of training a ResNet-18 model on
-TPU and GPU. 
+In this tutorial, you'll learn the basics of numerical precision on GPUs and
+TPUs and demonstrates that a model trained on an Nvidia GPU achieves equivalent
+accuracy to one trained on a Google TPU.
 
 ## Understanding Numerical Differences: TPU vs. GPU
 
@@ -18,15 +19,15 @@ distinct floating-point precision levels:
 * A standard CPU operation, or full-precision mode on a GPU, typically uses
   `float32`, which retains the full 23 bits of mantissa precision.
 
+* A **Google TPU** leverages `bfloat16`. This 16-bit format is specifically
+  designed with an 8-bit exponent (matching `float32`'s range) but reduces the
+  mantissa (precision) to only 7 bits.
+
 * An **NVIDIA GPU** (e.g., A100 and newer) can default to different precisions.
   While they support `bfloat16`, their Tensor Cores also utilize
   `TensorFloat-32` (TF32) by default for `float32` operations, which processes
   them with a 10-bit mantissa. The precision level ultimately used often depends
-  on the specific code and framework settings.
-
-* A **Google TPU** leverages `bfloat16`. This 16-bit format is specifically
-  designed with an 8-bit exponent (matching `float32`'s range) but reduces the
-  mantissa (precision) to only 7 bits.
+  on the specific code settings.
 
 ![alt text](img/bit_layout.svg "bit_layout")
 
@@ -42,9 +43,8 @@ computational variances, models trained on both TPUs and GPUs can converge to
 nearly equivalent final model accuracy. For more details on floating-point
 precision, refer to this
 [article](https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus)
-and this
+and
 [tutorial](https://github.com/pytorch/xla/blob/9c8ae9f9d79770a0f534e7eccf5b48c087d7513f/docs/source/tutorials/precision_tutorial.ipynb).
-
 
 ## Experimental Setup
 
@@ -52,33 +52,32 @@ and this
 
 To provide a clear and focused comparison, we use the well-established
 **ResNet-18** model. For the dataset, we use a combination of **VGGFace** and
-**FaceID 550**. The data loading logic, detailed in `data.py`, creates a
-deterministic 90/10 stratified split for training and testing, ensuring that
-images for every identity are present in both sets.
+**FaceID 550**. The data is split into 90/10 for training and testing, ensuring
+that images for every identity are present in both sets.
 
 ### Methodology
 
-Our methodology is designed to provide a comprehensive comparison by evaluating
-two key aspects: the impact of **training techniques** and the numerical
-differences between **hardware platforms**.
+Our methodology is designed to provide a fair comparison of the numerical
+differences between **hardware platforms** by using a robust, production-like
+training approach.
 
 #### Training Approaches
 
-The `train.py` script contains the core logic for our experiments. It defines
-two distinct training functions to illustrate the impact of different training
-strategies:
+To achieve stable and reliable results for the hardware comparison, our training
+process incorporates several well-established best practices:
 
--   **`train_simple`**: This function uses a basic setup with a standard SGD
-    optimizer and a fixed learning rate. It is used to demonstrate how sensitive
-    training can be to hyperparameters, like a high learning rate.
+-   **Optimizer**: We use the AdamW optimizer, which is known for its robust
+    performance across a wide range of tasks.
+-   **Learning Rate Scheduling**: A cosine learning rate scheduler with a warmup
+    phase is used to help the model converge smoothly and avoid early
+    divergence.
+-   **Backbone Freezing**: The pretrained backbone of the ResNet-18 model is
+    initially frozen. This allows the newly added classification layers to adapt
+    to the dataset before fine-tuning the entire model, which improves
+    stability.
 
--   **`train_prod`**: This function implements a more robust, production-like
-    training approach, incorporating the AdamW optimizer, a learning rate
-    scheduler, and backbone freezing.
-
-By comparing these two approaches, our analysis in `viz.ipynb` highlights the
-significant impact that production-level training techniques have on model
-performance and stability.
+This production-like setup ensures that our comparison between TPU and GPU
+performance is based on a solid and reproducible training methodology.
 
 #### Hardware Comparison and Statistical Analysis
 
@@ -92,14 +91,7 @@ a rigorous process:
     type, allowing for a more reliable comparison than one based on a single
     run.
 
-2.  **Learning Rate Selection**: Model performance is highly dependent on the
-    choice of hyperparameters, particularly the learning rate. A learning rate
-    that is optimal for one hardware platform may cause training to diverge on
-    another. As detailed in our analysis notebook (`viz.ipynb`), we carefully
-    selected a learning rate that ensures stable convergence on both TPU and
-    GPU.
-
-3.  **Statistical Analysis (t-test)**: A t-test is a statistical tool used to
+2.  **Statistical Analysis (t-test)**: A t-test is a statistical tool used to
     determine if there is a significant difference between the average results
     of two groups. We use an independent two-sample t-test to compare the final
     model accuracies from our multiple TPU and GPU runs. This is crucial because
@@ -116,9 +108,3 @@ distributions and the full t-test calculations, is available in our analysis
 notebook:
 
 - [View Results Analysis](viz.ipynb)
-
-The raw data and logs used for this analysis can be found in the following
-files:
-- [metrics.csv](./metrics.csv)
-- [gpu-prod.log](./gpu-prod.log)
-- [tpu-prod.log](./tpu-prod.log)
