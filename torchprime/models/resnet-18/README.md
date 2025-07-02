@@ -8,8 +8,9 @@ TPU and GPU.
 If you perform the exact same mathematical computation on different hardware
 accelerators, will the result be identical? For deep learning workloads, the
 answer is often no. Modern deep learning accelerators like Google's Tensor
-Processing Units (TPUs) and NVIDIA's Graphics Processing Units (GPUs) uses
-different floating-point precision levels to maximize computational speed.
+Processing Units (TPUs) and NVIDIA's Graphics Processing Units (GPUs) can
+default to different floating-point precision levels, which can yield slightly
+different results while maximizing computational speed.
 
 Consider how even a simple computation can vary across hardware due to their
 distinct floating-point precision levels:
@@ -17,9 +18,11 @@ distinct floating-point precision levels:
 * A standard CPU operation, or full-precision mode on a GPU, typically uses
   `float32`, which retains the full 23 bits of mantissa precision.
 
-* An **NVIDIA GPU** (e.g., A100 and later) utilizes `TensorFloat-32` (TF32)
-  within its Tensor Cores. While it accepts `float32` inputs, TF32 effectively
-  processes them with an 8-bit exponent and a 10-bit mantissa internally.
+* An **NVIDIA GPU** (e.g., A100 and newer) can default to different precisions.
+  While they support `bfloat16`, their Tensor Cores also utilize
+  `TensorFloat-32` (TF32) by default for `float32` operations, which processes
+  them with a 10-bit mantissa. The precision level ultimately used often depends
+  on the specific code and framework settings.
 
 * A **Google TPU** leverages `bfloat16`. This 16-bit format is specifically
   designed with an 8-bit exponent (matching `float32`'s range) but reduces the
@@ -28,7 +31,7 @@ distinct floating-point precision levels:
 ![alt text](img/bit_layout.svg "bit_layout")
 
 This difference in representation is why floating-point computations can yield
-slightly different results on a GPU versus a TPU. Deep learning model training
+slightly different results on different hardware. Deep learning model training
 involves extensive calculations where these small numerical differences
 accumulate across hardware platforms. This makes direct, bit-for-bit comparison
 of final model states (weights, gradients, or loss) between different systems,
