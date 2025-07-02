@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Utility to validate the final loss reported during training."""
+"""Utility to validate the final loss reported during training.
+
+Example usage: python e2e_testing/check_loss.py <log_file> <target_loss> <tolerance>
+"""
 
 import re
 import sys

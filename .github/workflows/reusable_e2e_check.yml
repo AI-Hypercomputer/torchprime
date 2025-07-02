@@ -20,13 +20,13 @@ on:
         required: true
         type: number
       target_loss:
-        description: "Expected final loss value"
+        description: "Expected final loss value, e.g., 1.0"
         required: false
-        type: string
+        type: number
       loss_tolerance:
         description: "Allowed deviation from the expected loss"
         required: false
-        type: string
+        type: number
     secrets:
       GCP_SA_KEY:
         required: true
