@@ -156,22 +156,22 @@ def splash_attention_jax_wrapper(
 
   # could add support for head sharding when needed
   splash_kernel = wrap_splash_kernel(multi_head_mask)
-  kernel_sharding = P("context")  # noqa: F841
-  # axis_names_splash_kernel = splash_kernel.manual_sharding_spec(kernel_sharding)
+  named_sharding = jax.sharding.NamedSharding(mesh, P("context"))
+  axis_names_splash_kernel = splash_kernel.manual_sharding_spec(named_sharding)
 
   @functools.partial(
     shard_map.shard_map,
     mesh=mesh,
     in_specs=(
-      P(("data", "fsdp"), "context", None),
+      P(("data", "fsdp"), "tensor", "context", None),
       axis_names,
       axis_names,
       # add support for segment id later
       segment_axis_names,
-      None,
-      # kernel_sharding,
+      # None,
+      axis_names_splash_kernel,
     ),
-    out_specs=P(("data", "fsdp"), "context", None),
+    out_specs=P(("data", "fsdp"), "tensor", "context", None),
     check_rep=False,
   )
   def wrap_attention_kernel(query, key, value, decoder_segment_ids, splash_kernel):

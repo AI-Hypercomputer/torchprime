@@ -267,7 +267,7 @@ class TestConfigSpmd(unittest.TestCase):
         "flash_attention": True,
         "rope_theta": 500000.0,
         "context": 2,
-        "load_balance_cp": False,
+        "load_balance_cp": True,
       }
     )
     # Place model on CPU device first
@@ -351,7 +351,6 @@ class TestConfigSpmd(unittest.TestCase):
     unpermuted_labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
     xs.mark_sharding(unpermuted_labels, mesh, ("fsdp", "context"))
     torch_xla.sync()
-    """
     # check output are the same
     # Run the model and backwards
     config_logits, config_loss = model_config_sharded(
@@ -360,7 +359,6 @@ class TestConfigSpmd(unittest.TestCase):
     config_loss.backward()
     torch_xla.sync()
     """
-
     config_logits, config_loss = model_config_sharded(
       unpermuted_input,
       labels=unpermuted_labels,
@@ -368,7 +366,7 @@ class TestConfigSpmd(unittest.TestCase):
     )
     config_loss.backward()
     torch_xla.sync()
-
+    """
     fsdp_logits, fsdp_loss = model_fsdp_v2_sharded(
       unpermuted_input,
       labels=unpermuted_labels,

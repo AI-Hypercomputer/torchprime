@@ -66,8 +66,8 @@ class AttentionModule(nn.Module):
     self.partition_spec = None
     segment_ids_partition_spec = None
     if xs.get_global_mesh() is not None:
-      self.partition_spec = (("data", "fsdp"), "tensor", "context", None)
-      segment_ids_partition_spec = (("data", "fsdp"), "context")
+      self.partition_spec = (("data", "fsdp"), "tensor", None, None)
+      segment_ids_partition_spec = (("data", "fsdp"), None)
 
     match self.config.attention_kernel:
       case "splash_attention":
@@ -90,13 +90,10 @@ class AttentionModule(nn.Module):
             seq_dim=2,
             to_contiguous=True,
           )
-          print(key_states)
           # TODO: need to unpermuet decoder_segment_ids when it is supported
           q_len = query_states.shape[2]
           mask_shape = (q_len, q_len)
           custom_mask = LoadBalancedCausalMask(shape=mask_shape, cp_size=cp_size)
-        else:
-          print(key_states)
 
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
@@ -119,9 +116,11 @@ class AttentionModule(nn.Module):
             decoder_segment_ids=None,
             causal=False,
           )[0]
+          """
           unpermuted_output = reorder_sequence(  # noqa: F841
             tensor=attn_output, cp_size=2, seq_dim=2, to_contiguous=True
           )
+          """
           # print(unpermuted_output[0, 0, :, 0])
         else:
           attn_output = splash_attention(
