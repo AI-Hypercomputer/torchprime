@@ -34,8 +34,26 @@ def test_validate_context_parallelism():
   except Exception:
     raise AssertionError("RuntimeError was not raised!")  # noqa: B904
 
+  # test mismatch cp size
+  ici_mesh = ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},)
+  config = custom_config_creator(
+    ici_mesh=ici_mesh,
+    lb_cp_enabled=False,
+    attention_kernel="flash_attention",
+    context=1,
+  )
+  try:
+    config_vaidator(config)
+    raise AssertionError("RuntimeError was not raised!")
+  except RuntimeError as e:
+    assert "ici context size should equal to model context parallelism size" in str(e)
+  except Exception:
+    raise AssertionError("RuntimeError was not raised!")  # noqa: B904
 
-def custom_config_creator(ici_mesh, lb_cp_enabled=False, attention_kernel=None):
+
+def custom_config_creator(
+  ici_mesh, lb_cp_enabled=False, attention_kernel=None, context=2
+):
   return OmegaConf.create(
     {
       "model": {
@@ -48,6 +66,7 @@ def custom_config_creator(ici_mesh, lb_cp_enabled=False, attention_kernel=None):
         },
         "sharding": {"type": "spmd"},
         "load_balance_cp": lb_cp_enabled,
+        "context": ici_mesh[0]["context"],
       },
       "data": {"name": "dummy_dataset", "block_size": 4},
       "task": {

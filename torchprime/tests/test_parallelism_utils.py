@@ -1,5 +1,6 @@
 import unittest
 
+import numpy as np
 import torch
 import torch_xla
 
@@ -58,3 +59,14 @@ class TestParallelism_utils(unittest.TestCase):
       input.cpu(),
       input_unpermuted.cpu(),
     )
+
+  def test_reorder_mask(self):
+    input = np.arange(8)
+    res = p_utils.reorder_mask(tensor=input, cp_size=2, seq_dim=0, to_contiguous=False)
+    output_expected = np.array([0, 1, 6, 7, 2, 3, 4, 5])
+    assert (res == output_expected).all()
+
+    input = np.array([[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7]])
+    res = p_utils.reorder_mask(tensor=input, cp_size=2, seq_dim=1, to_contiguous=False)
+    output_expected = np.array([[0, 1, 6, 7, 2, 3, 4, 5], [0, 1, 6, 7, 2, 3, 4, 5]])
+    assert (res == output_expected).all()

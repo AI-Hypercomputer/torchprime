@@ -14,7 +14,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from torchprime.sharding.shard_model import shard_torch_xla_model_from_config
 from torchprime.torch_xla_models.topology import get_mesh, is_1d_sharding
-from torchprime.utils.parallelism_utils import cp_enabled
 
 logger = logging.getLogger(__name__)
 
