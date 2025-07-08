@@ -1,10 +1,13 @@
 """Utilities for preparing datasets for basic training tasks."""
 
 import json
+import logging
 
 import fsspec
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
 from transformers.tokenization_utils import PreTrainedTokenizerBase
+
+logger = logging.getLogger(__name__)
 
 
 def _load_json_dataset(path: str, split: str) -> Dataset:
@@ -33,6 +36,8 @@ def _load_hf_dataset(
   config: str | None,
   split: str,
   cache_dir: str | None,
+  num_proc: int | None,
+  streaming: bool = False,
 ) -> Dataset:
   """Download and return a dataset from Hugging Face Hub.
 
@@ -41,12 +46,21 @@ def _load_hf_dataset(
     config: Optional configuration name.
     split: Split to load.
     cache_dir: Directory where the dataset cache should live.
+    num_proc: Number of processes to use for dataset operations.
+    streaming: Whether to stream the dataset.
 
   Returns:
     The loaded ``Dataset`` instance for ``split``.
   """
 
-  data = load_dataset(name, config, split=split, cache_dir=cache_dir)
+  data = load_dataset(
+    name,
+    config,
+    split=split,
+    cache_dir=cache_dir,
+    num_proc=num_proc,
+    streaming=streaming,
+  )
   assert isinstance(data, Dataset | DatasetDict)
   if isinstance(data, DatasetDict):
     data = data[split]
@@ -59,6 +73,8 @@ def load_hf_or_json_dataset(
   file_dataset_path: str | None = None,
   split: str = "train",
   cache_dir: str | None = None,
+  num_proc: int | None = None,
+  streaming: bool = False,
 ):
   """Loads a dataset either from Hugging Face Hub or a local/remote JSONL file.
 
@@ -72,12 +88,21 @@ def load_hf_or_json_dataset(
     file_dataset_path: Optional path to a JSONL file (local or remote).
     split: Dataset split to load (default is "train").
     cache_dir: Optional directory to use for dataset caching (HF only).
+    num_proc: Number of processes to use for dataset operations (HF only).
+    streaming: Whether to stream the dataset (HF only).
 
   Returns:
     A HuggingFace ``Dataset`` instance.
   """
   if hf_dataset_name:
-    data = _load_hf_dataset(hf_dataset_name, hf_dataset_config_name, split, cache_dir)
+    data = _load_hf_dataset(
+      hf_dataset_name,
+      hf_dataset_config_name,
+      split,
+      cache_dir,
+      num_proc,
+      streaming,
+    )
   elif file_dataset_path:
     data = _load_json_dataset(file_dataset_path, split)
   else:
@@ -89,6 +114,7 @@ def load_hf_or_json_dataset(
 
 
 def make_train_dataset(
+  cached_dataset_path: str | None = None,
   hf_dataset_name: str | None = None,
   hf_dataset_config_name: str | None = None,
   file_dataset_path: str | None = None,
@@ -97,6 +123,9 @@ def make_train_dataset(
   *,
   tokenizer: PreTrainedTokenizerBase,
   block_size: int,
+  text_column: str = "text",
+  num_proc: int | None = None,
+  streaming: bool = False,
 ) -> Dataset:
   """Loads and tokenizes a dataset, then chunks it into fixed-size blocks for training.
 
@@ -106,6 +135,7 @@ def make_train_dataset(
   for efficient language modeling, especially on accelerators like TPUs.
 
   Args:
+    cached_dataset_path: Optional path to a pre-processed, cached dataset.
     hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
     hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
     file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
@@ -113,24 +143,37 @@ def make_train_dataset(
     cache_dir: Optional directory for HF dataset cache.
     tokenizer: A Hugging Face tokenizer used to tokenize the input text.
     block_size: The fixed length of each chunked training example.
+    text_column: The name of the column containing the text to be tokenized.
+    num_proc: Number of processes to use for dataset operations.
+    streaming: Whether to stream the dataset.
 
   Returns:
     A `Dataset` object containing tokenized and block-wise grouped training examples,
     each with keys `"input_ids"` and `"labels"`.
   """
+  if cached_dataset_path:
+    logger.info(f"Loading cached dataset from: {cached_dataset_path}")
+    # `load_from_disk` works seamlessly with local paths and GCS URIs.
+    data = load_from_disk(cached_dataset_path)
+    data.set_format("torch")
+    return data
+
   data = load_hf_or_json_dataset(
     hf_dataset_name=hf_dataset_name,
     hf_dataset_config_name=hf_dataset_config_name,
     file_dataset_path=file_dataset_path,
     split=split,
     cache_dir=cache_dir,
+    num_proc=num_proc,
+    streaming=streaming,
   )
 
   column_names = list(data.features)
   data = data.map(
-    lambda samples: tokenizer(samples["text"]),
+    lambda samples: tokenizer(samples[text_column]),
     batched=True,
     remove_columns=column_names,
+    num_proc=num_proc,
   )
 
   def group_texts(examples):
@@ -155,5 +198,5 @@ def make_train_dataset(
     result["labels"] = result["input_ids"].copy()
     return result
 
-  data = data.map(group_texts, batched=True)
+  data = data.map(group_texts, batched=True, num_proc=num_proc)
   return data

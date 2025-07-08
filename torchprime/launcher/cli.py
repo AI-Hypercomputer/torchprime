@@ -78,6 +78,46 @@ def cli(ctx, interactive):
 
 
 @cli.command()
+@click.option("--dataset-name", required=True, help="Name of the Hugging Face dataset.")
+@click.option(
+  "--dataset-config-name",
+  default=None,
+  help="Configuration name of the Hugging Face dataset.",
+)
+@click.option(
+  "--tokenizer-name", required=True, help="Name of the Hugging Face tokenizer."
+)
+@click.option(
+  "--output-path",
+  required=True,
+  help="Path to save the processed dataset (local or GCS).",
+)
+@click.option("--block-size", type=int, default=4096, help="Sequence length for packing.")
+@click.option("--num-proc", type=int, default=8, help="Number of processes for mapping.")
+@click.option("--split", default="train", help="Dataset split to process.")
+@click.option("--text-column", default="text", help="The column containing text data.")
+def preprocess(
+  dataset_name,
+  dataset_config_name,
+  tokenizer_name,
+  output_path,
+  block_size,
+  num_proc,
+  split,
+  text_column,
+):
+    """Preprocesses a dataset and saves it to a specified location."""
+    from torchprime.experimental.gcs_cache_loading.preprocess_dataset import (
+      main as preprocess_main,
+    )
+
+    preprocess_main(
+      dataset_name, dataset_config_name, tokenizer_name, output_path, block_size,
+      num_proc, split, text_column
+    )
+
+
+@cli.command()
 @click.option("--cluster", required=True, help="Name of the XPK cluster")
 @click.option("--project", required=True, help="GCP project the cluster belongs to")
 @click.option("--zone", required=True, help="Compute zone the cluster is located in")
