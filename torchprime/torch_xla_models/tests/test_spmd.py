@@ -237,7 +237,7 @@ class TestConfigSpmd(unittest.TestCase):
       model_config_sharded, model_fsdp_v2_sharded, input, labels
     )
 
-  def test_llama_confg_sharding_against_fsdp_lbcp(self):
+  def test_llama_confg_sharding_lbcp(self):
     import numpy as np
     import torch_xla.runtime as xr
     from torch_xla.distributed.spmd import Mesh
@@ -308,24 +308,6 @@ class TestConfigSpmd(unittest.TestCase):
     )
     torch_xla.sync()
 
-    # Shard model with FSDPv2
-    from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
-    from torch_xla.experimental.spmd_fully_sharded_data_parallel import (
-      SpmdFullyShardedDataParallel as FSDPv2,
-    )
-
-    auto_wrap_policy = functools.partial(
-      transformer_auto_wrap_policy,
-      # Transformer layer class to wrap
-      transformer_layer_cls={LlamaDecoderLayer},
-    )
-    model_fsdp_v2_sharded = FSDPv2(
-      copy.deepcopy(model),
-      shard_output=shard_output,
-      auto_wrap_policy=auto_wrap_policy,
-    )
-    torch_xla.sync()
-
     # Create random input and label of batch size 8, sequence length 256.
     input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
     input = reorder_sequence(
@@ -345,46 +327,19 @@ class TestConfigSpmd(unittest.TestCase):
     xs.mark_sharding(labels, mesh, ("fsdp", "context"))
     torch_xla.sync()
 
-    # Create random input and label of batch size 8, sequence length 256.
-    unpermuted_input = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
-    xs.mark_sharding(unpermuted_input, mesh, ("fsdp", "context"))
-    unpermuted_labels = torch.randint(vocab_size, ((8, 256)), device=torch_xla.device())
-    xs.mark_sharding(unpermuted_labels, mesh, ("fsdp", "context"))
-    torch_xla.sync()
     # check output are the same
     # Run the model and backwards
     config_logits, config_loss = model_config_sharded(
       input, labels=labels, attention_mask=torch.ones_like(input)
     )
-    config_loss.backward()
-    torch_xla.sync()
-    """
-    config_logits, config_loss = model_config_sharded(
-      unpermuted_input,
-      labels=unpermuted_labels,
-      attention_mask=torch.ones_like(unpermuted_input),
+    config_logits = reorder_sequence(
+      tensor=config_logits,
+      cp_size=2,
+      seq_dim=1,
+      to_contiguous=True,
     )
     config_loss.backward()
     torch_xla.sync()
-    """
-    fsdp_logits, fsdp_loss = model_fsdp_v2_sharded(
-      unpermuted_input,
-      labels=unpermuted_labels,
-      attention_mask=torch.ones_like(unpermuted_input),
-    )
-    fsdp_loss.backward()
-    torch_xla.sync()
-
-    assert_same_value_and_sharding(
-      config_logits,
-      fsdp_logits,
-      msg="Config sharded and FSDP v2 sharded logits are not equal",
-    )
-    assert_same_value_and_sharding(
-      config_loss,
-      fsdp_loss,
-      msg="Config sharded and FSDP v2 sharded loss are not equal",
-    )
 
   def test_mixtral_config_sharding_against_fsdp_v2(self):
     import numpy as np

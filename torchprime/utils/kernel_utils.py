@@ -102,10 +102,11 @@ def splash_attention_jax_wrapper(
       "Sharding along sequence dimension not allowed in tpu kernel attention"
     )
   block_sizes = splash_attention_kernel.BlockSizes(
-    block_q=min(global_block_q, seq_len),
+    # when q is sharded, we need ensure q block size is sharded by q_seq_shards
+    block_q=min(global_block_q, seq_len // q_seq_shards),
     block_kv=min(global_block_kv, key.shape[2]),
     block_kv_compute=min(global_block_kv_compute, key.shape[2]),
-    block_q_dkv=min(global_block_q_dkv, seq_len),
+    block_q_dkv=min(global_block_q_dkv, seq_len // q_seq_shards),
     block_kv_dkv=min(global_block_kv_dkv, key.shape[2]),
     block_kv_dkv_compute=min(global_block_kv_dkv_compute, seq_len),
     block_q_dq=None if global_use_fused_bwd_kernel else min(global_block_q_dq, seq_len),
@@ -156,7 +157,7 @@ def splash_attention_jax_wrapper(
 
   # could add support for head sharding when needed
   splash_kernel = wrap_splash_kernel(multi_head_mask)
-  named_sharding = jax.sharding.NamedSharding(mesh, P("context"))
+  named_sharding = jax.sharding.NamedSharding(mesh, P("tensor", "context"))
   axis_names_splash_kernel = splash_kernel.manual_sharding_spec(named_sharding)
 
   @functools.partial(
