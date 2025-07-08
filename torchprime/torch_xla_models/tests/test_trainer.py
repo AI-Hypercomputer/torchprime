@@ -377,7 +377,3 @@ def test_profiler_trace(monkeypatch, dummy_config):
   assert dummy_config.profile_end_step == 1
   assert calls["start"] == 1
   assert calls["stop"] == 1
-
-
-if __name__ == "__main__":
-  test_trainer_initialization()

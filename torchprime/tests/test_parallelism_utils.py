@@ -38,7 +38,6 @@ class TestParallelism_utils(unittest.TestCase):
   def test_loadBalancedCasualMask(self):
     mask_shape = (8, 8)
     lbMask = p_utils.LoadBalancedCausalMask(shape=mask_shape, cp_size=4)
-    # lbMask_expected = torch.tensor([0, 7, 1, 6, 2, 5, 3, 4], device=torch_xla.device())
     assert (lbMask.q_sequence == torch.tensor([0, 7, 1, 6, 2, 5, 3, 4])).all()
 
   def test_large_tensor(self):

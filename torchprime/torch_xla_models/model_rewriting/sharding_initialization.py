@@ -51,14 +51,9 @@ def setup_sharding_and_mesh(
   logger.info("Minibatch dataloading: %s", minibatch)
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/66): Test this for multislice
-  if cp_enabled(config):
-    input_sharding_spec = xs.ShardingSpec(
-      mesh, (("data", "fsdp"), "context"), minibatch=minibatch
-    )
-  else:
-    input_sharding_spec = xs.ShardingSpec(
-      mesh, (("data", "fsdp"), None), minibatch=minibatch
-    )
+  input_sharding_spec = xs.ShardingSpec(
+    mesh, (("data", "fsdp"), "context"), minibatch=minibatch
+  )
 
   # Annotate model weights and activations with sharding constraints to distribute
   # the training across devices following the SPMD paradigm.

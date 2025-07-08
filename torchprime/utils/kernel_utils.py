@@ -1,3 +1,8 @@
+"""
+Customized splash attention kernel wrapper. This is a varied copy
+from the torch/xla repository. (https://github.com/pytorch/xla)
+"""
+
 import functools
 
 import jax
@@ -167,9 +172,8 @@ def splash_attention_jax_wrapper(
       P(("data", "fsdp"), "tensor", "context", None),
       axis_names,
       axis_names,
-      # add support for segment id later
+      # segment id sharding
       segment_axis_names,
-      # None,
       axis_names_splash_kernel,
     ),
     out_specs=P(("data", "fsdp"), "tensor", "context", None),

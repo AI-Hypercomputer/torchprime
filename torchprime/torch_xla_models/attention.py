@@ -116,7 +116,7 @@ class AttentionModule(nn.Module):
             config=sa_config.to_json(),
             decoder_segment_ids=None,
             causal=False,
-            q_seq_shards=2,
+            q_seq_shards=cp_size,
           )[0]
         else:
           attn_output = splash_attention(
