@@ -90,7 +90,7 @@ class AttentionModule(nn.Module):
             seq_dim=2,
             to_contiguous=True,
           )
-          # Need to unpermuet decoder_segment_ids when decoder
+          # Need to unpermute decoder_segment_ids when decoder
           # segment ids is supported in torchprime
           q_len = query_states.shape[2]
           mask_shape = (q_len, q_len)

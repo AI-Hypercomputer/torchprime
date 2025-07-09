@@ -94,7 +94,7 @@ def dummy_config():
       "logging_steps": 1,
       "profile_step": -1,
       "profile_dir": "/tmp/profile",
-      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1},
+      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1, "context": 1},
       "dcn_mesh": {},
     }
   )

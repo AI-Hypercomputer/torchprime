@@ -1,54 +1,61 @@
+import pytest
 from omegaconf import OmegaConf
 
 from torchprime.torch_xla_models.utils.config_utils import config_vaidator
 
 
-def test_validate_context_parallelism():
-  # test correct config
-  ici_mesh = ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},)
-  config = custom_config_creator(
-    ici_mesh=ici_mesh, lb_cp_enabled=True, attention_kernel="splash_attention"
-  )
-  config_vaidator(config)
-
-  # test correct config when lb_cp is disabled
-  ici_mesh = ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},)
-  config = custom_config_creator(
-    ici_mesh=ici_mesh, lb_cp_enabled=False, attention_kernel="flash_attention"
-  )
-  config_vaidator(config)
-
-  # test incorrect config when wrong kernel is used
-  ici_mesh = ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},)
-  config = custom_config_creator(
-    ici_mesh=ici_mesh, lb_cp_enabled=True, attention_kernel="flash_attention"
-  )
-  try:
-    config_vaidator(config)
-    raise AssertionError("RuntimeError was not raised!")
-  except RuntimeError as e:
-    assert (
-      "Load balanced context parallelism is only supported with splash attention kernel"
-      in str(e)
-    )
-  except Exception:
-    raise AssertionError("RuntimeError was not raised!")  # noqa: B904
-
-  # test mismatch cp size
-  ici_mesh = ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},)
+@pytest.mark.parametrize(
+  "ici_mesh, lb_cp_enabled, attention_kernel, errorMsg, context",
+  [
+    (
+      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      True,
+      "splash_attention",
+      None,
+      2,
+    ),
+    (
+      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      False,
+      "flash_attention",
+      None,
+      2,
+    ),
+    (
+      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      True,
+      "flash_attention",
+      "Load balanced context parallelism is only supported with splash attention kernel",
+      2,
+    ),
+    (
+      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      False,
+      "flash_attention",
+      "ici context size should equal to model context parallelism size",
+      1,
+    ),
+  ],
+)
+def test_validate_context_parallelism(
+  ici_mesh, lb_cp_enabled, attention_kernel, errorMsg, context
+):
   config = custom_config_creator(
     ici_mesh=ici_mesh,
-    lb_cp_enabled=False,
-    attention_kernel="flash_attention",
-    context=1,
+    lb_cp_enabled=lb_cp_enabled,
+    attention_kernel=attention_kernel,
+    context=context,
   )
-  try:
+  if errorMsg is None:
     config_vaidator(config)
-    raise AssertionError("RuntimeError was not raised!")
-  except RuntimeError as e:
-    assert "ici context size should equal to model context parallelism size" in str(e)
-  except Exception:
-    raise AssertionError("RuntimeError was not raised!")  # noqa: B904
+  else:
+    try:
+      config_vaidator(config)
+      raise AssertionError("RuntimeError was not raised!")
+    except RuntimeError as e:
+      assert errorMsg in str(e)
+    except Exception:
+      raise AssertionError("RuntimeError was not raised!")  # noqa: B904
 
 
 def custom_config_creator(
