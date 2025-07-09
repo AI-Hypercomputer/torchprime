@@ -13,7 +13,6 @@ class MetricsLogger:
     self.hyperparameters = pprint.pformat(hyperparameters)  # Remember to escape this
 
   def log(self, epoch, metrics: dict):
-    hyperparameters_str = pprint.pformat(self.hyperparameters)
     with open(self.path, "a") as f:
       writer = csv.writer(f)
       if f.tell() == 0:
@@ -21,6 +20,6 @@ class MetricsLogger:
           ["run_name", "datetime", "hyperparameters", "epoch"] + list(metrics.keys())
         )
       writer.writerow(
-        [self.run_name, self.datetime, hyperparameters_str, epoch]
+        [self.run_name, self.datetime, self.hyperparameters, epoch]
         + list(metrics.values())
       )
