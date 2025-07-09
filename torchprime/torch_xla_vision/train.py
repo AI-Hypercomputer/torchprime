@@ -278,9 +278,7 @@ def train_prod(
   )
 
   num_channels = train.dataset[0][0].shape[0]
-  net, model_hash = _get_model(model_id, len(classes), num_channels, seed, device)
-
-  metrics_logger.add_tags({"model_hash": model_hash})
+  net, _ = _get_model(model_id, len(classes), num_channels, seed, device)
 
   net.freeze_backbone()
 

@@ -10,6 +10,8 @@ from torchprime.data import dataset as hf_dataset
 
 logger = logging.getLogger(__name__)
 
+_CELEBA_HF_DATASET_NAME = "flwrlabs/celeba"
+
 
 class HuggingFaceCelebA(data.Dataset):
   """A wrapper for the HuggingFace CelebA dataset to make it compatible with the vision trainer."""
@@ -26,7 +28,8 @@ class HuggingFaceCelebA(data.Dataset):
   def __getitem__(self, idx):
     item = self.hf_ds[idx]
     image = item["image"]
-    label = item["identity"]["label"]
+    # 'celeb_id' is the identity label, but it's 1-indexed, make it 0 index
+    label = item["celeb_id"] - 1
 
     if self.transforms:
       image = self.transforms(image)
@@ -59,11 +62,11 @@ def get_splits(seed: int = 42):
   # Load the official 'train' and 'test' splits for identity classification
   # from Hugging Face.
   hf_train_ds = hf_dataset.load_hf_or_json_dataset(
-    hf_dataset_name="flwrlabs/celeba",
+    hf_dataset_name=_CELEBA_HF_DATASET_NAME,
     split="train",
   )
   hf_test_ds = hf_dataset.load_hf_or_json_dataset(
-    hf_dataset_name="flwrlabs/celeba",
+    hf_dataset_name=_CELEBA_HF_DATASET_NAME,
     split="test",
   )
 
