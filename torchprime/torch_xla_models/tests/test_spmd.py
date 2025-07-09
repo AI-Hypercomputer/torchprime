@@ -2,7 +2,6 @@ import copy
 import functools
 import unittest
 
-import pytest
 import torch
 import torch_xla
 import torch_xla.distributed.spmd as xs
@@ -13,6 +12,7 @@ from torchprime.torch_xla_models.model.llama.model import LlamaDecoderLayer
 from torchprime.torch_xla_models.model.mixtral import MixtralForCausalLM
 from torchprime.torch_xla_models.model.mixtral.model import MixtralDecoderLayer
 from torchprime.utils.parallelism_utils import reorder_sequence
+from torchprime.utils.testutils import skip_unless_tpu
 
 
 class TestConfigSpmd(unittest.TestCase):
@@ -39,15 +39,11 @@ class TestConfigSpmd(unittest.TestCase):
     torch_xla.manual_seed(42)
     torch_xla._XLAC._xla_set_mat_mul_precision("highest")
 
+  @skip_unless_tpu()
   def test_llama_config_sharding_against_fsdp_v2(self):
     import numpy as np
     import torch_xla.runtime as xr
     from torch_xla.distributed.spmd import Mesh
-
-    # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
-    # work on PyTorch/XLA. We must run this on the TPU for now.
-    if xr.device_type() != "TPU":
-      pytest.skip("This test only works on TPU")
 
     super().setUp()
     vocab_size = 128256
@@ -137,15 +133,11 @@ class TestConfigSpmd(unittest.TestCase):
       model_config_sharded, model_fsdp_v2_sharded, input, labels
     )
 
+  @skip_unless_tpu()
   def test_llama_confg_sharding_against_fsdp_cp(self):
     import numpy as np
     import torch_xla.runtime as xr
     from torch_xla.distributed.spmd import Mesh
-
-    # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
-    # work on PyTorch/XLA. We must run this on the TPU for now.
-    if xr.device_type() != "TPU":
-      pytest.skip("This test only works on TPU")
 
     super().setUp()
     vocab_size = 128256
@@ -237,15 +229,11 @@ class TestConfigSpmd(unittest.TestCase):
       model_config_sharded, model_fsdp_v2_sharded, input, labels
     )
 
+  @skip_unless_tpu()
   def test_llama_confg_sharding_lbcp(self):
     import numpy as np
     import torch_xla.runtime as xr
     from torch_xla.distributed.spmd import Mesh
-
-    # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
-    # work on PyTorch/XLA. We must run this on the TPU for now.
-    if xr.device_type() != "TPU":
-      pytest.skip("This test only works on TPU")
 
     super().setUp()
     vocab_size = 128256
@@ -341,15 +329,11 @@ class TestConfigSpmd(unittest.TestCase):
     config_loss.backward()
     torch_xla.sync()
 
+  @skip_unless_tpu()
   def test_mixtral_config_sharding_against_fsdp_v2(self):
     import numpy as np
     import torch_xla.runtime as xr
     from torch_xla.distributed.spmd import Mesh
-
-    # TODO(https://github.com/pytorch/xla/issues/8063): `xla_force_host_platform_device_count` doesn't
-    # work on PyTorch/XLA. We must run this on the TPU for now.
-    if xr.device_type() != "TPU":
-      pytest.skip("This test only works on TPU")
 
     super().setUp()
     vocab_size = 32000
