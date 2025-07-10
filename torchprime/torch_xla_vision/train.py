@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_dataloaders(
-  train_batch_size: int, test_batch_size: int, num_workers: int
+  train_batch_size: int,
+  test_batch_size: int,
+  num_workers: int,
+  label_attribute: str,
 ) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, list[int]]:
   """
   Initializes and returns data loaders for the training and test sets.
@@ -28,12 +31,13 @@ def _get_dataloaders(
       train_batch_size: The batch size for the training DataLoader.
       test_batch_size: The batch size for the test DataLoader.
       num_workers: The number of worker processes for data loading.
+      label_attribute: The attribute to use for classification.
 
   Returns:
       A tuple containing the training DataLoader, test DataLoader, and a list of
       class labels.
   """
-  train_ds, test_ds = data.get_splits()
+  train_ds, test_ds = data.get_splits(label_attribute=label_attribute)
 
   train_loader = torch.utils.data.DataLoader(
     train_ds,
@@ -175,7 +179,7 @@ def log_stats(epoch, losses, net, test, criterion, metrics, device, metrics_logg
   metrics_logger.log(epoch, metrics_to_log)
 
 
-def train_simple(
+def trainer(
   lr: float,
   seed: int,
   device: torch.device,
@@ -185,75 +189,10 @@ def train_simple(
   test_batch_size: int,
   num_workers: int,
   model_id: str,
+  label_attribute: str,
 ):
   """
-  A simple training loop with a basic SGD optimizer.
-
-  Args:
-      lr: Learning rate.
-      seed: Random seed for reproducibility.
-      device: The device to train on (e.g., 'cuda', 'xla').
-      compile_fn: The function to compile the training step (e.g., torch.compile).
-      epochs: Number of training epochs.
-      train_batch_size: Batch size for the training set.
-      test_batch_size: Batch size for the test set.
-      num_workers: Number of worker processes for data loading.
-      model_id: The model to train (e.g., 'resnet18').
-  """
-  metrics_logger = metrics_log.MetricsLogger(
-    f"simple_{seed}", {"lr": lr, "device": device.type}
-  )
-
-  torch.manual_seed(seed)
-
-  train, test, classes = _get_dataloaders(
-    train_batch_size, test_batch_size, num_workers
-  )
-
-  num_channels = train.dataset[0][0].shape[0]
-  net, _ = _get_model(model_id, len(classes), num_channels, seed, device)
-
-  criterion = torch.nn.CrossEntropyLoss()
-  optimizer = torch.optim.SGD(net.parameters(), lr=lr)
-
-  train_step_compiled = compile_fn(train_step)
-
-  metrics = {
-    "accuracy_top1": torcheval.metrics.MulticlassAccuracy(
-      num_classes=len(classes), k=1
-    ),
-  }
-
-  for epoch in range(1, epochs + 1):
-    net.train()
-
-    losses = []
-
-    use_tqdm = sys.stdout.isatty()
-    pbar = tqdm(train, disable=not use_tqdm)
-    for batch in pbar:
-      inputs, labels = batch[0].to(device), batch[1].to(device)
-      loss = train_step_compiled(net, inputs, labels, criterion, optimizer)
-      losses.append(loss.item())
-      pbar.set_postfix({"loss": loss.item()})
-
-    # Print statistics
-    log_stats(epoch, losses, net, test, criterion, metrics, device, metrics_logger)
-
-
-def train_prod(
-  lr: float,
-  seed: int,
-  device: torch.device,
-  compile_fn,
-  epochs: int,
-  train_batch_size: int,
-  test_batch_size: int,
-  num_workers: int,
-  model_id: str,
-):
-  """
-  A more production-like training loop with AdamW, LR scheduling, and a
+  A binary image classification trainer with AdamW, LR scheduling, and a
   fine-tuning strategy (freezing/unfreezing the backbone).
 
   Args:
@@ -266,6 +205,7 @@ def train_prod(
       test_batch_size: Batch size for the test set.
       num_workers: Number of worker processes for data loading.
       model_id: The model to train (e.g., 'resnet18').
+      label_attribute: The attribute to use for classification.
   """
   metrics_logger = metrics_log.MetricsLogger(
     f"prod_{seed}", {"lr": lr, "device": device.type, "model": model_id}
@@ -274,7 +214,7 @@ def train_prod(
   torch.manual_seed(seed)
 
   train, test, classes = _get_dataloaders(
-    train_batch_size, test_batch_size, num_workers
+    train_batch_size, test_batch_size, num_workers, label_attribute=label_attribute
   )
 
   num_channels = train.dataset[0][0].shape[0]
@@ -333,6 +273,7 @@ def main(
   test_batch_size: int = 4096,
   num_workers: int = 16,
   use_torch_compile: bool = False,
+  label_attribute: str = "Bags_Under_Eyes",
 ):
   """
   Main entry point for training a model on the CelebA dataset.
@@ -350,6 +291,7 @@ def main(
       test_batch_size: Batch size for the test set.
       num_workers: Number of worker processes for data loading.
       use_torch_compile: Whether to use torch.compile on CUDA.
+      label_attribute: The attribute to use for classification.
   """
   if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -383,12 +325,11 @@ def main(
     "train_batch_size": train_batch_size,
     "test_batch_size": test_batch_size,
     "num_workers": num_workers,
+    "label_attribute": label_attribute,
   }
 
-  if run_type == "simple":
-    train_simple(**common_args)
-  else:
-    train_prod(**common_args)
+
+  trainer(**common_args)
 
 
 if __name__ == "__main__":
