@@ -328,7 +328,6 @@ def main(
     "label_attribute": label_attribute,
   }
 
-
   trainer(**common_args)
 
 
