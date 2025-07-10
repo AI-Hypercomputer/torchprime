@@ -8,28 +8,28 @@ from torchprime.torch_xla_models.utils.config_utils import config_vaidator
   "ici_mesh, lb_cp_enabled, attention_kernel, errorMsg, context",
   [
     (
-      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      {"data": 1, "fsdp": 1, "tensor": 1, "context": 2},
       True,
       "splash_attention",
       None,
       2,
     ),
     (
-      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      {"data": 1, "fsdp": 1, "tensor": 1, "context": 2},
       False,
       "flash_attention",
       None,
       2,
     ),
     (
-      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      {"data": 1, "fsdp": 1, "tensor": 1, "context": 2},
       True,
       "flash_attention",
       "Load balanced context parallelism is only supported with splash attention kernel",
       2,
     ),
     (
-      ({"data": 1, "fsdp": 1, "tensor": 1, "context": 2},),
+      {"data": 1, "fsdp": 1, "tensor": 1, "context": 2},
       False,
       "flash_attention",
       "ici context size should equal to model context parallelism size",
@@ -73,7 +73,7 @@ def custom_config_creator(
         },
         "sharding": {"type": "spmd"},
         "load_balance_cp": lb_cp_enabled,
-        "context": ici_mesh[0]["context"],
+        "context": context,
       },
       "data": {"name": "dummy_dataset", "block_size": 4},
       "task": {
