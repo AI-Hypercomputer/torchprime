@@ -36,7 +36,7 @@ class TestParallelism_utils(unittest.TestCase):
     )
     assert (res == output_expected).all()
 
-  def test_loadBalancedCasualMask(self):
+  def test_load_balanced_casual_mask(self):
     mask_shape = (8, 8)
     lbMask = p_utils.LoadBalancedCausalMask(shape=mask_shape, cp_size=4)
     assert (lbMask.q_sequence == torch.tensor([0, 7, 1, 6, 2, 5, 3, 4])).all()

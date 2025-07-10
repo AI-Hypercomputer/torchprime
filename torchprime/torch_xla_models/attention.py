@@ -11,11 +11,8 @@ from torch_xla.experimental.splash_attention import (
   splash_attention,
 )
 
-from torchprime.utils.kernel_utils import tpu_splash_attention_jax_call_wrapper
-from torchprime.utils.parallelism_utils import (
-  LoadBalancedCausalMask,
-  reorder_sequence,
-)
+import torchprime.utils.kernel_utils as kernel_utils
+import torchprime.utils.parallelism_utils as parallelism_utils
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -78,13 +75,13 @@ class AttentionModule(nn.Module):
         if self.config.load_balance_cp:
           cp_size = self.config.context
           # when CP and lbcp is enabled, we need to unpermute the kv in each attention layer
-          key_states = reorder_sequence(
+          key_states = parallelism_utils.reorder_sequence(
             tensor=key_states,
             cp_size=cp_size,
             seq_dim=2,
             to_contiguous=True,
           )
-          value_states = reorder_sequence(
+          value_states = parallelism_utils.reorder_sequence(
             tensor=value_states,
             cp_size=cp_size,
             seq_dim=2,
@@ -94,7 +91,9 @@ class AttentionModule(nn.Module):
           # segment ids is supported in torchprime
           q_len = query_states.shape[2]
           mask_shape = (q_len, q_len)
-          custom_mask = LoadBalancedCausalMask(shape=mask_shape, cp_size=cp_size)
+          custom_mask = parallelism_utils.LoadBalancedCausalMask(
+            shape=mask_shape, cp_size=cp_size
+          )
 
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
@@ -108,7 +107,7 @@ class AttentionModule(nn.Module):
         query_states /= math.sqrt(head_dim)
 
         if self.config.load_balance_cp:
-          attn_output = tpu_splash_attention_jax_call_wrapper(
+          attn_output = kernel_utils.tpu_splash_attention_jax_call_wrapper(
             mask=custom_mask,
             query=query_states,
             key=key_states,
