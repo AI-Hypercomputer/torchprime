@@ -30,14 +30,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "fire==0.7.0",
     "ruff~=0.11.4",
     "pytest~=8.3.4",
     "pytest-forked~=1.6.0",
     "toml~=0.10.2",
     "dataclasses-json~=0.6.7",
     "watchdog~=6.0.0",
-    "gdown~=5.2.0", # For torchvision CelebA dataset download
     "pathspec~=0.12.1",
     "pyyaml~=6.0.2",
     "rich~=14.0.0",

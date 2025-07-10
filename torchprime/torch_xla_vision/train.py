@@ -5,10 +5,11 @@ import os
 import pprint
 import sys
 
-import fire
+import hydra
 import torch
 import torcheval.metrics
 import transformers
+from omegaconf import DictConfig
 from tqdm import tqdm
 
 from torchprime import models
@@ -180,50 +181,40 @@ def log_stats(epoch, losses, net, test, criterion, metrics, device, metrics_logg
 
 
 def trainer(
-  lr: float,
-  seed: int,
+  config: DictConfig,
   device: torch.device,
   compile_fn,
-  epochs: int,
-  train_batch_size: int,
-  test_batch_size: int,
-  num_workers: int,
-  model_id: str,
-  label_attribute: str,
 ):
   """
   A binary image classification trainer with AdamW, LR scheduling, and a
   fine-tuning strategy (freezing/unfreezing the backbone).
 
   Args:
-      lr: Learning rate.
-      seed: Random seed for reproducibility.
+      config: The hydra configuration.
       device: The device to train on (e.g., 'cuda', 'xla').
       compile_fn: The function to compile the training step (e.g., torch.compile).
-      epochs: Number of training epochs.
-      train_batch_size: Batch size for the training set.
-      test_batch_size: Batch size for the test set.
-      num_workers: Number of worker processes for data loading.
-      model_id: The model to train (e.g., 'resnet18').
-      label_attribute: The attribute to use for classification.
   """
   metrics_logger = metrics_log.MetricsLogger(
-    f"prod_{seed}", {"lr": lr, "device": device.type, "model": model_id}
+    f"prod_{config.seed}",
+    {"lr": config.lr, "device": device.type, "model": config.model_id},
   )
 
-  torch.manual_seed(seed)
+  torch.manual_seed(config.seed)
 
   train, test, classes = _get_dataloaders(
-    train_batch_size, test_batch_size, num_workers, label_attribute=label_attribute
+    config.train_batch_size,
+    config.test_batch_size,
+    config.num_workers,
+    label_attribute=config.label_attribute,
   )
 
   num_channels = train.dataset[0][0].shape[0]
-  net, _ = _get_model(model_id, len(classes), num_channels, seed, device)
+  net, _ = _get_model(config.model_id, len(classes), num_channels, config.seed, device)
 
   net.freeze_backbone()
 
   criterion = torch.nn.CrossEntropyLoss()
-  optimizer = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=0.001)
+  optimizer = torch.optim.AdamW(net.parameters(), lr=config.lr, weight_decay=0.001)
 
   lr_scheduler = transformers.get_cosine_schedule_with_warmup(
     optimizer,
@@ -237,7 +228,7 @@ def trainer(
     "accuracy_top1": torcheval.metrics.MulticlassAccuracy(num_classes=len(classes), k=1)
   }
 
-  for epoch in range(1, epochs + 1):
+  for epoch in range(1, config.epochs + 1):
     net.train()
 
     losses = []
@@ -253,49 +244,30 @@ def trainer(
 
     if epoch == 5:
       net.unfreeze_all()
-      optimizer = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=0.001)
+      optimizer = torch.optim.AdamW(net.parameters(), lr=config.lr, weight_decay=0.001)
       lr_scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=len(train) * 1,
-        num_training_steps=len(train) * (epochs - 5),
+        num_training_steps=len(train) * (config.epochs - 5),
       )
 
     log_stats(epoch, losses, net, test, criterion, metrics, device, metrics_logger)
 
 
-def main(
-  run_type: str = "simple",
-  lr: float = 0.1,
-  seed: int = 42,
-  model_id: str = "resnet18",
-  epochs: int = 25,
-  train_batch_size: int = 2048,
-  test_batch_size: int = 4096,
-  num_workers: int = 16,
-  use_torch_compile: bool = False,
-  label_attribute: str = "Bags_Under_Eyes",
-):
+@hydra.main(version_base=None, config_path="configs", config_name="default")
+def main(config: DictConfig):
   """
   Main entry point for training a model on the CelebA dataset.
 
   Sets up the device and compilation function, then calls the appropriate
-  training function based on `run_type`.
+  training function.
 
   Args:
-      run_type: Type of training run ('simple' or 'prod').
-      lr: Learning rate.
-      seed: Random seed for reproducibility.
-      model_id: The model to train (e.g., 'resnet18').
-      epochs: Number of training epochs.
-      train_batch_size: Batch size for the training set.
-      test_batch_size: Batch size for the test set.
-      num_workers: Number of worker processes for data loading.
-      use_torch_compile: Whether to use torch.compile on CUDA.
-      label_attribute: The attribute to use for classification.
+      config: The hydra configuration.
   """
   if torch.cuda.is_available():
     device = torch.device("cuda")
-    if use_torch_compile:
+    if config.use_torch_compile:
       logger.info("Using torch.compile on CUDA.")
       compile_fn = torch.compile
     else:
@@ -312,24 +284,11 @@ def main(
     compile_fn = torch_xla.compile
 
   logger.info(
-    f"Running {run_type} training for model {model_id} with lr={lr}, seed={seed}, device={device}"
+    f"Running training for model {config.model_id} with lr={config.lr}, seed={config.seed}, device={device}"
   )
 
-  common_args = {
-    "lr": lr,
-    "seed": seed,
-    "device": device,
-    "compile_fn": compile_fn,
-    "model_id": model_id,
-    "epochs": epochs,
-    "train_batch_size": train_batch_size,
-    "test_batch_size": test_batch_size,
-    "num_workers": num_workers,
-    "label_attribute": label_attribute,
-  }
-
-  trainer(**common_args)
+  trainer(config, device, compile_fn)
 
 
 if __name__ == "__main__":
-  fire.Fire(main)
+  main()
