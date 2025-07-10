@@ -2,10 +2,13 @@ import copy
 import functools
 import unittest
 
+import numpy as np
 import torch
 import torch_xla
 import torch_xla.distributed.spmd as xs
+import torch_xla.runtime as xr
 from omegaconf import OmegaConf
+from torch_xla.distributed.spmd import Mesh
 
 from torchprime.torch_xla_models.model.llama import LlamaForCausalLM
 from torchprime.torch_xla_models.model.llama.model import LlamaDecoderLayer
@@ -27,8 +30,6 @@ class TestConfigSpmd(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls):
-    import torch_xla.runtime as xr
-
     xr.use_spmd()
 
     import jax
@@ -41,10 +42,6 @@ class TestConfigSpmd(unittest.TestCase):
 
   @skip_unless_tpu()
   def test_llama_config_sharding_against_fsdp_v2(self):
-    import numpy as np
-    import torch_xla.runtime as xr
-    from torch_xla.distributed.spmd import Mesh
-
     super().setUp()
     vocab_size = 128256
     torchprime_config = OmegaConf.create(
@@ -135,10 +132,6 @@ class TestConfigSpmd(unittest.TestCase):
 
   @skip_unless_tpu()
   def test_llama_confg_sharding_against_fsdp_cp(self):
-    import numpy as np
-    import torch_xla.runtime as xr
-    from torch_xla.distributed.spmd import Mesh
-
     super().setUp()
     vocab_size = 128256
     torchprime_config = OmegaConf.create(
@@ -169,6 +162,8 @@ class TestConfigSpmd(unittest.TestCase):
     # Define mesh for test
     num_devices = xr.global_runtime_device_count()
     assert num_devices > 1, "The TPU VM should have more than 1 device for SPMD testing"
+    # since the last dimension is context (as 2), so the mesh shape will automatically
+    # have the last one as 2 and the second dimension (fsdp sharding) as num_devices//2
     mesh_shape = (1, num_devices // 2, 1, 1, 2)
     device_ids = np.array(range(num_devices))
     mesh = Mesh(device_ids, mesh_shape, ("data", "fsdp", "tensor", "expert", "context"))
@@ -231,10 +226,6 @@ class TestConfigSpmd(unittest.TestCase):
 
   @skip_unless_tpu()
   def test_llama_confg_sharding_lbcp(self):
-    import numpy as np
-    import torch_xla.runtime as xr
-    from torch_xla.distributed.spmd import Mesh
-
     super().setUp()
     vocab_size = 128256
     torchprime_config = OmegaConf.create(
@@ -331,10 +322,6 @@ class TestConfigSpmd(unittest.TestCase):
 
   @skip_unless_tpu()
   def test_mixtral_config_sharding_against_fsdp_v2(self):
-    import numpy as np
-    import torch_xla.runtime as xr
-    from torch_xla.distributed.spmd import Mesh
-
     super().setUp()
     vocab_size = 32000
     torchprime_config = OmegaConf.create(

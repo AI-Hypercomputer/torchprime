@@ -39,6 +39,10 @@ def tpu_splash_attention_jax_call_wrapper(
   q_seq_shards: int = 1,
   grad_output: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+  """
+  Wrapper for calling Jax splash attention kernel with
+  splashAttentionConfig. Currently only support forward pass
+  """
   # return tuple to fit for the output num for both fwd and bwd
   query = query.contiguous()
   key = key.contiguous()
@@ -77,6 +81,9 @@ def splash_attention_jax_wrapper(
   attn_logits_soft_cap,
   q_seq_shards,
 ):
+  """
+  Wrapper for splash attention kernel with more customized input
+  """
   mesh = Mesh.from_str(config.mesh).get_jax_mesh()
   # input q,k,v shape: [batch, #head, seq_len, head_dim]
   if decoder_segment_ids is not None and not decoder_segment_ids.shape:
