@@ -138,8 +138,8 @@ def eval(net, loader, criterion, metrics, device) -> list[float]:
 
   with torch.no_grad():
     losses = []
-    for batch in loader:
-      image, label = batch[0].to(device), batch[1].to(device)
+    for image, label in loader:
+      image, label = image.to(device), label.to(device)
       output = net(image)
       loss = criterion(output, label)
       losses.append(loss.item())  # Barrier - obviates mark_step.
@@ -194,6 +194,9 @@ def trainer(
       device: The device to train on (e.g., 'cuda', 'xla').
       compile_fn: The function to compile the training step (e.g., torch.compile).
   """
+  if config.unfreeze_epoch < 0:
+    raise ValueError("unfreeze_epoch cannot be negative. Set to 0 to disable.")
+
   metrics_logger = metrics_log.MetricsLogger(
     f"prod_{config.seed}",
     {"lr": config.lr, "device": device.type, "model": config.model_id},
@@ -219,7 +222,8 @@ def trainer(
   lr_scheduler = transformers.get_cosine_schedule_with_warmup(
     optimizer,
     num_warmup_steps=len(train) * 1,
-    num_training_steps=len(train) * 5,
+    # The initial scheduler runs until unfreeze_epoch if enabled, otherwise for all epochs.
+    num_training_steps=len(train) * (config.unfreeze_epoch or config.epochs),
   )
 
   train_step_compiled = compile_fn(train_step)
@@ -235,20 +239,21 @@ def trainer(
 
     use_tqdm = sys.stdout.isatty()
     pbar = tqdm(train, disable=not use_tqdm, desc=f"Epoch {epoch}")
-    for batch in pbar:
-      inputs, labels = batch[0].to(device), batch[1].to(device)
+    for inputs, labels in pbar:
+      inputs, labels = inputs.to(device), labels.to(device)
       loss = train_step_compiled(net, inputs, labels, criterion, optimizer)
       losses.append(loss.item())
       lr_scheduler.step()
       pbar.set_postfix({"loss": loss.item()})
 
-    if epoch == 5:
+    if config.unfreeze_epoch and epoch == config.unfreeze_epoch:
+      logger.info(f"Unfreezing backbone at epoch {config.unfreeze_epoch}")
       net.unfreeze_all()
       optimizer = torch.optim.AdamW(net.parameters(), lr=config.lr, weight_decay=0.001)
       lr_scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer,
         num_warmup_steps=len(train) * 1,
-        num_training_steps=len(train) * (config.epochs - 5),
+        num_training_steps=len(train) * (config.epochs - config.unfreeze_epoch),
       )
 
     log_stats(epoch, losses, net, test, criterion, metrics, device, metrics_logger)
