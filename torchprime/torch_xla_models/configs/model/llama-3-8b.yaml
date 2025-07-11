@@ -24,6 +24,3 @@ attention_bias: false
 # choose attention_kernel from: [flash_attention, splash_attention, null]
 attention_kernel: flash_attention
 rope_theta: 500000.0
-# This enables load balancing with context parallelism
-load_balance_cp: False
-context: 1

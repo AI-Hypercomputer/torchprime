@@ -21,7 +21,7 @@ def config_vaidator(config: dict):
       "Load balanced context parallelism is only supported with splash attention kernel"
     )
 
-  if cp_enabled:
+  if cp_enabled(config):
     if "context" not in config.model:
       raise RuntimeError("Specify context parallelism size in config.model as well")
     elif config.model.context != config.ici_mesh.context:
