@@ -1,7 +1,6 @@
 """Trainers for model."""
 
 import logging
-import os
 import pprint
 import sys
 
