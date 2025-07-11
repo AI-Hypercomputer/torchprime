@@ -187,7 +187,7 @@ jobs:
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            model=llama-3-8b \
+            model=llama-3-8b-cp \
             model/sharding=llama-fsdp-tp-cp \
             dataset=wikitext \
             task=train \
