@@ -224,7 +224,7 @@ def test_moe_layer_from_model(fixture):
   # Run original, OOM-prone version
   original_out, original_scores = moe_layer.forward_original(hidden_states)
 
-  # Run the new, efficient version
+  # Run the new, naive slow version
   efficient_out, efficient_scores = moe_layer.forward(hidden_states)
 
   assert (

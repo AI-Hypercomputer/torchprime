@@ -14,9 +14,9 @@ model.layers.*.self_attn.v_proj.weight: [tensor, fsdp]
 model.layers.*.self_attn.o_proj.weight: [fsdp, tensor]
 
 # num_experts, hidden_size, 2 * intermediate_size
-model.layers.*.feed_forward.experts.gate_up_proj: [expert, tensor, fsdp]  
+model.layers.*.feed_forward.experts.gate_up_proj: [null, tensor, fsdp]  
 # num_experts, expert_dim, hidden_size
-model.layers.*.feed_forward.experts.down_proj:  [expert, fsdp, tensor]
+model.layers.*.feed_forward.experts.down_proj:  [null, fsdp, tensor]
 # hidden_size, num_experts
 model.layers.*.feed_forward.router.weight: [fsdp, null]
 # hidden_size, intermediate_size    
