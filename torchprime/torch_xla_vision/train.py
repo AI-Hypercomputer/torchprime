@@ -22,8 +22,7 @@ def _get_dataloaders(
   train_batch_size: int,
   test_batch_size: int,
   num_workers: int,
-  label_attribute: str,
-) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, list[int]]:
+) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, int]:
   """
   Initializes and returns data loaders for the training and test sets.
 
@@ -31,13 +30,12 @@ def _get_dataloaders(
       train_batch_size: The batch size for the training DataLoader.
       test_batch_size: The batch size for the test DataLoader.
       num_workers: The number of worker processes for data loading.
-      label_attribute: The attribute to use for classification.
 
   Returns:
-      A tuple containing the training DataLoader, test DataLoader, and a list of
-      class labels.
+      A tuple containing the training DataLoader, test DataLoader, and the number
+      of classes.
   """
-  train_ds, test_ds = data.get_splits(label_attribute=label_attribute)
+  train_ds, test_ds = data.get_splits()
 
   train_loader = torch.utils.data.DataLoader(
     train_ds,
@@ -59,7 +57,7 @@ def _get_dataloaders(
     persistent_workers=True,
     drop_last=False,
   )
-  return train_loader, test_loader, train_ds.classes
+  return train_loader, test_loader, train_ds.num_classes
 
 
 def _get_model(
@@ -203,15 +201,12 @@ def trainer(
 
   torch.manual_seed(config.seed)
 
-  train, test, classes = _get_dataloaders(
-    config.train_batch_size,
-    config.test_batch_size,
-    config.num_workers,
-    label_attribute=config.label_attribute,
+  train, test, num_classes = _get_dataloaders(
+    config.train_batch_size, config.test_batch_size, config.num_workers
   )
 
   num_channels = train.dataset[0][0].shape[0]
-  net, _ = _get_model(config.model_id, len(classes), num_channels, config.seed, device)
+  net, _ = _get_model(config.model_id, num_classes, num_channels, config.seed, device)
 
   net.freeze_backbone()
 
@@ -228,7 +223,7 @@ def trainer(
   train_step_compiled = compile_fn(train_step)
 
   metrics = {
-    "accuracy_top1": torcheval.metrics.MulticlassAccuracy(num_classes=len(classes), k=1)
+    "accuracy_top1": torcheval.metrics.MulticlassAccuracy(num_classes=num_classes, k=1)
   }
 
   for epoch in range(1, config.epochs + 1):
