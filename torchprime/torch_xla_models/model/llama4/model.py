@@ -186,7 +186,6 @@ class Llama4TextMoe(nn.Module):
 
     # Dimensions: batch * seq_len, num_experts
     router_logits = self.router(hidden_states_flat)
-    tokens_per_expert = batch * seq_len
 
     # Find the top K experts and their scores for each token
     # router_top_value, router_indices: [batch * seq_len, top_k]

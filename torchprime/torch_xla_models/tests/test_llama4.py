@@ -225,26 +225,26 @@ def test_moe_layer_from_model(fixture):
   original_out, original_scores = moe_layer.forward_original(hidden_states)
 
   # Run the new, naive slow version
-  efficient_out, efficient_scores = moe_layer.forward(hidden_states)
+  out, scores = moe_layer.forward(hidden_states)
 
   assert (
-    original_out.size() == efficient_out.size()
+    original_out.size() == out.size()
   ), "Dimensions for outputs tensors don't match"
   assert (
-    original_scores.size() == efficient_scores.size()
+    original_scores.size() == scores.size()
   ), "Dimensions for scores don't match"
 
   # Assert
   torch.testing.assert_close(
     original_out,
-    efficient_out,
+    out,
     atol=1e-3,
     rtol=1e-6,
     msg="MoE layer output does not match original logic",
   )
   torch.testing.assert_close(
     original_scores,
-    efficient_scores,
+    scores,
     atol=1e-3,
     rtol=1e-6,
     msg="MoE layer scores do not match original logic",
