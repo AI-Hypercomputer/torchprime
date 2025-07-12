@@ -227,12 +227,8 @@ def test_moe_layer_from_model(fixture):
   # Run the new, naive slow version
   out, scores = moe_layer.forward(hidden_states)
 
-  assert (
-    original_out.size() == out.size()
-  ), "Dimensions for outputs tensors don't match"
-  assert (
-    original_scores.size() == scores.size()
-  ), "Dimensions for scores don't match"
+  assert original_out.size() == out.size(), "Dimensions for outputs tensors don't match"
+  assert original_scores.size() == scores.size(), "Dimensions for scores don't match"
 
   # Assert
   torch.testing.assert_close(
