@@ -72,7 +72,7 @@ class AttentionModule(nn.Module):
         assert xs.get_global_mesh() is not None, (
           "Global mesh is required for Splash Attention"
         )
-        if self.config.load_balance_cp:
+        if "load_balance_cp" in self.config and self.config.load_balance_cp:
           cp_size = self.config.context
           # when CP and lbcp is enabled, we need to unpermute the kv in each attention layer
           key_states = parallelism_utils.reorder_sequence(
