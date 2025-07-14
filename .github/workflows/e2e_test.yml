@@ -340,6 +340,10 @@ jobs:
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       step_time_lower_bound: ${{ matrix.config.lower_bound }}
       step_time_upper_bound: ${{ matrix.config.upper_bound }}
-      target_loss: ${{ matrix.config.target_loss }}
-      loss_tolerance: ${{ matrix.config.loss_tolerance }}
+      # Optional loss validation settings. When undefined in the matrix,
+      # these fields expand to an empty string which causes a workflow
+      # syntax error. Default to ``0`` so the reusable workflow can
+      # skip the loss check when no value is provided.
+      target_loss: ${{ matrix.config.target_loss || 0 }}
+      loss_tolerance: ${{ matrix.config.loss_tolerance || 0 }}
     secrets: inherit
