@@ -194,7 +194,7 @@ jobs:
             task.global_batch_size=2 \
             task.max_steps=15 \
             task.lr_scheduler.type=constant \
-            ici_mesh.fsdp=2 \
+            ici_mesh.fsdp=4 \
             profile_start_step=3
 
       - name: Run Mixtral 8x7B

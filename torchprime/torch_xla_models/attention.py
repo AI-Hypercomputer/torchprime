@@ -106,7 +106,7 @@ class AttentionModule(nn.Module):
               setattr(sa_config, key, value)
         query_states /= math.sqrt(head_dim)
 
-        if self.config.load_balance_cp:
+        if "load_balance_cp" in self.config and self.config.load_balance_cp:
           attn_output = kernel_utils.tpu_splash_attention_jax_call_wrapper(
             mask=custom_mask,
             query=query_states,
