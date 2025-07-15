@@ -11,6 +11,8 @@ the best sharding strategies and how to diagnose out-of-memory (OOM) errors.
 
 [How is training performance measured](./metrics.md)
 
+[How to fine-tune a pretrained model (SFT)](./sft.md)
+
 [How to view metrics on tensorboard](./tensorboard.md)
 
 <!-- TODO: how to check model sharding once configured -->
