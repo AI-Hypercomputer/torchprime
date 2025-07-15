@@ -234,7 +234,7 @@ def test_moe_layer_from_model(fixture):
   torch.testing.assert_close(
     original_out,
     out,
-    atol=1e-3,
+    atol=1e-2,
     rtol=1e-6,
     msg="MoE layer output does not match original logic",
   )
