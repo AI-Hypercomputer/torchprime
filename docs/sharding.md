@@ -33,7 +33,7 @@ https://github.com/AI-Hypercomputer/torchprime/blob/b123c0cc157c28f32a0f6588f19e
 > automatically. In contrast to eager PyTorch, the XLA compiler decides the best
 > weight prefetching schedules.
 
-## How to shard weights
+## How to shard weights 
 
 To shard a particular weight in the model, simply spell out its name as it
 appears in the [state dict][state-dict], followed by the
