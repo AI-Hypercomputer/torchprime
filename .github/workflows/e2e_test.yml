@@ -191,7 +191,7 @@ jobs:
             model/sharding=llama-fsdp-tp-cp \
             dataset=wikitext \
             task=train \
-            task.global_batch_size=2 \
+            task.global_batch_size=4 \
             task.max_steps=15 \
             task.lr_scheduler.type=constant \
             ici_mesh.fsdp=4 \
