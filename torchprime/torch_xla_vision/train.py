@@ -277,6 +277,11 @@ def main(config: DictConfig):
   else:
     import torch_xla
 
+    # Initialize the XLA compilation cache. This saves compiled graphs to disk,
+    # which significantly speeds up the startup time for subsequent runs.
+    # https://docs.pytorch.org/xla/release/r2.7/learn/pytorch-on-xla-devices.html#compilation-caching
+    torch_xla.runtime.initialize_cache("/tmp/xla_cache", readonly=False)
+
     device = torch.device("xla")
     compile_fn = torch_xla.compile
 
