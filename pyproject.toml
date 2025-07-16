@@ -40,6 +40,7 @@ dev = [
     "pyyaml~=6.0.2",
     "rich~=14.0.0",
     "scipy~=1.15.2",
+    "torcheval~=0.0.7",
     "tomli~=2.2.1",
     "xpk@git+https://github.com/AI-Hypercomputer/xpk@e52a5f4cd56ad50aeab06d55100cf4d3abc4c2c8"
 ]
