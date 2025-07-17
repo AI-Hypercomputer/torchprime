@@ -62,14 +62,6 @@ jobs:
           else
             echo "value=" >> "$GITHUB_OUTPUT"
           fi
-      - name: Get PyTorchXLA version
-        id: get-pytorch-xla-version
-        container:
-          image: ${{ github.event.inputs.docker_url }}
-        run: |
-          python -c "import torch_xla; f = open('torch_xla_version.txt', 'w'); f.write(torch_xla.version.__version__); f.close()"
-          echo "result=$(cat torch_xla_version.txt)" >> $GITHUB_OUTPUT
-
       # Launch training workloads.
 
       - name: Run Llama 3.0 8B
@@ -99,8 +91,6 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
-        # Skip test for PyTorch/XLA 2.8, some funtionality is missing
-        if: steps.get-pytorch-xla-version.outputs.result != '2.8.0'
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
           echo "name=$name" >> "$GITHUB_OUTPUT"
