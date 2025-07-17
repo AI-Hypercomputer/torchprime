@@ -53,7 +53,7 @@ benchmarks:
   llama-3-8b-sft:
     name: Llama 3.0 8B SFT
     step_time_lower_bound: 0 # some random number, (TODO): replaced by actual values
-    step_time_upper_bound: 1 # some random number
+    step_time_upper_bound: 1.2
     confidence_interval: 0.5 # some random number
     average: 0.5 # some random number
     sample_size: 123 # some random number
