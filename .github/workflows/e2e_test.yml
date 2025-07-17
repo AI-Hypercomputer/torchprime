@@ -64,6 +64,8 @@ jobs:
           fi
       - name: Get PyTorchXLA version
         id: get-pytorch-xla-version
+        container:
+          image: ${{ github.event.inputs.docker_url }}
         run: |
           python -c "import torch_xla; f = open('torch_xla_version.txt', 'w'); f.write(torch_xla.version.__version__); f.close()"
           echo "result=$(cat torch_xla_version.txt)" >> $GITHUB_OUTPUT
