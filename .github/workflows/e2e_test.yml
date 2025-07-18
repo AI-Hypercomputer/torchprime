@@ -92,7 +92,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
-        if: False # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
+        if: ${{ false }} # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
           echo "name=$name" >> "$GITHUB_OUTPUT"
