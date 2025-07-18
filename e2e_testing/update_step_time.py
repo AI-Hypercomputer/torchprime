@@ -30,7 +30,7 @@ def match_llama3_8b(row):
     and config["dcn_mesh"]["data"] == 1
     and config["dcn_mesh"]["fsdp"] == 1
     and config["ici_mesh"]["tensor"] == 1
-    and config["ici_mesh"]["context"] == 1
+    and ("context" not in config["ici_mesh"] or config["ici_mesh"]["context"] == 1)
     and (
       "pure_modules" not in config["model"] or len(config["model"]["pure_modules"]) == 0
     )
@@ -116,7 +116,7 @@ def match_llama_3_8b_fsdp_cp(row):
   config = json.loads(row.configs_framework)
   return (
     row.run_id.startswith("llama-3-8b-fsdp-cp")
-    and config["ici_mesh"]["context"] == 2
+    and ("context" in config["ici_mesh"] and config["ici_mesh"]["context"] == 2)
     and config["ici_mesh"]["fsdp"] == 2
     and config["ici_mesh"]["tensor"] == 1
   )
