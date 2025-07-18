@@ -324,10 +324,11 @@ jobs:
         config: ${{ fromJson(needs.load-benchmarks.outputs.matrix) }}
     uses: ./.github/workflows/reusable_e2e_check.yml
     with:
+      # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
+      # matrix.config.benchmark == 'llama-3-8b-pure-mlp' && needs.tp-run.outputs.llama-3-8b-pure-mlp-name ||
       jobset_name: >-
         ${{
           matrix.config.benchmark == 'llama-3-8b' && needs.tp-run.outputs.llama-3-8b-name ||
-          matrix.config.benchmark == 'llama-3-8b-pure-mlp' && needs.tp-run.outputs.llama-3-8b-pure-mlp-name ||
           matrix.config.benchmark == 'llama-3_1-8b-sa' && needs.tp-run.outputs.llama-3_1-8b-sa-name ||
           matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
           matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||
