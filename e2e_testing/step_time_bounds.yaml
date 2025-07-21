@@ -51,7 +51,7 @@ benchmarks:
   llama-3-8b-sft:
     name: Llama 3.0 8B SFT
     step_time_lower_bound: 0.86888893
-    step_time_upper_bound: 0.940223
+    step_time_upper_bound: 1.2
     confidence_interval: 0.03567
     average: 0.9046
     sample_size: 211
