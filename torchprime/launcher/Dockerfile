@@ -20,8 +20,8 @@ RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 # Install the Google Cloud SDK and GCS fuse
 RUN apt-get update && apt-get install -y google-cloud-sdk git fuse gcsfuse && gcsfuse -v
 
-# Set the default Python version to 3.10
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python3.10 1
+# Set the default Python version to 3.12
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python3.12 1
 
 WORKDIR /workspaces
 

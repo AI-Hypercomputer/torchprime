@@ -19,6 +19,14 @@ on:
         description: "Upper bound for step time (in seconds)"
         required: true
         type: number
+      target_loss:
+        description: "Expected final loss value, e.g., 1.0"
+        required: false
+        type: number
+      loss_tolerance:
+        description: "Allowed deviation from the expected loss"
+        required: false
+        type: number
     secrets:
       GCP_SA_KEY:
         required: true
@@ -101,3 +109,9 @@ jobs:
         run: |
           output_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/outputs/0-0"
           e2e_testing/check_step_time.py "$output_dir" "${{ inputs.step_time_lower_bound }}" "${{ inputs.step_time_upper_bound }}"
+      - name: Validate loss
+        if: ${{ inputs.target_loss }}
+        run: |
+          e2e_testing/check_loss.py \
+            /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log \
+            "${{ inputs.target_loss }}" "${{ inputs.loss_tolerance }}"

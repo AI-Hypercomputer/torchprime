@@ -16,6 +16,7 @@ import torchprime.data
 import torchprime.torch_xla_models.trainer
 from torchprime.metrics import metrics
 from torchprime.torch_xla_models.model import model_utils
+from torchprime.torch_xla_models.utils.config_utils import config_vaidator
 from torchprime.utils import retry
 
 transformers.utils.check_min_version("4.39.3")
@@ -27,6 +28,10 @@ assert xr.is_spmd() is True
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config: omegaconf.DictConfig):
+  # Validate the config to avoid misuse and feature combination
+  # Adding any new feature should update the config validator to
+  # ensure different features can be combined together
+  config_vaidator(config)
   # Call metrics logger in the beginning to get the correct start time.
   metrics_logger = metrics.MetricsLogger()
 

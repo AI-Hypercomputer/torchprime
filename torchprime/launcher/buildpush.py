@@ -71,8 +71,8 @@ def buildpush(
     # Use the provided base image
     base_image = base_docker_url
   else:
-    # Use torch_xla Python 3.10 as the base image
-    base_image = f"us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.10_tpuvm_{torch_xla_version}"
+    # Use torch_xla Python 3.12 as the base image
+    base_image = f"us-central1-docker.pkg.dev/tpu-pytorch-releases/docker/xla:nightly_3.12_tpuvm_{torch_xla_version}"
   build_cmd += f" --build-arg BASE_IMAGE={base_image}"
 
   # Build, tag, and push Docker image

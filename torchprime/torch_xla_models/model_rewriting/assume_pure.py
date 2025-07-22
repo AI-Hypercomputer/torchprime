@@ -1,4 +1,7 @@
+import logging
+
 import torch.nn as nn
+import torch_xla.version
 from omegaconf import DictConfig
 from torch_xla.experimental.assume_pure import PureModule
 
@@ -6,6 +9,8 @@ from torchprime.sharding.shard_model import wrap_module
 from torchprime.torch_xla_models.model_rewriting.rematerialization_utils import (
   get_classes_by_names,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def mark_pure_modules(model: nn.Module, config: DictConfig) -> nn.Module:
@@ -26,6 +31,15 @@ def mark_pure_modules(model: nn.Module, config: DictConfig) -> nn.Module:
     Transformed model.
   """
   pure_module_config = config.model.pure_modules
+  if pure_module_config:
+    torch_xla_version = torch_xla.version.__version__
+    if torch_xla_version.startswith("2.7"):
+      logger.warning("pure_modules is not supported for PyTorch/XLA 2.7.x")
+      return model
+    if torch_xla_version == "2.8.0":
+      logger.warning("pure_modules is not supported for PyTorch/XLA 2.8.0")
+      return model
+
   pure_module_classes = get_classes_by_names(model, pure_module_config)
 
   def transform(mod: nn.Module, _: str):
