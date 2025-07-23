@@ -149,7 +149,6 @@ STEP_ID_MAPPING = {
 }
 """Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
 
-CONFIDENCE_LEVEL = 0.999  # 99.9% confidence level
 
 
 def parse_days_ago(days_str: str):
@@ -222,7 +221,7 @@ def calculate_confidence_t_interval(alpha, stdev, count):
   return upper_bound
 
 
-def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
+def compute_bounds(step_times, confidence_level):
   """Implements the formula described in e2e_testing/README.md"""
   n = len(step_times)
   assert n > 1, "Not enough step times to compute bounds"
@@ -231,8 +230,8 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   min_time = min(step_times)
   max_time = max(step_times)
 
-  stdev = np.std(step_times, ddof=1)
-  t_critical = calculate_confidence_t_interval(1 - confidence_level, stdev, n)
+  stdev = float(np.std(step_times, ddof=1))
+  t_critical = float(calculate_confidence_t_interval(1 - confidence_level, stdev, n))
 
   # Calculate the half-width H
   H = max(
@@ -292,7 +291,13 @@ def compute_bounds(step_times, confidence_level=CONFIDENCE_LEVEL):
   type=click.Path(),
   help="Output YAML file path",
 )
-def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
+@click.option(
+  "--confidence_level",
+  default=99.0,
+  type=float,
+  help="Confidence level, default is 99%",
+)
+def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output, confidence_level):
   """
   Query BigQuery for E2E test results and compute step time bounds.
 
@@ -301,6 +306,7 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
   the results to a YAML file for use in GitHub Actions.
   """
   console = Console()
+  confidence_level = confidence_level / 100.0
 
   # Parse datetime inputs
   start_time = parse_datetime(start_time)
@@ -371,7 +377,11 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
   benchmarks_data = {}
 
   for name, step_times in step_time_by_benchmark.items():
-    lower_bound, upper_bound = compute_bounds(step_times)
+    if len(step_times) <= 1:
+      console.print(f"\n[red]Not enough data to update bounds for: {name}[/red]\n")
+      continue
+    lower_bound, upper_bound = compute_bounds(step_times, confidence_level)
+    console.print(f"updating compute bounds for: {name}")
     average = sum(step_times) / len(step_times)
     interval_ms = (upper_bound - lower_bound) * 1000
 
@@ -395,11 +405,6 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
         "sample_size": len(step_times),
       }
 
-      # Manually add target loss values for llama-3-8b-sft benchmark
-      # TODO (jialei): a better way, maybe similar to the step time bounds
-      if job_id == "llama-3-8b-sft":
-        benchmarks_data[job_id].update({"target_loss": 0.4735, "loss_tolerance": 0.001})
-
   console.print(table)
 
   # Write to file
@@ -413,7 +418,7 @@ def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output):
         "metadata": {
           "query_start": start_time,
           "query_end": end_time,
-          "confidence_level": CONFIDENCE_LEVEL,
+          "confidence_level": confidence_level,
         },
       },
       f,
