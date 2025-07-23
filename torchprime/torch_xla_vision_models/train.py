@@ -284,6 +284,7 @@ def main(config: DictConfig):
     f"Running training for model {config.model_id} with lr={config.lr}, seed={config.seed}, device={device}"
   )
 
+  trainer(config, device, compile_fn)
 
 
 if __name__ == "__main__":
