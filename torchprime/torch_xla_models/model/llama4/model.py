@@ -19,19 +19,16 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/ll
 """
 
 from enum import Enum
+
 import torch
 import torch_xla.debug.profiler as xp
+import torch_xla.distributed.spmd as xs
 from omegaconf import DictConfig
 from torch import nn
+from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 from transformers.activations import ACT2FN
 from transformers.utils import logging
-import torch_xla.core.xla_model as xm
-import torch_xla.distributed.spmd as xs
-import torch_xla.runtime as xr
 
-import torch_xla
-
-from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
 from torchprime.torch_xla_models import offloading
@@ -39,15 +36,13 @@ from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 
-from torch_xla.distributed.spmd.debugging import visualize_tensor_sharding
-
 logger = logging.get_logger(__name__)
 
 
 class MoeImplementation(str, Enum):
-    original = "original"
-    sequential = "sequential"
-    expert_parallelism = "expert_parallelism"
+  original = "original"
+  sequential = "sequential"
+  expert_parallelism = "expert_parallelism"
 
 
 class Llama4TextExperts(nn.Module):
@@ -148,6 +143,7 @@ class Llama4TextMoe(nn.Module):
   It is used to compare alternative implementations to original one
   for correctness.
   """
+
   def __init__(self, config):
     super().__init__()
     self.top_k = config.num_experts_per_tok
@@ -259,13 +255,14 @@ class Llama4TextMoeSequential(Llama4TextMoe):
 
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, sparse_router_scores.transpose(0, 1)
-    
+
+
 class Llama4TextMoeExpertParallelism(Llama4TextMoe):
   """Expert parallelism implementation of MOE layer.
 
   Note that this implementation needs mesh to be initialized in order for it
   to work properly.
-  """  
+  """
 
   @xp.trace_me("Llama4TextMoe")
   def forward(self, hidden_states):
@@ -305,10 +302,10 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
         routed_in, mesh, (("expert", "fsdp"), "tensor")
       )
       router_scores = MarkShardingFunction.apply(
-        router_scores, mesh, (("expert","fsdp"), "tensor")
+        router_scores, mesh, (("expert", "fsdp"), "tensor")
       )
     routed_in = routed_in * router_scores.reshape(-1, 1)
-    
+
     # Expert weights are expected to be sharded by expert dimension.
     # Therefore multiplication per expert should happen locally.
     routed_out = self.experts(routed_in)
@@ -320,7 +317,7 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
     out = routed_out.sum(dim=0) + self.shared_expert(hidden_states)
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
-  
+
 
 class Llama4TextRotaryEmbedding(nn.Module):
   inv_freq: nn.Buffer

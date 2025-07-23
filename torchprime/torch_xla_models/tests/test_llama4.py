@@ -23,7 +23,8 @@ class LlamaFixture:
 
 
 def get_llama_4_text_dummy_model(
-  moe_implementation: modeling_llama4.MoeImplementation = None) -> LlamaFixture:
+  moe_implementation: modeling_llama4.MoeImplementation = None,
+) -> LlamaFixture:
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 128
@@ -222,9 +223,11 @@ def test_moe_layer_from_model(fixture):
   model_xla.eval()
   moe_layer = model_xla.model.layers[0].feed_forward
   assert isinstance(moe_layer, modeling_llama4.Llama4TextMoe)
-  hidden_states = torch.rand(batch_size, seq_len, model_xla.config.hidden_size).to(device)
+  hidden_states = torch.rand(batch_size, seq_len, model_xla.config.hidden_size).to(
+    device
+  )
   out_original, scores_original = moe_layer.forward(hidden_states)
-  torch_xla.sync()  
+  torch_xla.sync()
 
   # Model with sequential MOE layer implementation
   fixture_seq = fixture(moe_implementation=modeling_llama4.MoeImplementation.sequential)
@@ -236,7 +239,9 @@ def test_moe_layer_from_model(fixture):
   torch_xla.sync()
 
   # Model with Expert Parallelism implementation
-  fixture_exp = fixture(moe_implementation=modeling_llama4.MoeImplementation.expert_parallelism)
+  fixture_exp = fixture(
+    moe_implementation=modeling_llama4.MoeImplementation.expert_parallelism
+  )
   model_exp = copy.deepcopy(fixture_exp.model).to(device)
   model_exp.eval()
   moe_layer_exp = model_exp.model.layers[0].feed_forward
@@ -245,10 +250,12 @@ def test_moe_layer_from_model(fixture):
   torch_xla.sync()
 
   # Assert
-  assert out_original.size() == out_seq.size(), \
+  assert out_original.size() == out_seq.size(), (
     "Dimensions for outputs tensors don't match for seq MOE"
-  assert scores_original.size() == scores_seq.size(), \
+  )
+  assert scores_original.size() == scores_seq.size(), (
     "Dimensions for scores don't match for seq MOE"
+  )
 
   torch.testing.assert_close(
     out_original,
@@ -265,10 +272,12 @@ def test_moe_layer_from_model(fixture):
     msg="sequential MoE layer scores do not match original logic",
   )
 
-  assert out_original.size() == out_seq.size(), \
+  assert out_original.size() == out_seq.size(), (
     "Dimensions for outputs tensors don't match for expert parallelism MOE"
-  assert scores_original.size() == scores_seq.size(), \
+  )
+  assert scores_original.size() == scores_seq.size(), (
     "Dimensions for scores don't match for expert parallelism MOE"
+  )
 
   torch.testing.assert_close(
     out_original,
