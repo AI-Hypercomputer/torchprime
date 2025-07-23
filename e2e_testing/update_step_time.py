@@ -413,10 +413,10 @@ def main(
         "sample_size": len(step_times),
       }
       # Manually add target loss values for llama-3-8b-sft benchmark
-      # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/348): 
+      # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/348):
       # preserve non-performance releated values in the file.
       if job_id == "llama-3-8b-sft":
-        benchmarks_data[job_id].update({"target_loss": 0.4735, "loss_tolerance": 0.001}) 
+        benchmarks_data[job_id].update({"target_loss": 0.4735, "loss_tolerance": 0.001})
 
   console.print(table)
 
