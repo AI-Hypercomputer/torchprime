@@ -51,9 +51,12 @@ and
 ### Model and Dataset
 
 To provide a clear and focused comparison, we use the well-established
-**ResNet-18** model. For the dataset, we use a combination of **VGGFace** and
-**FaceID 550**. The data is split into 90/10 for training and testing, ensuring
-that images for every identity are present in both sets.
+**ResNet-18** model. For the dataset, we use a **CelebA** from huggingface. The
+data is split into 90/10 for training and testing, ensuring that images for
+every identity are present in both sets. Implementaion detail can be found in
+[model.py](model.py) and [data.py](../../torch_xla_vision_models/data.py).
+
+
 
 ### Methodology
 
@@ -77,7 +80,8 @@ process incorporates several well-established best practices:
     stability.
 
 This production-like setup ensures that our comparison between TPU and GPU
-performance is based on a solid and reproducible training methodology.
+performance is based on a solid and reproducible training methodology. Check
+[train.py](../../torch_xla_vision_models/train.py) for more detail.
 
 #### Hardware Comparison and Statistical Analysis
 

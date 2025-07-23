@@ -1,4 +1,4 @@
-lr: 0.1
+lr: 0.01
 seed: 42
 model_id: "resnet18"
 epochs: 25
