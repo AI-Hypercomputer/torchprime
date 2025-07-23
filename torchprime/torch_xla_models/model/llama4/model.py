@@ -18,13 +18,20 @@ Modelled after:
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama4/modeling_llama4.py
 """
 
+from enum import Enum
 import torch
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
 from torch import nn
 from transformers.activations import ACT2FN
 from transformers.utils import logging
+import torch_xla.core.xla_model as xm
+import torch_xla.distributed.spmd as xs
+import torch_xla.runtime as xr
 
+import torch_xla
+
+from torch_xla.distributed.spmd.xla_sharding import MarkShardingFunction
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
 from torchprime.torch_xla_models import offloading
@@ -32,7 +39,15 @@ from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
 from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 
+from torch_xla.distributed.spmd.debugging import visualize_tensor_sharding
+
 logger = logging.get_logger(__name__)
+
+
+class MoeImplementation(str, Enum):
+    original = "original"
+    sequential = "sequential"
+    expert_parallelism = "expert_parallelism"
 
 
 class Llama4TextExperts(nn.Module):
@@ -127,6 +142,12 @@ class Llama4TextRMSNorm(nn.Module):
 
 
 class Llama4TextMoe(nn.Module):
+  """Original implementation of MOE layer from HF.
+
+  This implementation would likely to OOM on real model size.
+  It is used to compare alternative implementations to original one
+  for correctness.
+  """
   def __init__(self, config):
     super().__init__()
     self.top_k = config.num_experts_per_tok
@@ -138,42 +159,168 @@ class Llama4TextMoe(nn.Module):
 
   @xp.trace_me("Llama4TextMoe")
   def forward(self, hidden_states):
+    # batch, seq_len, hidden_dim is the shape of hidden states
     batch, seq_len, hidden_dim = hidden_states.shape
     hidden_states = hidden_states.view(-1, self.hidden_dim)
+    # Get routed logits for each token
+    # Dimensions: [batch * seq_len, num_experts]
     router_logits = self.router(hidden_states)
-    tokens_per_expert = batch * seq_len
 
+    # Find the top K experts and their scores for each token
+    # router_top_value, router_indices: [batch * seq_len, top_k]
     router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+
+    # Create a score mask to keep only the top-k scores
+    # Dimensions: [num_experts, batch * seq_len]
     router_scores = (
       torch.full_like(router_logits, float("-inf"))
       .scatter_(1, router_indices, router_top_value)
       .transpose(0, 1)
     )
-    # We do this to make sure we have -inf for non topK tokens before going through the !
-    # Here we are just creating a tensor to index each and every single one of the hidden states. Let s maybe register a buffer for this!
-    router_indices = (
-      torch.arange(tokens_per_expert, device=hidden_states.device)
-      .view(1, -1)
-      .expand(router_scores.size(0), -1)
-    )
     router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
 
-    router_indices = router_indices.reshape(-1, 1).expand(-1, hidden_dim)
-    routed_in = torch.gather(
-      input=hidden_states,
-      dim=0,
-      index=router_indices,
-    ).to(hidden_states.device)
-    # we gather inputs corresponding to each expert based on the router indices
+    # Repeating hidden_states for num_experts
+    # This is a huge tensor, dimensions would be:
+    # [num_experts * batch * seq_len, hidden_dim]
+    routed_in = hidden_states.repeat(self.num_experts, 1)
+    # Following line would likely OOM on materialization of routed_in tensor.
     routed_in = routed_in * router_scores.reshape(-1, 1)
     routed_out = self.experts(routed_in)
     out = self.shared_expert(hidden_states)
-    # now that we finished expert computation -> we scatter add because we gathered previously
-    # we have to do this because we used all experts on all tokens. This is faster than the for loop, tho you are compute bound
-    # this scales a lot better if you do EP!
+    # Now that we finished expert computation -> we scatter add because we gathered previously.
+    # W.e have to do this because we used all experts on all tokens.
     out.scatter_add_(dim=0, index=router_indices, src=routed_out.view(-1, hidden_dim))
+    # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
 
+
+class Llama4TextMoeSequential(Llama4TextMoe):
+  """Naive sequential implementation of MOE layer.
+
+  This implementation iterates over experts one by one wich is slow
+  but memory efficient. It is presented here mostly for educational purposes.
+  """
+
+  @xp.trace_me("Llama4TextMoe")
+  def forward(self, hidden_states):
+    """
+    This version processes experts sequentially to save memory. It is slower
+    but avoids the large intermediate tensor that can cause OOM errors.
+    """
+    batch, seq_len, hidden_dim = hidden_states.shape
+    hidden_states_flat = hidden_states.view(-1, self.hidden_dim)
+
+    # Dimensions: [batch * seq_len, num_experts]
+    router_logits = self.router(hidden_states_flat)
+
+    # Find the top K experts and their scores for each token
+    # router_top_value, router_indices: [batch * seq_len, top_k]
+    router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+
+    # Zero out logits that didn't make to topk
+    # Dimensions: [batch * seq_len, num_experts]
+    sparse_router_scores = torch.full_like(router_logits, float("-inf")).scatter_(
+      1, router_indices, router_top_value
+    )
+    # Dimensions: [batch * seq_len, num_experts]
+    sparse_router_scores = torch.sigmoid(sparse_router_scores.float()).to(
+      hidden_states.dtype
+    )
+
+    out = self.shared_expert(hidden_states_flat)
+
+    def process_expert(i):
+      # dimensions: (hidden_dim, 2 * intermediate_dim)
+      expert_weights = self.experts.gate_up_proj[i]
+
+      # dimensions: (batch * seq_len)
+      router_scores_for_expert = sparse_router_scores[:, i]
+
+      # (batch * seq_len, hidden_dim) @ (hidden_dim, 2*expert_dim)
+      # -> (batch * seq_len, 2*expert_dim)
+      gate_up = hidden_states_flat @ expert_weights
+
+      gate_up = gate_up * router_scores_for_expert.unsqueeze(1)
+
+      gate, up = gate_up.chunk(2, dim=-1)
+      # (batch * seq_len, expert_dim)
+      act_fn_out = up * self.experts.act_fn(gate)
+      # (expert_dim, hidden_dim)
+      down_proj_weights = self.experts.down_proj[i]
+
+      # (batch * seq_len, expert_dim) @ (expert_dim, hidden_dim)
+      # -> (batch * seq_len, hidden_dim)
+      # This op is prone to OOM
+      expert_output = act_fn_out @ down_proj_weights
+      return expert_output
+
+    for i in range(self.num_experts):
+      out += process_expert(i)
+
+    # No need to reshape output back to [batch, seq_len, hidden_dim]
+    return out, sparse_router_scores.transpose(0, 1)
+    
+class Llama4TextMoeExpertParallelism(Llama4TextMoe):
+  """Expert parallelism implementation of MOE layer.
+
+  Note that this implementation needs mesh to be initialized in order for it
+  to work properly.
+  """  
+
+  @xp.trace_me("Llama4TextMoe")
+  def forward(self, hidden_states):
+    mesh = xs.get_global_mesh()
+
+    # batch, seq_len, hidden_dim is the shape of hidden states
+    batch, seq_len, hidden_dim = hidden_states.shape
+    # [batch * seq_len, hidden_dim]
+    hidden_states = hidden_states.view(-1, self.hidden_dim)
+    # Get routed logits for each token
+    # Dimensions: [batch * seq_len, num_experts]
+    router_logits = self.router(hidden_states)
+
+    # Find the top K experts and their scores for each token
+    # router_top_value, router_indices: [batch * seq_len, top_k]
+    router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=1)
+
+    # Create a score mask to keep only the top-k scores
+    # Dimensions: [num_experts, batch * seq_len]
+    router_scores = (
+      torch.full_like(router_logits, float("-inf"))
+      .scatter_(1, router_indices, router_top_value)
+      .transpose(0, 1)
+    )
+    router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
+
+    # Repeating hidden_states for num_experts
+    # This is a huge tensor, dimensions would be:
+    # [num_experts * batch * seq_len, hidden_dim]
+    routed_in = hidden_states.repeat(self.num_experts, 1)
+
+    # This should trigger all-to-all to reshard routed_in to assign
+    # data for specific expert to a specific device by replacing
+    # data dimension sharding by expert.
+    if mesh:
+      routed_in = MarkShardingFunction.apply(
+        routed_in, mesh, (("expert", "fsdp"), "tensor")
+      )
+      router_scores = MarkShardingFunction.apply(
+        router_scores, mesh, (("expert","fsdp"), "tensor")
+      )
+    routed_in = routed_in * router_scores.reshape(-1, 1)
+    
+    # Expert weights are expected to be sharded by expert dimension.
+    # Therefore multiplication per expert should happen locally.
+    routed_out = self.experts(routed_in)
+    # Reshard back, by concatenating expert dimension and resharding by batch dimension.
+    if mesh:
+      routed_out = MarkShardingFunction.apply(
+        routed_out, mesh, (("data", "fsdp"), "tensor")
+      )
+    out = routed_out.sum(dim=0) + self.shared_expert(hidden_states)
+    # No need to reshape output back to [batch, seq_len, hidden_dim]
+    return out, router_scores
+  
 
 class Llama4TextRotaryEmbedding(nn.Module):
   inv_freq: nn.Buffer
@@ -402,7 +549,15 @@ class Llama4TextDecoderLayer(nn.Module):
     )
     self.is_moe_layer = layer_idx in config.moe_layers
     if self.is_moe_layer:  # the 128E model interleaves dense / sparse
-      self.feed_forward = Llama4TextMoe(config)
+      match config.moe_implementation:
+        case MoeImplementation.expert_parallelism:
+          self.feed_forward = Llama4TextMoeExpertParallelism(config)
+        case MoeImplementation.sequential:
+          self.feed_forward = Llama4TextMoeSequential(config)
+        case MoeImplementation.original:
+          self.feed_forward = Llama4TextMoe(config)
+        case _:
+          self.feed_forward = Llama4TextMoe(config)
     else:
       self.feed_forward = Llama4TextMLP(
         config, intermediate_size=config.intermediate_size_mlp
