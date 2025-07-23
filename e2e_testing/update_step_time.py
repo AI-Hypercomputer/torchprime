@@ -150,7 +150,6 @@ STEP_ID_MAPPING = {
 """Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
 
 
-
 def parse_days_ago(days_str: str):
   """Parse a string like '2 days ago' and return a datetime object."""
   match = re.match(r"(\d+)\s+days?\s+ago", days_str.strip())
@@ -297,7 +296,16 @@ def compute_bounds(step_times, confidence_level):
   type=float,
   help="Confidence level, default is 99%",
 )
-def main(bq_project, bq_dataset, bq_table, start_time, end_time, limit, output, confidence_level):
+def main(
+  bq_project,
+  bq_dataset,
+  bq_table,
+  start_time,
+  end_time,
+  limit,
+  output,
+  confidence_level,
+):
   """
   Query BigQuery for E2E test results and compute step time bounds.
 
