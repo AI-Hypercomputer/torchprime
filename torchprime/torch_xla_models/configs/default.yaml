@@ -24,6 +24,8 @@ profile_end_step: null
 # when using tp run to launch the run using XPK
 profile_dir: profile
 
+# Default path for preprocessed data, can be overridden in dataset-specific configs
+cached_dataset_path: null
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
 

@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from timeit import default_timer as timer
 
 import datasets
 import hydra
@@ -69,12 +70,25 @@ def main(config: omegaconf.DictConfig):
   trainer_cls = torchprime.torch_xla_models.trainer.TRAINERS.get(
     config.task.name, torchprime.torch_xla_models.trainer.Trainer
   )
+
+  load_time_start = timer()
   data = retry.retry(lambda: dataset_fn(**config.dataset, tokenizer=tokenizer))
+  load_time_end = timer()
+  load_time_seconds = load_time_end - load_time_start
 
   dataset_name = getattr(config.dataset, "hf_dataset_name", None) or getattr(
     config.dataset, "file_dataset_path", "unknown"
   )
-  logger.info("Loaded dataset `%s`, size=%d (packed) samples", dataset_name, len(data))
+  num_tokens = len(data) * config.dataset.block_size
+  tokens_per_second = num_tokens / load_time_seconds
+  logger.info("--- Dataset Loading Benchmark ---")
+  logger.info("  Dataset: %s", dataset_name)
+  logger.info("  Num samples: %d", len(data))
+  logger.info("  Total tokens: %d", num_tokens)
+  logger.info(f"  Load time: {load_time_seconds:.2f} seconds")
+  logger.info(f"  Tokens/sec: {tokens_per_second:,.2f}")
+  logger.info("---------------------------------")
+  metrics_logger.log_dataset_load_time(load_time_seconds)
 
   trainer = trainer_cls(
     model=model,

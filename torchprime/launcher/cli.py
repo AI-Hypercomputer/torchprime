@@ -92,29 +92,42 @@ def cli(ctx, interactive):
   required=True,
   help="Path to save the processed dataset (local or GCS).",
 )
-@click.option("--block-size", type=int, default=4096, help="Sequence length for packing.")
-@click.option("--num-proc", type=int, default=8, help="Number of processes for mapping.")
+@click.option(
+  "--block-size", type=int, default=4096, help="Sequence length for packing."
+)
 @click.option("--split", default="train", help="Dataset split to process.")
 @click.option("--text-column", default="text", help="The column containing text data.")
+@click.option(
+  "--cache-dir", default=None, help="Directory to cache the raw dataset downloads."
+)
+@click.option("--num-workers", type=int, default=50, help="Number of Dataflow workers.")
 def preprocess(
   dataset_name,
   dataset_config_name,
   tokenizer_name,
   output_path,
   block_size,
-  num_proc,
   split,
   text_column,
+  cache_dir,
+  num_workers,
 ):
-    """Preprocesses a dataset and saves it to a specified location."""
-    from torchprime.experimental.gcs_cache_loading.preprocess_dataset import (
-      main as preprocess_main,
-    )
+  """Preprocesses a dataset and saves it to a specified location."""
+  from torchprime.data.preprocess import (
+    main as preprocess_main,
+  )
 
-    preprocess_main(
-      dataset_name, dataset_config_name, tokenizer_name, output_path, block_size,
-      num_proc, split, text_column
-    )
+  preprocess_main(
+    dataset_name,
+    dataset_config_name,
+    tokenizer_name,
+    output_path,
+    block_size,
+    split,
+    text_column,
+    cache_dir,
+    num_workers,
+  )
 
 
 @cli.command()

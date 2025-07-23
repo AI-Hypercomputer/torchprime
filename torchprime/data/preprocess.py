@@ -13,9 +13,10 @@ def main(
   tokenizer_name: str,
   output_path: str,
   block_size: int,
-  num_proc: int,
   split: str,
   text_column: str,
+  cache_dir: str | None,
+  num_workers: int = 1,
 ) -> None:
   """Main function to preprocess a dataset and save it to a specified location.
 
@@ -25,9 +26,10 @@ def main(
       tokenizer_name: Name of the Hugging Face tokenizer.
       output_path: Path to save the processed dataset.
       block_size: Sequence length for packing.
-      num_proc: Number of processes for mapping.
       split: Dataset split to process.
       text_column: The column containing text data.
+      cache_dir: Directory to cache the raw dataset downloads.
+      num_workers: Number of processes for parallel processing.
   """
   logger.info("Starting dataset preprocessing...")
 
@@ -43,8 +45,9 @@ def main(
     tokenizer=tokenizer,
     block_size=block_size,
     text_column=text_column,
-    num_proc=num_proc,
     streaming=False,
+    cache_dir=cache_dir,
+    num_proc=num_workers,
   )
 
   logger.info(f"Saving processed dataset to: {output_path}")

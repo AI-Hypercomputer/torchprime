@@ -19,6 +19,9 @@ class Metrics:
   step_execution_time: timedelta | None
   """The average time to execute a training step."""
 
+  dataset_load_time: timedelta | None
+  """The time it took to load and process the dataset."""
+
   mfu: float | None
   """Model FLOPs Utilization."""
 
@@ -60,9 +63,13 @@ class MetricsLogger:
     self.mfu = None
     self.tokens_per_second = None
     self.num_steps = None
+    self.dataset_load_time: float | None = None
 
   def log_step_execution_time(self, step_execution_time: float):
     self.step_execution_time = step_execution_time
+
+  def log_dataset_load_time(self, dataset_load_time: float):
+    self.dataset_load_time = dataset_load_time
 
   def log_mfu(self, mfu: float):
     self.mfu = mfu
@@ -79,6 +86,9 @@ class MetricsLogger:
       train_runtime=timedelta(seconds=time.time() - self.start_time),
       step_execution_time=timedelta(seconds=self.step_execution_time)
       if self.step_execution_time
+      else None,
+      dataset_load_time=timedelta(seconds=self.dataset_load_time)
+      if self.dataset_load_time is not None
       else None,
       mfu=self.mfu,
       tokens_per_second=self.tokens_per_second,

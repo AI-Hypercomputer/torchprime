@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from timeit import default_timer as timer
 
+import numpy as np
 import torch
 import torch.nn.utils as nn_utils
 import torch_xla
@@ -49,6 +50,7 @@ from torchprime.torch_xla_models.model_rewriting.sharding_initialization import 
   setup_sharding_and_mesh,
 )
 from torchprime.torch_xla_models.topology import get_num_slices
+from torchprime.utils.data_load_benchmark_logger import DataLoadBenchmarkLogger
 from torchprime.utils.profiling import ensure_profile_end_step
 
 logger = logging.getLogger(__name__)
@@ -91,9 +93,14 @@ class Trainer:
     self.device = xm.xla_device()
     self.global_batch_size = self.config.task.global_batch_size
     self.train_dataset = train_dataset
+    self.dataloader_wait_times = []
 
     # Initialize tensorboard metrics writer
     self._initialize_tensorboard_writer()
+
+    self.benchmark_logger = DataLoadBenchmarkLogger(
+      self.config.output_dir, "dataloader_benchmark.csv"
+    )
 
     # -- Model transformations --
     # Recursively replace `nn.Linear` layers with einsum operations in the model.
@@ -157,6 +164,7 @@ class Trainer:
   def __del__(self):
     # Close TensorBoard writer on destruction.
     self.summary_writer.close()
+    self.benchmark_logger.close()
 
   def _initialize_tensorboard_writer(self):
     run_name = self.config.run_name
@@ -196,16 +204,35 @@ class Trainer:
       # Each process will load the global batch, then discard the unneeded parts.
       batch_size = self.global_batch_size
 
+    # A good starting point for num_workers is the number of CPU cores per host.
+    # Setting this to 0 disables parallel data loading.
+    num_workers = getattr(
+      self.config.task, "dataloader_num_workers", os.cpu_count() or 0
+    )
+
+    # # To avoid frequent synchronizations, set batches_per_execution to a larger
+    # # value. This allows the data loader to prefetch multiple batches
+    # # asynchronously. A good default is the number of logging steps.
+    # batches_per_execution = getattr(
+    #   self.config.task, "batches_per_execution", self.config.logging_steps
+    # )
+    # logger.info("Dataloader batches_per_execution: %d", batches_per_execution)
+
     dataloader = DataLoader(
       self.train_dataset,
       # Data collator will default to DataCollatorWithPadding, so we change it.
       collate_fn=default_data_collator,
+      num_workers=num_workers,
+      persistent_workers=True,
       batch_size=batch_size,
       sampler=sampler,
       drop_last=True,
     )
     loader = pl.MpDeviceLoader(
-      dataloader, self.device, input_sharding=self.input_sharding_spec
+      dataloader,
+      self.device,
+      input_sharding=self.input_sharding_spec,
+      # batches_per_execution=batches_per_execution,
     )
     return loader
 
@@ -235,6 +262,7 @@ class Trainer:
 
     epoch = 0
     for step in range(max_step):
+      wait_start_time = timer()
       try:
         batch = next(train_iterator)
       except StopIteration:
@@ -243,9 +271,31 @@ class Trainer:
         train_iterator = iter(train_loader)
         batch = next(train_iterator)
 
+      # Log batch shapes on the master worker to debug potential recompilations.
+      # This helps verify if input tensor shapes are consistent across steps.
+      if xm.is_master_ordinal():
+        batch_shapes = {k: v.shape for k, v in batch.items()}
+        logger.info(f"Step {step} batch shapes: {batch_shapes}")
+
+      wait_end_time = timer()
+      batch_wait_time = wait_end_time - wait_start_time
+      batch_wait_time_ms = batch_wait_time * 1000
+
       trace_start_time = timer()
       loss, grad_norm = self.train_step(batch)
       trace_end_time = timer()
+      compute_time_ms = (trace_end_time - trace_start_time) * 1000
+
+      self.dataloader_wait_times.append(batch_wait_time)
+      self.benchmark_logger.log_step(
+        epoch=step / steps_per_epoch,
+        step=step,
+        wait_time_ms=batch_wait_time_ms,
+        compute_time_ms=compute_time_ms,
+      )
+      logger.info(
+        f"Epoch: {epoch:.4f}, step: {step}, batch loading time: {batch_wait_time_ms:.2f} ms"
+      )
 
       if step % self.config.logging_steps == 0:
 
@@ -254,14 +304,23 @@ class Trainer:
         ):
           loss = loss.detach().item()
           grad_norm = grad_norm.detach().item()
+          compute_time_ms = (trace_end_time - trace_start_time) * 1000
+
+          # A moving average of wait time over the last logging window.
+          wait_time_ms = (
+            np.mean(self.dataloader_wait_times[-self.config.logging_steps :]) * 1000
+          )
+          step_time_ms = compute_time_ms + wait_time_ms
           logger.info(
-            "Epoch: %.4f, step: %d, loss: %.4f, grad_norm: %.4f, lr: %.2e, trace time: %.2f ms",
+            "Epoch: %.4f, step: %d, loss: %.4f, grad_norm: %.4f, lr: %.2e, step time: %.2f ms (compute: %.2f, wait: %.2f)",
             step / steps_per_epoch,
             step,
             loss,
             grad_norm,
             lr,
-            (trace_end_time - trace_start_time) * 1000,
+            step_time_ms,
+            compute_time_ms,
+            wait_time_ms,
           )
           self._log_to_tensorboard(epoch, step, loss, lr, grad_norm)
           if math.isnan(loss):
@@ -333,6 +392,10 @@ class Trainer:
     # Print and save metrics
     metrics = metrics_logger.finalize()
     logger.info("***** train metrics *****\n%s", metrics)
+
+    # Ensure benchmark log is flushed and closed properly
+    logger.info("Saving data loading time benchmark log...")
+    self.benchmark_logger.close()
     metrics.save(Path(self.config.output_dir) / "train_metrics.json")
 
     # Save the hydra config
