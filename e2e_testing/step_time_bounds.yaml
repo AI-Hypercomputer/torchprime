@@ -6,13 +6,6 @@ benchmarks:
     confidence_interval: 0.98564
     average: 2.4793
     sample_size: 132
-  llama-3-8b-pure-mlp:
-    name: Llama 3.0 8B (@assume_pure)
-    step_time_lower_bound: 2.70962654
-    step_time_upper_bound: 2.796375
-    confidence_interval: 0.04337
-    average: 2.753
-    sample_size: 69
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
     step_time_lower_bound: 2.36619991
