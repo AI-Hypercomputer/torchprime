@@ -1,77 +1,70 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 1.493623
-    step_time_upper_bound: 3.96306871
-    confidence_interval: 1.23472
-    average: 2.7283
-    sample_size: 220
-  llama-3-8b-pure-mlp:
-    name: Llama 3.0 8B (@assume_pure)
-    step_time_lower_bound: 2.70435715
-    step_time_upper_bound: 2.801263
-    confidence_interval: 0.04845
-    average: 2.7528
-    sample_size: 157
+    step_time_lower_bound: 1.42296086
+    step_time_upper_bound: 2.77216
+    confidence_interval: 0.6746
+    average: 2.0976
+    sample_size: 21
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.36728463
-    step_time_upper_bound: 2.458874
-    confidence_interval: 0.04579
-    average: 2.4131
-    sample_size: 196
+    step_time_lower_bound: 2.37654959
+    step_time_upper_bound: 2.44893181
+    confidence_interval: 0.03619
+    average: 2.4127
+    sample_size: 10
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.75646605
-    step_time_upper_bound: 2.851563
-    confidence_interval: 0.04755
-    average: 2.804
-    sample_size: 184
+    step_time_lower_bound: 2.76869585
+    step_time_upper_bound: 2.85302161
+    confidence_interval: 0.04216
+    average: 2.8109
+    sample_size: 11
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.31332149
-    step_time_upper_bound: 3.41423484
-    confidence_interval: 0.05046
-    average: 3.3638
-    sample_size: 216
+    step_time_lower_bound: 3.30667133
+    step_time_upper_bound: 3.40738213
+    confidence_interval: 0.05036
+    average: 3.357
+    sample_size: 11
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.11988047
-    step_time_upper_bound: 3.21490221
-    confidence_interval: 0.04751
-    average: 3.1674
-    sample_size: 207
+    step_time_lower_bound: 3.11787799
+    step_time_upper_bound: 3.21283874
+    confidence_interval: 0.04748
+    average: 3.1654
+    sample_size: 11
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 3.89051708
-    step_time_upper_bound: 4.077723
-    confidence_interval: 0.0936
-    average: 3.9841
-    sample_size: 211
+    step_time_lower_bound: 3.92182809
+    step_time_upper_bound: 4.04127463
+    confidence_interval: 0.05972
+    average: 3.9816
+    sample_size: 11
   llama-3-8b-sft:
     name: Llama 3.0 8B SFT
-    step_time_lower_bound: 0.86888893
-    step_time_upper_bound: 1.2
-    confidence_interval: 0.03567
-    average: 0.9046
-    sample_size: 211
+    step_time_lower_bound: 1.07372701
+    step_time_upper_bound: 1.10642935
+    confidence_interval: 0.01635
+    average: 1.0901
+    sample_size: 11
     target_loss: 0.4735
     loss_tolerance: 0.001
   llama-3-8b-ddp-fsdp:
     name: Llama 3.0 8B (ddp + fsdp)
-    step_time_lower_bound: 3.22453297
-    step_time_upper_bound: 3.346441
-    confidence_interval: 0.06095
-    average: 3.2855
-    sample_size: 214
+    step_time_lower_bound: 3.22900775
+    step_time_upper_bound: 3.32735316
+    confidence_interval: 0.04917
+    average: 3.2782
+    sample_size: 11
   llama-3-8b-fsdp-cp:
     name: Llama 3.0 8B (fsdp + cp)
-    step_time_lower_bound: 1.59375241
+    step_time_lower_bound: 1.5
     step_time_upper_bound: 1.64229309
     confidence_interval: 0.02427
     average: 1.618
     sample_size: 175
 metadata:
-  query_start: '2025-06-18T17:20:50.414780+00:00'
-  query_end: '2025-07-16T17:20:50.414804+00:00'
+  query_start: '2025-07-17T16:41:39-07:00'
+  query_end: '2025-07-20T00:00:00-07:00'
   confidence_level: 0.999
