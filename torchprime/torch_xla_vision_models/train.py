@@ -280,15 +280,10 @@ def main(config: DictConfig):
     device = torch.device("xla")
     compile_fn = torch_xla.compile
 
-  # logger.info(
-  #   f"Running training for model {config.model_id} with lr={config.lr}, seed={config.seed}, device={device}"
-  # )
-  
-  seeds = [42, 42, 0, 1, 2, 3]
-  for seed in seeds:
-    config.seed = seed
-    logger.info(f"Running prod training with seed {config.seed}, lr {config.lr}, device {device}")
-    trainer(config, device, compile_fn)
+  logger.info(
+    f"Running training for model {config.model_id} with lr={config.lr}, seed={config.seed}, device={device}"
+  )
+
 
 
 if __name__ == "__main__":
