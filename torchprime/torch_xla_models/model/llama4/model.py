@@ -185,7 +185,9 @@ class Llama4TextMoe(nn.Module):
     out = self.shared_expert(hidden_states)
     # Now that we finished expert computation -> we scatter add because we gathered previously.
     # W.e have to do this because we used all experts on all tokens.
-    out.scatter_add_(dim=0, index=router_indices, src=routed_out.view(-1, hidden_dim))
+    # Replacing by sum, as backwards pass in PyTorch/XLA has issues with scatter_add_
+    # out.scatter_add_(dim=0, index=router_indices, src=routed_out.view(-1, hidden_dim))
+    out += routed_out.sum(dim=0)
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
 

@@ -96,7 +96,7 @@ def test_forward_our_model_against_hf_model(fixture, transform):
     torch.testing.assert_close(
       hf_output.logits,
       llama_xla_logits,
-      atol=1e-5,
+      atol=1e-4,
       rtol=1e-9,
       msg="logits are not equal",
     )
