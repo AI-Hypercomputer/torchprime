@@ -35,6 +35,5 @@ model.norm.weight: [fsdp]
 lm_head.weight: [tensor, fsdp]
 
 # Activations
-# batch, seq_len, hidden_dim
-model.layers.*: [[data, fsdp], null, null]
-lm_head: [[data, fsdp], null, null]
+model.layers.*: [[data, fsdp], null, tensor]
+lm_head: [[data, fsdp], null, tensor]
