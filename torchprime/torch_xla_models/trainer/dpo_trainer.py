@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
+from contextlib import contextmanager
 
 import torch
 import torch.nn.functional as F
@@ -45,11 +47,21 @@ class DPOTrainer(SFTTrainer):
       self.ref_model = model_utils.initialize_model_class(config.model)
       if getattr(config.model, "pretrained_model", None):
         self.ref_model.from_pretrained(config.model.pretrained_model)
-    self.ref_model.to(self.device)
+    # Keep the reference model on CPU unless needed to save TPU memory.
+    self.ref_model.to("cpu")
     self.ref_model.eval()
     # Ensure the reference model does not receive gradient updates.
     for p in self.ref_model.parameters():
       p.requires_grad_(False)
+
+  @contextmanager
+  def _ref_model_on_device(self) -> Generator[None, None, None]:
+    """Context manager to temporarily move the reference model to the XLA device."""
+    self.ref_model.to(self.device)
+    try:
+      yield
+    finally:
+      self.ref_model.to("cpu")
 
   def _seq_log_prob(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """Compute the log probability of a sequence.
@@ -100,8 +112,9 @@ class DPOTrainer(SFTTrainer):
       attention_mask=batch["rejected_attention_mask"],
     )[0]
 
-    # Reference model forward pass is executed without gradient tracking.
-    with torch.no_grad():
+    # Reference model forward pass is executed without gradient tracking. The
+    # model is temporarily moved to the XLA device to save memory.
+    with self._ref_model_on_device(), torch.no_grad():
       c_ref = self.ref_model(
         input_ids=batch["chosen_input_ids"],
         attention_mask=batch["chosen_attention_mask"],
