@@ -4,6 +4,7 @@ tp is a CLI for common torchprime workflows.
 
 import getpass
 import json
+import logging
 import os
 import re
 import subprocess
@@ -19,6 +20,7 @@ import toml
 from dataclasses_json import dataclass_json
 from pathspec import PathSpec
 from pathspec.patterns import GitWildMatchPattern  # type: ignore
+from transformers import AutoTokenizer
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -113,21 +115,40 @@ def preprocess(
   num_workers,
 ):
   """Preprocesses a dataset and saves it to a specified location."""
-  from torchprime.data.preprocess import (
-    main as preprocess_main,
+  from torchprime.data.dataset import make_train_dataset
+
+  logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+  )
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.INFO)
+
+  logger.info("Starting dataset preprocessing...")
+
+  logger.info(f"Loading tokenizer: {tokenizer_name}")
+  tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+  if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
+  logger.info("Loading and preprocessing raw dataset...")
+  processed_dataset = make_train_dataset(
+    hf_dataset_name=dataset_name,
+    hf_dataset_config_name=dataset_config_name,
+    split=split,
+    tokenizer=tokenizer,
+    block_size=block_size,
+    text_column=text_column,
+    streaming=False,
+    cache_dir=cache_dir,
+    num_proc=num_workers,
   )
 
-  preprocess_main(
-    dataset_name,
-    dataset_config_name,
-    tokenizer_name,
-    output_path,
-    block_size,
-    split,
-    text_column,
-    cache_dir,
-    num_workers,
-  )
+  logger.info("Preprocessing finished. Now saving to disk...")
+  logger.info(f"Saving processed dataset to: {output_path}")
+  processed_dataset.save_to_disk(output_path)
+  logger.info("Preprocessing complete.")
 
 
 @cli.command()

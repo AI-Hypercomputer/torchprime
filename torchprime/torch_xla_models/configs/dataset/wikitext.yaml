@@ -4,4 +4,3 @@ hf_dataset_config_name: wikitext-2-raw-v1
 split: train
 block_size: 8192
 cache_dir: /tmp/
-cached_dataset_path: null # <--- Add this line with a default of null
