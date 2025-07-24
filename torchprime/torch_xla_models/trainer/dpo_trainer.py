@@ -41,10 +41,17 @@ class DPOTrainer(SFTTrainer):
     dtype_name = config.get("torch_dtype", "bfloat16")
     model_dtype = getattr(torch, dtype_name)
     with model_utils.set_default_dtype(model_dtype), torch_xla.device():
-      # The reference model shares the same architecture as the policy model
-      # and is initialized from pretrained weights. It remains frozen during
-      # training.
-      self.ref_model = model_utils.initialize_model_class(config.model)
+      model_class = getattr(config.model, "model_class", None)
+      if model_class is None:
+        # Fall back to the same class as the policy model when the config does
+        # not specify ``model_class``. This is useful for unit tests that
+        # construct a small dummy model directly.
+        self.ref_model = model.__class__()
+      else:
+        # The reference model shares the same architecture as the policy model
+        # and is initialized from pretrained weights. It remains frozen during
+        # training.
+        self.ref_model = model_utils.initialize_model_class(config.model)
       if getattr(config.model, "pretrained_model", None):
         self.ref_model.from_pretrained(config.model.pretrained_model)
     # Keep the reference model on CPU unless needed to save TPU memory.
@@ -77,9 +84,7 @@ class DPOTrainer(SFTTrainer):
     logits = logits[:, :-1].reshape(-1, vocab)
     labels = labels[:, 1:].reshape(-1)
     log_probs = F.log_softmax(logits, dim=-1)
-    labels_clipped = labels.clone()
-    # Use a dummy index for padding positions so ``gather`` does not crash.
-    labels_clipped[labels_clipped == -100] = 0
+    labels_clipped = torch.where(labels == -100, torch.zeros_like(labels), labels)
     token_log_probs = log_probs.gather(1, labels_clipped.unsqueeze(-1)).squeeze(-1)
     # Ignore padding tokens when summing probabilities.
     mask = labels != -100
