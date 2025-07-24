@@ -1,5 +1,8 @@
+import numpy as np
 import torch
+import torch_xla
 from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
+from omegaconf import DictConfig
 
 
 def reorder_sequence(
@@ -18,6 +21,8 @@ def reorder_sequence(
   it to couple the chunks of largest & smallest computation
   intensity
   """
+
+  device = torch_xla.device()
 
   if tensor is None:
     return tensor
@@ -44,11 +49,11 @@ def reorder_sequence(
 
   if not to_contiguous:
     # Create first and second halves
-    first_half = torch.arange(cp_size)
-    second_half = torch.arange(2 * cp_size - 1, cp_size - 1, -1)
+    first_half = torch.arange(cp_size).to(device)
+    second_half = torch.arange(2 * cp_size - 1, cp_size - 1, -1).to(device)
 
     # Stack and reshape to interleave
-    src_indices = torch.stack([first_half, second_half], axis=1).reshape(-1)
+    src_indices = torch.stack([first_half, second_half], axis=1).reshape(-1).to(device)
 
   else:
     half = cp_size // 2
@@ -64,12 +69,16 @@ def reorder_sequence(
     second_block = second_pair + fourth_pair
 
     # Stack into shape (2*cp_size//2, 2) → then flatten → length=2*cp_size
-    src_indices = torch.stack(
-      [torch.tensor(first_block), torch.tensor(second_block)], axis=1
-    ).reshape(-1)
+    src_indices = (
+      torch.stack([torch.tensor(first_block), torch.tensor(second_block)], axis=1)
+      .reshape(-1)
+      .to(device)
+    )
 
   # One gather and one reshape
-  reordered = torch.index_select(reshaped, dim=seq_dim, index=src_indices)
+  reordered = torch.index_select(input=reshaped, dim=seq_dim, index=src_indices).to(
+    device
+  )
 
   # Reshape back to original dimensions
   return reordered.reshape(ori_tensor_shape)
@@ -103,14 +112,13 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
       else:
         return q_ids + self.offset >= kv_ids
 
-    arr = torch.arange(shape[0])
+    arr = np.arange(shape[0])
     # we reorder the mask to be load balanced following the same approach as
     # used to reorder the input tokens
-    out = reorder_sequence(
-      tensor=torch.tensor(arr[None, :, None, None]),
+    out = reorder_mask(
+      tensor=arr[np.newaxis, :, np.newaxis, np.newaxis],
       cp_size=cp_size,
       seq_dim=1,
-      to_contiguous=False,
     )
     q_sequence = out[0, :, 0, 0]
 
@@ -130,7 +138,7 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
     return (
       self.shape == other.shape
       and self.offset == other.offset
-      and torch.equal(self.q_sequence, other.q_sequence)
+      and np.array_equal(self.q_sequence, other.q_sequence)
     )
 
   def __hash__(self):
@@ -142,3 +150,56 @@ class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
         self.q_sequence.tobytes() if self.q_sequence is not None else None,
       )
     )
+
+
+def cp_enabled(config: DictConfig):
+  """
+  Check if context parallelism is enabled
+  """
+  return "context" in config.ici_mesh and config.ici_mesh.context > 1
+
+
+def lb_cp_enabled(config: DictConfig):
+  """
+  Check if load balanced context parallelism is enabled
+  """
+  return (
+    cp_enabled(config)
+    and "load_balance_cp" in config.model
+    and config.model.load_balance_cp
+  )
+
+
+def reorder_mask(tensor, cp_size: int, seq_dim: int):
+  seq_len = tensor.shape[seq_dim]
+  group_size = seq_len // (2 * cp_size)
+
+  if cp_size % 2 != 0:
+    raise ValueError(f"{cp_size=} must be a multiple of 2.")
+
+  # Need to ensure we have 2 pairs to swap for balancing between cp ranks
+  if seq_len % (cp_size * 2) != 0:
+    raise ValueError(f"{tensor.shape=} is not a multiple of {cp_size*2=}")
+
+  # [B, S, H, D]: [B, 2*cp_size, S/2*cp_size, H, D] -> [B, 2, S/2*cp_size, H, D]
+  # [S, B, H, D]: [2*cp_size, S/2*cp_size, B, H, D] -> [2, S/2*cp_size, B, H, D]
+  ori_tensor_shape = tensor.shape
+  reshaped = tensor.reshape(
+    *ori_tensor_shape[:seq_dim],
+    2 * cp_size,
+    group_size,
+    *ori_tensor_shape[seq_dim + 1 :],
+  )
+
+  # Create first and second halves
+  first_half = np.arange(cp_size)
+  second_half = np.arange(2 * cp_size - 1, cp_size - 1, -1)
+
+  # Stack and reshape to interleave
+  src_indices = np.stack([first_half, second_half], axis=1).reshape(-1)
+
+  # One gather and one reshape
+  reordered = np.take(reshaped, src_indices, axis=seq_dim)
+
+  # Reshape back to original dimensions
+  return reordered.reshape(ori_tensor_shape)

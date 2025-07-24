@@ -17,12 +17,19 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
+import huggingface_hub
 import safetensors
 import torch
 import torch.distributed.checkpoint as dist_cp
 import torch_xla.experimental.distributed_checkpoint as xc
+from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
+
+HF_MODEL_CONFIG_FILES = [
+  "config.json",
+  "generation_config.json",
+]
 
 
 def load_safetensors_to_state_dict(model_dir: str) -> dict:
@@ -324,6 +331,13 @@ def convert_to_safetensors_on_cpu(model: torch.nn.Module, save_dir: Path) -> Non
   )
   logger.info("Checkpoint fully materialised on CPU")
 
+  # delete the checkpoint dist_cp files `*.distcp` to save disk space
+  for file in save_dir.glob("*.distcp"):
+    try:
+      file.unlink()
+    except OSError as e:
+      logger.warning("Failed to delete %s: %s", file, str(e))
+
   cpu_state = {k.replace("._orig_mod", ""): v for k, v in reload_sd["model"].items()}
 
   try:
@@ -417,3 +431,56 @@ def move_to_mounted_gcs_shutil(work_dir: Path, save_dir: Path):
       shutil.copy2(index_file, dest)
 
   shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def copy_hf_config_files(model_path_or_repo: str, save_dir: Path) -> None:
+  """Copy configuration files from a Hugging Face model repository or local directory.
+
+  This function downloads specific configuration files from a Hugging Face model
+  repository (if `model_path_or_repo` is a repo ID) or copies them from a local
+  directory. Only files matching `HF_MODEL_CONFIG_FILES` will be considered.
+
+  Args:
+      model_path_or_repo: Either a local path to a model directory or a Hugging Face
+          model repo ID (e.g., "meta-llama/Llama-2-7b-hf").
+      save_dir: Target directory to save the copied configuration files.
+  """
+  patterns = HF_MODEL_CONFIG_FILES
+
+  if os.path.isdir(model_path_or_repo):
+    model_dir = Path(model_path_or_repo)
+  else:
+    model_dir = Path(
+      huggingface_hub.snapshot_download(
+        repo_id=model_path_or_repo, allow_patterns=patterns
+      )
+    )
+
+  save_dir = Path(save_dir)
+  save_dir.mkdir(parents=True, exist_ok=True)
+
+  for name in patterns:
+    src = model_dir / name
+    if src.exists():
+      shutil.copy2(src, save_dir / name)
+    else:
+      logger.warning(
+        "Configuration file %s not found in HF model repo %s", name, model_dir
+      )
+
+
+def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
+  """Save a Hugging Face tokenizer to a local directory.
+
+  This function downloads a tokenizer from a Hugging Face model repository or
+  loads it from a local directory and saves it to `save_dir`.
+
+  Args:
+      model_path_or_repo: Either a local path to a tokenizer directory or a Hugging Face
+          model repo ID (e.g., "meta-llama/Llama-2-7b-hf").
+      save_dir: Directory where the tokenizer files will be saved.
+  """
+  tokenizer = AutoTokenizer.from_pretrained(model_path_or_repo)
+  save_dir = Path(save_dir)
+  save_dir.mkdir(parents=True, exist_ok=True)
+  tokenizer.save_pretrained(save_dir)

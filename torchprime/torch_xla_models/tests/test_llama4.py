@@ -30,6 +30,7 @@ def get_llama_4_text_dummy_model() -> LlamaFixture:
     "meta-llama/Llama-4-Scout-17B-16E",
   )
   config.text_config.num_hidden_layers = 1
+  config.text_config.moe_layers = [0]
   config.text_config.vocab_size = vocab_size
   config.text_config.head_dim = 64
   config.text_config.num_attention_heads = 8
@@ -191,3 +192,56 @@ def test_rotarty_embedding_our_model_against_hf_model_native(fixture):
       rtol=1e-6,
       msg="xk after apply_rotary_emb is not equal",
     )
+
+
+@pytest.mark.parametrize(
+  "fixture",
+  [get_llama_4_text_dummy_model],
+  ids=["Llama4 text dummy"],
+)
+def test_moe_layer_from_model(fixture):
+  """
+  Tests the Llama4TextMoe layer from a loaded model to verify that the
+  memory-efficient `forward` method is mathematically equivalent to the
+  `forward_original` method.
+  """
+  # Arrange
+  torch.manual_seed(42)
+  fixture = fixture()
+  model = fixture.model
+  model.eval()
+
+  # Get a MoE layer from the model
+  moe_layer = model.model.layers[0].feed_forward
+  assert isinstance(moe_layer, modeling_llama4.Llama4TextMoe)
+
+  # Create dummy input
+  batch_size = 2
+  seq_len = 16
+  hidden_states = torch.rand(batch_size, seq_len, model.config.hidden_size)
+
+  # Act
+  # Run original, OOM-prone version
+  original_out, original_scores = moe_layer.forward_original(hidden_states)
+
+  # Run the new, naive slow version
+  out, scores = moe_layer.forward(hidden_states)
+
+  assert original_out.size() == out.size(), "Dimensions for outputs tensors don't match"
+  assert original_scores.size() == scores.size(), "Dimensions for scores don't match"
+
+  # Assert
+  torch.testing.assert_close(
+    original_out,
+    out,
+    atol=1e-2,
+    rtol=1e-6,
+    msg="MoE layer output does not match original logic",
+  )
+  torch.testing.assert_close(
+    original_scores,
+    scores,
+    atol=1e-3,
+    rtol=1e-6,
+    msg="MoE layer scores do not match original logic",
+  )

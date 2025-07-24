@@ -22,7 +22,8 @@ jobs:
       ARTIFACT_DIR: gs://torchprime-e2e-tests/${{ github.job }}/${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       llama-3-8b-name: ${{ steps.run-llama-3-8b.outputs.name }}
-      llama-3-8b-pure-mlp-name: ${{ steps.run-llama-3-8b-pure-mlp.outputs.name }}
+      # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
+      # llama-3-8b-pure-mlp-name: ${{ steps.run-llama-3-8b-pure-mlp.outputs.name }}
       llama-3_1-8b-sa-name: ${{ steps.run-llama-3_1-8b-SplashAttention.outputs.name }}
       llama-3_1-8b-scan-offload-name: ${{ steps.run-llama-3_1-8b-scan-offload.outputs.name }}
       llama-3-8b-2d-name: ${{ steps.run-llama-3-8b-2d.outputs.name }}
@@ -63,7 +64,6 @@ jobs:
           else
             echo "value=" >> "$GITHUB_OUTPUT"
           fi
-
       # Launch training workloads.
 
       - name: Run Llama 3.0 8B
@@ -87,27 +87,28 @@ jobs:
             ici_mesh.fsdp=4 \
             profile_start_step=3
 
-      - name: Run Llama 3.0 8B (@assume_pure)
-        id: run-llama-3-8b-pure-mlp
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          XLA_IR_DEBUG: 1
-          XLA_HLO_DEBUG: 1
-        run: |
-          name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
-            --name $name \
-            torchprime/torch_xla_models/train.py \
-            model=llama-3-8b \
-            dataset=wikitext \
-            task=train \
-            task.global_batch_size=8 \
-            task.lr_scheduler.type=constant \
-            task.max_steps=15 \
-            ici_mesh.fsdp=4 \
-            profile_start_step=3 \
-            model.pure_modules=[LlamaMLP,EinsumLinear]
+      # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
+      # - name: Run Llama 3.0 8B (@assume_pure)
+      #   id: run-llama-3-8b-pure-mlp
+      #   env:
+      #     HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      #     XLA_IR_DEBUG: 1
+      #     XLA_HLO_DEBUG: 1
+      #   run: |
+      #     name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
+      #     echo "name=$name" >> "$GITHUB_OUTPUT"
+      #     tp run ${{ steps.docker-url-option.outputs.value }} \
+      #       --name $name \
+      #       torchprime/torch_xla_models/train.py \
+      #       model=llama-3-8b \
+      #       dataset=wikitext \
+      #       task=train \
+      #       task.global_batch_size=8 \
+      #       task.lr_scheduler.type=constant \
+      #       task.max_steps=15 \
+      #       ici_mesh.fsdp=4 \
+      #       profile_start_step=3 \
+      #       model.pure_modules=[LlamaMLP,EinsumLinear]
 
       - name: Run Llama 3.1 8B (Splash Attention)
         id: run-llama-3_1-8b-SplashAttention
@@ -188,15 +189,14 @@ jobs:
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            model=llama-3-8b \
+            model=llama-3-8b-cp \
             model/sharding=llama-fsdp-tp-cp \
             dataset=wikitext \
             task=train \
-            task.global_batch_size=2 \
+            task.global_batch_size=4 \
             task.max_steps=15 \
             task.lr_scheduler.type=constant \
-            ici_mesh.fsdp=2 \
-            ici_mesh.context=2 \
+            ici_mesh.fsdp=4 \
             profile_start_step=3
 
       - name: Run Mixtral 8x7B
@@ -259,9 +259,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             --config-name llama-3-8b-sft-w-gsm8k \
             ici_mesh.fsdp=4 \
-            task.max_steps=20 \
-            task.global_batch_size=16 \
-            task.lr_scheduler.type=constant \
+            task.max_steps=50 \
             task.convert_to_safetensors=False \ 
             profile_start_step=3
 
@@ -325,7 +323,9 @@ jobs:
             "benchmark": .key,
             "name": .value.name,
             "lower_bound": .value.step_time_lower_bound,
-            "upper_bound": .value.step_time_upper_bound
+            "upper_bound": .value.step_time_upper_bound,
+            "target_loss": .value.target_loss,
+            "loss_tolerance": .value.loss_tolerance
           })' e2e_testing/step_time_bounds.yaml)
           echo "Benchmark matrix JSON: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -345,10 +345,11 @@ jobs:
         config: ${{ fromJson(needs.load-benchmarks.outputs.matrix) }}
     uses: ./.github/workflows/reusable_e2e_check.yml
     with:
+      # TODO(vlasenkoalexey): re-enable test after PyTorch2.8 release
+      # matrix.config.benchmark == 'llama-3-8b-pure-mlp' && needs.tp-run.outputs.llama-3-8b-pure-mlp-name ||
       jobset_name: >-
         ${{
           matrix.config.benchmark == 'llama-3-8b' && needs.tp-run.outputs.llama-3-8b-name ||
-          matrix.config.benchmark == 'llama-3-8b-pure-mlp' && needs.tp-run.outputs.llama-3-8b-pure-mlp-name ||
           matrix.config.benchmark == 'llama-3_1-8b-sa' && needs.tp-run.outputs.llama-3_1-8b-sa-name ||
           matrix.config.benchmark == 'llama-3_1-8b-scan-offload' && needs.tp-run.outputs.llama-3_1-8b-scan-offload-name ||
           matrix.config.benchmark == 'llama-3-8b-2d' && needs.tp-run.outputs.llama-3-8b-2d-name ||
@@ -362,4 +363,10 @@ jobs:
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       step_time_lower_bound: ${{ matrix.config.lower_bound }}
       step_time_upper_bound: ${{ matrix.config.upper_bound }}
+      # Optional loss validation settings. When undefined in the matrix,
+      # these fields expand to an empty string which causes a workflow
+      # syntax error. Default to ``0`` so the reusable workflow can
+      # skip the loss check when no value is provided.
+      target_loss: ${{ matrix.config.target_loss || 0 }}
+      loss_tolerance: ${{ matrix.config.loss_tolerance || 0 }}
     secrets: inherit

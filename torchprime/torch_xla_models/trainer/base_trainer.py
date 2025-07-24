@@ -49,6 +49,7 @@ from torchprime.torch_xla_models.model_rewriting.sharding_initialization import 
   setup_sharding_and_mesh,
 )
 from torchprime.torch_xla_models.topology import get_num_slices
+from torchprime.utils.parallelism_utils import lb_cp_enabled, reorder_sequence
 from torchprime.utils.profiling import ensure_profile_end_step
 
 logger = logging.getLogger(__name__)
@@ -242,6 +243,21 @@ class Trainer:
         epoch += 1
         train_iterator = iter(train_loader)
         batch = next(train_iterator)
+
+      # when context parallel and load balance context parallel is enabled,
+      # we will reorder the sequence here for each batch
+      if lb_cp_enabled(self.config):
+        return {
+          key: reorder_sequence(
+            tensor=value,
+            cp_size=self.config.ici_mesh.context,
+            seq_dim=1,
+            to_contiguous=False,
+          )
+          if key in ["input_ids"]
+          else value
+          for key, value in batch.items()
+        }
 
       trace_start_time = timer()
       loss, grad_norm = self.train_step(batch)

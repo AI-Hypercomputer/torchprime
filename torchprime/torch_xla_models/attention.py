@@ -11,6 +11,9 @@ from torch_xla.experimental.splash_attention import (
   splash_attention,
 )
 
+import torchprime.utils.kernel_utils as kernel_utils
+import torchprime.utils.parallelism_utils as parallelism_utils
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
   """
@@ -35,9 +38,9 @@ class AttentionModule(nn.Module):
   @xp.trace_me("AttentionModule")
   def forward(
     self,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
+    query_states: torch.Tensor,  # (batch_size, num_heads, q_len, head_dim)
+    key_states: torch.Tensor,  # (batch_size, num_kv_heads, kv_len, head_dim)
+    value_states: torch.Tensor,  # (batch_size, num_kv_heads, kv_len, head_dim)
     attention_mask: torch.Tensor | None = None,
   ):
     if self.config.attention_kernel != "splash_attention":
@@ -69,6 +72,29 @@ class AttentionModule(nn.Module):
         assert xs.get_global_mesh() is not None, (
           "Global mesh is required for Splash Attention"
         )
+        if "load_balance_cp" in self.config and self.config.load_balance_cp:
+          cp_size = self.config.context
+          # when CP and lbcp is enabled, we need to unpermute the kv in each attention layer
+          key_states = parallelism_utils.reorder_sequence(
+            tensor=key_states,
+            cp_size=cp_size,
+            seq_dim=2,
+            to_contiguous=True,
+          )
+          value_states = parallelism_utils.reorder_sequence(
+            tensor=value_states,
+            cp_size=cp_size,
+            seq_dim=2,
+            to_contiguous=True,
+          )
+          # Need to unpermute decoder_segment_ids when decoder
+          # segment ids is supported in torchprime
+          q_len = query_states.shape[2]
+          mask_shape = (q_len, q_len)
+          custom_mask = parallelism_utils.LoadBalancedCausalMask(
+            shape=mask_shape, cp_size=cp_size
+          )
+
         sa_config = SplashAttentionConfig(
           mesh=str(xs.get_global_mesh()),
           qkv_partition_spec=self.partition_spec,
@@ -79,9 +105,22 @@ class AttentionModule(nn.Module):
             if hasattr(sa_config, key):
               setattr(sa_config, key, value)
         query_states /= math.sqrt(head_dim)
-        attn_output = splash_attention(
-          query_states, key_states, value_states, sa_config.to_json()
-        )
+
+        if "load_balance_cp" in self.config and self.config.load_balance_cp:
+          attn_output = kernel_utils.tpu_splash_attention_jax_call_wrapper(
+            mask=custom_mask,
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            config=sa_config.to_json(),
+            decoder_segment_ids=None,
+            causal=False,
+            q_seq_shards=cp_size,
+          )[0]
+        else:
+          attn_output = splash_attention(
+            query_states, key_states, value_states, sa_config.to_json()
+          )
       case "flash_attention":
         # Integrated with PyTorch/XLA Pallas Flash Attention:
         default_block_sizes = {

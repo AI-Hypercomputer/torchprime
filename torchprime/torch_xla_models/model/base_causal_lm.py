@@ -117,7 +117,8 @@ class BaseCausalLM(nn.Module):
       model_dir = model_path_or_repo
     else:
       model_dir = huggingface_hub.snapshot_download(
-        repo_id=model_path_or_repo, allow_patterns=["*.safetensors*", "config.json"]
+        repo_id=model_path_or_repo,
+        allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
       )
 
     # Load weights
@@ -130,11 +131,12 @@ class BaseCausalLM(nn.Module):
     This method performs the following steps:
       1. Check if export is enabled via `export_checkpoint_path`.
       2. Create the save directory and flush pending XLA device ops.
-      3. Initialize a torch.distributed process group if needed.
-      4. Save the model state using torch.distributed.checkpoint (DCP).
-      5. If `convert_to_safetensors` is enabled and current process is rank 0,
+      3. Save the HF config files and tokenizer.
+      4. Initialize a torch.distributed process group if needed.
+      5. Save the model state using torch.distributed.checkpoint (DCP).
+      6. If `convert_to_safetensors` is enabled and current process is rank 0,
         reload the checkpoint on CPU and export sharded safetensors + index.
-      6. Synchronize all processes using an XLA rendezvous barrier.
+      7. Synchronize all processes using an XLA rendezvous barrier.
     """
     # Step 1: Check export path
     folder_name = getattr(config.task, "export_checkpoint_path", None)
@@ -148,22 +150,28 @@ class BaseCausalLM(nn.Module):
     xm.mark_step()
     xm.wait_device_ops()
 
-    # Step 3: Initialize torch.distributed process group
+    # Step 3: Save the HF config files and tokenizer
+    if xr.process_index() == 0:
+      logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
+      model_utils.copy_hf_config_files(config.model.pretrained_model, save_dir)
+      model_utils.save_hf_tokenizer(config.model.pretrained_model, save_dir)
+
+    # Step 4: Initialize torch.distributed process group
     if not dist.is_initialized():
       xr.use_spmd()
       dist.init_process_group("gloo", init_method="xla://")
 
-    # Step 4: Save distributed checkpoint
+    # Step 5: Save distributed checkpoint
     logger.info("Saving distributed checkpoint to %s", save_dir)
     model_utils.save_distributed_checkpoint(self, save_dir)
 
-    # Step 5: Convert to safetensors on rank-0 if enabled
+    # Step 6: Convert to safetensors on rank-0 if enabled
     if (
       getattr(config.task, "convert_to_safetensors", False) and xr.process_index() == 0
     ):
       logger.info("Converting distributed checkpoint to safetensors")
       model_utils.convert_to_safetensors_on_cpu(self, save_dir)
 
-    # Step 6: Barrier to synchronize all ranks
+    # Step 7: Barrier to synchronize all ranks
     if xr.process_count() > 1:
       xm.rendezvous("sft_save")
