@@ -96,7 +96,7 @@ def analyze_step_duration(file_path: str) -> float:
     file_content = blob.download_as_bytes()
   else:
     # Read local file
-    logger.info("Loading %", file_path)
+    logger.info("Loading %s", file_path)
     with open(file_path, "rb") as f:
       file_content = f.read()
 
