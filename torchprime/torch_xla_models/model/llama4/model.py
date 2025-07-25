@@ -183,11 +183,8 @@ class Llama4TextMoe(nn.Module):
     routed_in = routed_in * router_scores.reshape(-1, 1)
     routed_out = self.experts(routed_in)
     out = self.shared_expert(hidden_states)
-    # Now that we finished expert computation -> we scatter add because we gathered previously.
-    # W.e have to do this because we used all experts on all tokens.
-    # Replacing by sum, as backwards pass in PyTorch/XLA has issues with scatter_add_
-    # out.scatter_add_(dim=0, index=router_indices, src=routed_out.view(-1, hidden_dim))
-    out += routed_out.sum(dim=0)
+    # Combining results from all experts
+    out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
 
@@ -301,10 +298,10 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
     # data dimension sharding by expert.
     if mesh:
       routed_in = MarkShardingFunction.apply(
-        routed_in, mesh, (("expert", "fsdp"), "tensor")
+        routed_in, mesh, (("expert", "data", "fsdp"), "tensor")
       )
       router_scores = MarkShardingFunction.apply(
-        router_scores, mesh, (("expert", "fsdp"), "tensor")
+        router_scores, mesh, (("expert", "data", "fsdp"), "tensor")
       )
     routed_in = routed_in * router_scores.reshape(-1, 1)
 
@@ -316,7 +313,9 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
       routed_out = MarkShardingFunction.apply(
         routed_out, mesh, (("data", "fsdp"), "tensor")
       )
-    out = routed_out.sum(dim=0) + self.shared_expert(hidden_states)
+    out = self.shared_expert(hidden_states)
+    # Combining results from all experts
+    out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
 

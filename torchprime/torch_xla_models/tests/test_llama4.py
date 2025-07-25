@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 import pytest
 import torch
-import torch.test
 import torch_xla
 import transformers.models.llama4.modeling_llama4 as hf_modeling_llama4
 from omegaconf import DictConfig, OmegaConf
@@ -260,36 +259,36 @@ def test_moe_layer_from_model(fixture):
   torch.testing.assert_close(
     out_original,
     out_seq,
-    atol=1e-2,
+    atol=1e-5,
     rtol=1e-6,
     msg="sequential MoE layer output does not match original logic",
   )
   torch.testing.assert_close(
     scores_original,
     scores_seq,
-    atol=1e-3,
+    atol=1e-5,
     rtol=1e-6,
     msg="sequential MoE layer scores do not match original logic",
   )
 
-  assert out_original.size() == out_seq.size(), (
+  assert out_original.size() == out_exp.size(), (
     "Dimensions for outputs tensors don't match for expert parallelism MOE"
   )
-  assert scores_original.size() == scores_seq.size(), (
+  assert scores_original.size() == scores_exp.size(), (
     "Dimensions for scores don't match for expert parallelism MOE"
   )
 
   torch.testing.assert_close(
     out_original,
     out_exp,
-    atol=1e-2,
+    atol=1e-5,
     rtol=1e-6,
     msg="expert parallelism MoE layer output does not match original logic",
   )
   torch.testing.assert_close(
     scores_original,
     scores_exp,
-    atol=1e-3,
+    atol=1e-5,
     rtol=1e-6,
     msg="expert parallelism MoE layer scores do not match original logic",
   )
