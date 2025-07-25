@@ -44,9 +44,7 @@ class DeepseekV3RotaryEmbedding(nn.Module):
 
   def __init__(self, head_dim: int, rope_theta: float) -> None:
     super().__init__()
-    inv_freq = 1.0 / (
-      rope_theta ** (torch.arange(0, head_dim, 2).float() / head_dim)
-    )
+    inv_freq = 1.0 / (rope_theta ** (torch.arange(0, head_dim, 2).float() / head_dim))
     self.register_buffer("inv_freq", inv_freq, persistent=False)
 
   @torch.no_grad()
@@ -92,7 +90,9 @@ class DeepseekV3MLP(nn.Module):
     self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
     self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
     self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-    self.act_fn = nn.SiLU() if config.hidden_act == "silu" else ACT2FN[config.hidden_act]
+    self.act_fn = (
+      nn.SiLU() if config.hidden_act == "silu" else ACT2FN[config.hidden_act]
+    )
 
   @xp.trace_me("DeepseekV3MLP")
   def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -122,10 +122,14 @@ class DeepseekV3Attention(nn.Module):
       self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
     )
     self.k_proj = nn.Linear(
-      self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+      self.hidden_size,
+      self.num_key_value_heads * self.head_dim,
+      bias=config.attention_bias,
     )
     self.v_proj = nn.Linear(
-      self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+      self.hidden_size,
+      self.num_key_value_heads * self.head_dim,
+      bias=config.attention_bias,
     )
     self.o_proj = nn.Linear(
       self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
@@ -144,15 +148,21 @@ class DeepseekV3Attention(nn.Module):
   ) -> torch.Tensor:
     batch_size, seq_len, _ = hidden_states.size()
 
-    query_states = self.q_proj(hidden_states).view(
-      batch_size, seq_len, self.num_heads, self.head_dim
-    ).transpose(1, 2)
-    key_states = self.k_proj(hidden_states).view(
-      batch_size, seq_len, self.num_key_value_heads, self.head_dim
-    ).transpose(1, 2)
-    value_states = self.v_proj(hidden_states).view(
-      batch_size, seq_len, self.num_key_value_heads, self.head_dim
-    ).transpose(1, 2)
+    query_states = (
+      self.q_proj(hidden_states)
+      .view(batch_size, seq_len, self.num_heads, self.head_dim)
+      .transpose(1, 2)
+    )
+    key_states = (
+      self.k_proj(hidden_states)
+      .view(batch_size, seq_len, self.num_key_value_heads, self.head_dim)
+      .transpose(1, 2)
+    )
+    value_states = (
+      self.v_proj(hidden_states)
+      .view(batch_size, seq_len, self.num_key_value_heads, self.head_dim)
+      .transpose(1, 2)
+    )
 
     if position_embeddings is None:
       cos, sin = self.rotary_emb(value_states, position_ids)
@@ -172,7 +182,9 @@ class DeepseekV3Attention(nn.Module):
     attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
-    attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+    attn_output = attn_output.reshape(
+      batch_size, seq_len, self.num_heads * self.head_dim
+    )
     attn_output = self.o_proj(attn_output)
     return attn_output
 
@@ -183,8 +195,12 @@ class DeepseekV3DecoderLayer(nn.Module):
     self.hidden_size = config.hidden_size
     self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
     self.mlp = DeepseekV3MLP(config)
-    self.input_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    self.post_attention_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    self.input_layernorm = DeepseekV3RMSNorm(
+      config.hidden_size, eps=config.rms_norm_eps
+    )
+    self.post_attention_layernorm = DeepseekV3RMSNorm(
+      config.hidden_size, eps=config.rms_norm_eps
+    )
 
   @xp.trace_me("DeepseekV3DecoderLayer")
   def forward(
@@ -225,7 +241,9 @@ class DeepseekV3Model(nn.Module):
     )
     self.norm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
     self.rope_theta = config.rope_theta
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    head_dim = getattr(
+      config, "head_dim", config.hidden_size // config.num_attention_heads
+    )
     self.rotary_emb = DeepseekV3RotaryEmbedding(head_dim, self.rope_theta)
 
   @xp.trace_me("DeepseekV3Model")
@@ -236,7 +254,9 @@ class DeepseekV3Model(nn.Module):
   ) -> torch.Tensor:
     inputs_embeds = self.embed_tokens(input_ids)
     seq_len = inputs_embeds.size(1)
-    position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0).float()
+    position_ids = (
+      torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0).float()
+    )
 
     causal_mask = torch.triu(
       torch.full((seq_len, seq_len), float("-inf"), device=inputs_embeds.device), 1

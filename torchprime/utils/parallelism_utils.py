@@ -89,6 +89,7 @@ def reorder_sequence(
 
 
 if splash_attention_mask is None:  # pragma: no cover - jax may be missing
+
   class LoadBalancedCausalMask:
     """Placeholder mask when JAX is unavailable."""
 
@@ -96,6 +97,7 @@ if splash_attention_mask is None:  # pragma: no cover - jax may be missing
       raise ImportError("JAX splash attention mask is not available")
 
 else:
+
   class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
     """Lazy causal mask, prevents the model from attending to future tokens."""
 
