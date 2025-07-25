@@ -24,14 +24,16 @@ profile_end_step: null
 # when using tp run to launch the run using XPK
 profile_dir: profile
 
-# Default path for preprocessed data, can be overridden in dataset-specific configs
-cached_dataset_path: null
 # This might be overwritten when using tp run to launch the run using XPK
 output_dir: outputs
 
 # The name of the training run as it shows up on tensorboard.
 # If unspecified, defaults to the current date and time.
 run_name: null
+
+dataset:
+  # Default path for preprocessed data, can be overridden in dataset-specific configs
+  cached_dataset_path: null
 
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called

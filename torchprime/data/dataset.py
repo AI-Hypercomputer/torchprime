@@ -4,7 +4,6 @@ import json
 import logging
 
 import fsspec
-import torch_xla.runtime as xr
 from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
@@ -152,14 +151,6 @@ def make_train_dataset(
     logger.info(f"Loading cached dataset from: {cached_dataset_path}")
     # `load_from_disk` works seamlessly with local paths and GCS URIs.
     data = load_from_disk(cached_dataset_path)
-    # In a distributed environment, ensure each process gets a unique shard of the
-    # dataset to avoid redundant work and OOM errors.
-    if xr.world_size() > 1:
-      logger.info(
-        f"Sharding cached dataset for worker {xr.process_ordinal()} of {xr.world_size()}"
-      )
-      data = data.shard(num_shards=xr.world_size(), index=xr.process_ordinal())
-    data.set_format("torch")
     return data
 
   logger.info("No `cached_dataset_path` provided. Processing dataset on-the-fly...")
@@ -172,14 +163,6 @@ def make_train_dataset(
     cache_dir=cache_dir,
     streaming=streaming,
   )
-
-  # In a distributed environment, ensure each process gets a unique shard of the
-  # dataset to avoid redundant work during on-the-fly preprocessing.
-  if xr.world_size() > 1 and not streaming:
-    logger.info(
-      f"Sharding dataset for worker {xr.process_ordinal()} of {xr.world_size()}"
-    )
-    data = data.shard(num_shards=xr.world_size(), index=xr.process_ordinal())
 
   column_names = list(data.features)
   data = data.map(
