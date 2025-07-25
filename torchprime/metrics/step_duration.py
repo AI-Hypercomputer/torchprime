@@ -7,8 +7,8 @@ import logging
 import os
 import statistics
 import sys
-from urllib.parse import urlparse
 from datetime import datetime
+from urllib.parse import urlparse
 
 from torchprime.metrics.xplane_pb2 import XSpace  # type: ignore
 
