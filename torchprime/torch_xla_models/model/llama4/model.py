@@ -308,6 +308,7 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
     # Expert weights are expected to be sharded by expert dimension.
     # Therefore multiplication per expert should happen locally.
     routed_out = self.experts(routed_in)
+    routed_out = routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0)
     # Reshard back, by concatenating expert dimension and resharding by batch dimension.
     if mesh:
       routed_out = MarkShardingFunction.apply(
@@ -315,7 +316,7 @@ class Llama4TextMoeExpertParallelism(Llama4TextMoe):
       )
     out = self.shared_expert(hidden_states)
     # Combining results from all experts
-    out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
+    out.add_(routed_out)
     # No need to reshape output back to [batch, seq_len, hidden_dim]
     return out, router_scores
 
