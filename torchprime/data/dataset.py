@@ -121,6 +121,7 @@ def make_train_dataset(
   text_column: str = "text",
   streaming: bool = False,
   num_proc: int | None = None,
+  **kwargs,
 ) -> Dataset:
   """Loads and tokenizes a dataset, then chunks it into fixed-size blocks for training.
 
@@ -141,6 +142,7 @@ def make_train_dataset(
     text_column: The name of the column containing the text to be tokenized.
     streaming: Whether to stream the dataset.
     num_proc: Number of processes for multiprocessing.
+    **kwargs: Unused keyword arguments.
 
   Returns:
     A `Dataset` object containing tokenized and block-wise grouped training examples,
