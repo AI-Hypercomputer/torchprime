@@ -1,28 +1,42 @@
-"""
-Customized splash attention kernel wrapper. This is a varied copy
-from the torch/xla repository. (https://github.com/pytorch/xla)
-"""
+"""Customized splash attention kernel wrapper."""
 
+from __future__ import annotations
+
+# This is a varied copy from the torch/xla repository.
 import functools
 
-import jax
+try:  # noqa: SIM105
+  import jax
+  from jax.experimental import shard_map
+except Exception:  # pragma: no cover - jax may be unavailable
+  jax = None
+  shard_map = None
 import numpy as np
 import torch
 import torch_xla.debug.profiler as xp
-from jax.experimental import shard_map
-from jax.experimental.pallas.ops.tpu.splash_attention import (
-  splash_attention_kernel,
-  splash_attention_mask,
-)
-from jax.experimental.pallas.ops.tpu.splash_attention import (
-  splash_attention_mask as mask_lib,
-)
-from jax.sharding import PartitionSpec as P
-from torch_xla.core.xla_builder import call_jax
-from torch_xla.distributed.spmd import Mesh
-from torch_xla.experimental.splash_attention import (
-  SplashAttentionConfig,
-)
+
+if jax is not None:
+  from jax.experimental.pallas.ops.tpu.splash_attention import (
+    splash_attention_kernel,
+    splash_attention_mask,
+  )
+  from jax.experimental.pallas.ops.tpu.splash_attention import (
+    splash_attention_mask as mask_lib,
+  )
+  from jax.sharding import PartitionSpec as P
+  from torch_xla.core.xla_builder import call_jax
+  from torch_xla.distributed.spmd import Mesh
+else:  # pragma: no cover - JAX is optional for tests
+  splash_attention_kernel = None
+  splash_attention_mask = None
+  mask_lib = None
+  P = None
+  call_jax = None
+  Mesh = None
+try:  # noqa: SIM105
+  from torch_xla.experimental.splash_attention import SplashAttentionConfig
+except Exception:  # pragma: no cover - kernel may be unavailable
+  SplashAttentionConfig = None
 
 
 @xp.trace_me("tpu_splash_attention_jax_call_wrapper")
@@ -39,6 +53,8 @@ def tpu_splash_attention_jax_call_wrapper(
   q_seq_shards: int = 1,
   grad_output: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+  if jax is None or call_jax is None:
+    raise ImportError("JAX is required for splash attention kernels")
   """
   Wrapper for calling Jax splash attention kernel with
   splashAttentionConfig. Currently only support forward pass.

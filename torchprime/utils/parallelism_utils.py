@@ -1,7 +1,11 @@
 import numpy as np
 import torch
 import torch_xla
-from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
+
+try:  # noqa: SIM105
+  from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_mask
+except Exception:  # pragma: no cover - jax may be missing
+  splash_attention_mask = None
 from omegaconf import DictConfig
 
 
@@ -84,72 +88,71 @@ def reorder_sequence(
   return reordered.reshape(ori_tensor_shape)
 
 
-class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
-  """Lazy causal mask, prevents the model from attending to future tokens.
-  Attributes:
-    offset: Offset of q start wrt kv. A positive offset shifts the bottom
-      triangle upward, a negative one shifts it downward. A negative offset
-      makes the first 'offset' rows of the attention matrix all 0s which leads
-      to undefined softmax.
-  """
+if splash_attention_mask is None:  # pragma: no cover - jax may be missing
+  class LoadBalancedCausalMask:
+    """Placeholder mask when JAX is unavailable."""
 
-  offset: int
-  shape: tuple[int, int]
-  cp_size: int
+    def __init__(self, *args, **kwargs) -> None:
+      raise ImportError("JAX splash attention mask is not available")
 
-  def __init__(
-    self,
-    shape: tuple[int, int],
-    offset: int = 0,
-    shard_count: int = 1,
-    cp_size: int = 4,
-  ):
-    self.offset = offset
+else:
+  class LoadBalancedCausalMask(splash_attention_mask._ComputableMask):
+    """Lazy causal mask, prevents the model from attending to future tokens."""
 
-    def causal_mask_function(q_ids, kv_ids):
-      if self.offset == 0:
-        return q_ids >= kv_ids
-      else:
+    offset: int
+    shape: tuple[int, int]
+    cp_size: int
+
+    def __init__(
+      self,
+      shape: tuple[int, int],
+      offset: int = 0,
+      shard_count: int = 1,
+      cp_size: int = 4,
+    ) -> None:
+      self.offset = offset
+
+      def causal_mask_function(q_ids, kv_ids):
+        if self.offset == 0:
+          return q_ids >= kv_ids
         return q_ids + self.offset >= kv_ids
 
-    arr = np.arange(shape[0])
-    # we reorder the mask to be load balanced following the same approach as
-    # used to reorder the input tokens
-    out = reorder_mask(
-      tensor=arr[np.newaxis, :, np.newaxis, np.newaxis],
-      cp_size=cp_size,
-      seq_dim=1,
-    )
-    q_sequence = out[0, :, 0, 0]
-
-    mask_function = causal_mask_function
-
-    super().__init__(
-      shape=shape,
-      mask_function=mask_function,
-      shard_count=shard_count,
-    )
-    self.q_sequence = q_sequence
-
-  def __eq__(self, other: object):
-    if not isinstance(other, type(self)):
-      return NotImplemented
-
-    return (
-      self.shape == other.shape
-      and self.offset == other.offset
-      and np.array_equal(self.q_sequence, other.q_sequence)
-    )
-
-  def __hash__(self):
-    return hash(
-      (
-        type(self),
-        self.shape,
-        self.offset,
-        self.q_sequence.tobytes() if self.q_sequence is not None else None,
+      arr = np.arange(shape[0])
+      out = reorder_mask(
+        tensor=arr[np.newaxis, :, np.newaxis, np.newaxis],
+        cp_size=cp_size,
+        seq_dim=1,
       )
-    )
+      q_sequence = out[0, :, 0, 0]
+
+      mask_function = causal_mask_function
+
+      super().__init__(
+        shape=shape,
+        mask_function=mask_function,
+        shard_count=shard_count,
+      )
+      self.q_sequence = q_sequence
+
+      def __eq__(self, other: object):
+        if not isinstance(other, type(self)):
+          return NotImplemented
+
+        return (
+          self.shape == other.shape
+          and self.offset == other.offset
+          and np.array_equal(self.q_sequence, other.q_sequence)
+        )
+
+      def __hash__(self):
+        return hash(
+          (
+            type(self),
+            self.shape,
+            self.offset,
+            self.q_sequence.tobytes() if self.q_sequence is not None else None,
+          )
+        )
 
 
 def cp_enabled(config: DictConfig):

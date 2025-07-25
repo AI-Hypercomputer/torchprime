@@ -6,10 +6,15 @@ import torch_xla.debug.profiler as xp
 import torch_xla.distributed.spmd as xs
 from torch import nn
 from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
-from torch_xla.experimental.splash_attention import (
-  SplashAttentionConfig,
-  splash_attention,
-)
+
+try:  # noqa: SIM105
+  from torch_xla.experimental.splash_attention import (
+    SplashAttentionConfig,
+    splash_attention,
+  )
+except Exception:  # pragma: no cover - kernel may not be available
+  SplashAttentionConfig = None
+  splash_attention = None
 
 import torchprime.utils.kernel_utils as kernel_utils
 import torchprime.utils.parallelism_utils as parallelism_utils
@@ -68,6 +73,10 @@ class AttentionModule(nn.Module):
 
     match self.config.attention_kernel:
       case "splash_attention":
+        if splash_attention is None or SplashAttentionConfig is None:
+          raise ImportError(
+            "Splash Attention kernel is not available in this environment"
+          )
         # Integrated with PyTorch/XLA Pallas Splash Attention:
         assert xs.get_global_mesh() is not None, (
           "Global mesh is required for Splash Attention"
