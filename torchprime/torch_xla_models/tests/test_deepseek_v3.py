@@ -1,68 +1,120 @@
-"""Unit test for the DeepSeek V3 model using BaseCausalLM.
-
-This test verifies that a minimal DeepSeek V3 model can be exported and
-reloaded without changing its weights.
-"""
+import copy
+from dataclasses import dataclass
 
 import pytest
 import torch
-import torch_xla.core.xla_model as xm
+import torch_xla
 from omegaconf import OmegaConf
+from transformers import DeepseekV3Config
+from transformers import DeepseekV3ForCausalLM as HFDeepseekV3ForCausalLM
 
-from torchprime.torch_xla_models.model.deepseek_v3 import DeepseekForCausalLM
-from torchprime.torch_xla_models.model.model_utils import set_default_dtype
+from torchprime.torch_xla_models.model.deepseek_v3 import (
+  DeepseekV3ForCausalLM,  # noqa: E402
+)
 
 
-@pytest.fixture(scope="module")
-def cfg():
-  return OmegaConf.create(
-    {
-      "model_id": "deepseek-v3-mini",
-      "model_class": "deepseek_v3.DeepseekForCausalLM",
-      "vocab_size": 128,
-      "hidden_size": 64,
-      "intermediate_size": 256,
-      "num_hidden_layers": 2,
-      "num_attention_heads": 4,
-      "num_key_value_heads": 1,
-      "hidden_act": "silu",
-      "max_position_embeddings": 64,
-      "bos_token_id": 1,
-      "eos_token_id": 2,
-      "tokenizer_name": "deepseek-ai/DeepSeek-V3",
-      "initializer_range": 0.02,
-      "rms_norm_eps": 1e-5,
-      "attention_dropout": False,
-      "attention_bias": False,
-      "attention_kernel": "torch",
-      "rope_theta": 10000.0,
-    }
+@dataclass
+class DeepseekFixture:
+  vocab_size: int
+  hf_model: HFDeepseekV3ForCausalLM
+  model: DeepseekV3ForCausalLM
+
+
+def get_deepseek_v3_dummy() -> DeepseekFixture:
+  torch.manual_seed(42)
+  torch_xla.manual_seed(42)
+  vocab_size = 64
+  config = DeepseekV3Config(
+    vocab_size=vocab_size,
+    hidden_size=128,
+    intermediate_size=256,
+    moe_intermediate_size=64,
+    num_hidden_layers=1,
+    num_attention_heads=4,
+    num_key_value_heads=4,
+    max_position_embeddings=64,
+    use_cache=False,
+  )
+  tp_cfg = OmegaConf.create(config.to_dict())
+  with torch.device("cpu"):
+    hf_model = HFDeepseekV3ForCausalLM(config)
+    model = DeepseekV3ForCausalLM(tp_cfg)
+    model.load_state_dict(hf_model.state_dict())
+  return DeepseekFixture(vocab_size, hf_model, model)
+
+
+def noop(mod):
+  return mod
+
+
+def scan_decoders(mod):
+  import torchprime.torch_xla_models.scan_layers
+
+  return torchprime.torch_xla_models.scan_layers.compile(mod, "model.layers")
+
+
+@pytest.mark.parametrize("transform", [noop, scan_decoders])
+def test_forward_our_model_against_hf_model(transform):
+  fixture = get_deepseek_v3_dummy()
+  device = torch_xla.device()
+  model_xla = copy.deepcopy(fixture.model).to(device)
+  model_xla = transform(model_xla)
+  hf_model_xla = copy.deepcopy(fixture.hf_model).to(device)
+  torch_xla.sync()
+  for input_size in [8, 16]:
+    input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2)).to(device)
+    hf_output = hf_model_xla(
+      input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
+    )
+    deepseek_xla_logits, deepseek_xla_loss = model_xla(
+      input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
+    )
+    torch_xla.sync()
+    torch.testing.assert_close(
+      hf_output.logits,
+      deepseek_xla_logits,
+      atol=1e-6,
+      rtol=1e-9,
+      msg="logits are not equal",
+    )
+    torch.testing.assert_close(
+      hf_output.loss,
+      deepseek_xla_loss,
+      atol=1e-6,
+      rtol=1e-9,
+      msg="loss is not equal",
+    )
+
+
+def test_forward_torch_xla_against_native():
+  fixture = get_deepseek_v3_dummy()
+  input_size = 8
+  device = torch.device("cpu")
+  input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2))
+  native_logits, native_loss = fixture.model(
+    input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
   )
 
+  device = torch_xla.device()
+  input_ids = input_ids.to(device)
+  model_xla = copy.deepcopy(fixture.model).to(device)
+  torch_xla.sync()
 
-@pytest.mark.xla
-def test_deepseek_model_export_reload_consistency(tmp_path, cfg):
-  device = xm.xla_device()
-  with set_default_dtype(torch.bfloat16):
-    model = DeepseekForCausalLM(cfg).to(device).eval()
-  input_ids = torch.randint(0, cfg.vocab_size, (1, 4), dtype=torch.long, device=device)
-  attn_mask = torch.ones_like(input_ids).to(device, dtype=torch.bfloat16)
-
-  with torch.no_grad():
-    orig_logits = model(input_ids, attn_mask)[0]
-    assert orig_logits.shape == (1, 4, cfg.vocab_size)
-  xm.mark_step()
-
-  export_dir = tmp_path / "deepseek_mini_export"
-  model.export(str(export_dir))
-
-  reloaded_model = DeepseekForCausalLM(cfg)
-  reloaded_model.from_pretrained(str(export_dir))
-  reloaded_model.to(device).eval()
-
-  with torch.no_grad():
-    reload_logits = reloaded_model(input_ids, attn_mask)[0]
-  xm.mark_step()
-
-  diff = (orig_logits - reload_logits).abs().max()
-  assert diff.item() < 0.005, f"Max diff {diff.item()} too large"
+  xla_logits, xla_loss = model_xla(
+    input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
+  )
+  torch_xla.sync()
+  torch.testing.assert_close(
+    native_logits,
+    xla_logits.to("cpu"),
+    atol=1e-2,
+    rtol=1e-6,
+    msg="CPU run and XLA run logits are not equal",
+  )
+  torch.testing.assert_close(
+    native_loss,
+    xla_loss.to("cpu"),
+    atol=1e-2,
+    rtol=1e-6,
+    msg="CPU run and XLA run loss is not equal",
+  )

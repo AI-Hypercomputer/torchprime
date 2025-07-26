@@ -101,7 +101,7 @@ class DeepseekV3MLP(nn.Module):
 
 
 class DeepseekV3Attention(nn.Module):
-  """Minimal multi-head self-attention for DeepSeek V3."""
+  """MLA for DeepSeek V3."""
 
   def __init__(self, config: DictConfig, layer_idx: int | None = None) -> None:
     super().__init__()
