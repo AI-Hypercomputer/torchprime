@@ -32,7 +32,7 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.num_hidden_layers = 1
 
   scale_factor = 32
-  config.attention_kernel="pytorch"
+  config.attention_kernel = "pytorch"
 
   config.hidden_size //= scale_factor
   config.intermediate_size //= scale_factor
@@ -87,15 +87,15 @@ def test_forward_our_model_against_hf_model(transform):
     torch.testing.assert_close(
       hf_output.logits,
       deepseek_xla_logits,
-    atol=1e-2,
-    rtol=1e-4,
+      atol=1e-2,
+      rtol=1e-4,
       msg="logits are not equal",
     )
     torch.testing.assert_close(
       hf_output.loss,
       deepseek_xla_loss,
-    atol=1e-2,
-    rtol=1e-4,
+      atol=1e-2,
+      rtol=1e-4,
       msg="loss is not equal",
     )
 

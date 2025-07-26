@@ -46,7 +46,6 @@ class DeepseekV3RotaryEmbedding(nn.Module):
   inv_freq: nn.Buffer
 
   def __init__(self, config: DictConfig):
-
     super().__init__()
     self.config = config
     inv_freq, self.attention_scaling = deepseek_v3_rope_init_fn(self.config)
@@ -252,7 +251,9 @@ class DeepseekV3Attention(nn.Module):
     self.attention_block = AttentionModule(config)
     self.layer_idx = layer_idx
     self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-    self.attention_dropout = config.attention_dropout # this is not used in the current implementation
+    self.attention_dropout = (
+      config.attention_dropout
+    )  # this is not used in the current implementation
     self.num_heads = config.num_attention_heads
     self.rope_theta = config.rope_theta
     #############
