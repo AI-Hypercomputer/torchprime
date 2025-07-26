@@ -17,7 +17,7 @@ from transformers.activations import ACT2FN
 from transformers.utils import logging
 
 from torchprime.layers.sequential import HomogeneousSequential
-from torchprime.rope.rope import RopeScaling, llama3_rope_frequencies
+from torchprime.rope.rope import deepseek_v3_rope_init_fn
 from torchprime.torch_xla_models import offloading
 from torchprime.torch_xla_models.attention import AttentionModule
 from torchprime.torch_xla_models.loss import cross_entropy_loss
@@ -45,20 +45,21 @@ class DeepseekV3RMSNorm(nn.Module):
 class DeepseekV3RotaryEmbedding(nn.Module):
   inv_freq: nn.Buffer
 
-  def __init__(
-    self, head_dim: int, rope_theta: float, scaling: RopeScaling | None = None
-  ):
+  def __init__(self, config: DictConfig):
+
     super().__init__()
-    inv_freq = llama3_rope_frequencies(head_dim, theta=rope_theta, scaling=scaling)
+    self.config = config
+    inv_freq, self.attention_scaling = deepseek_v3_rope_init_fn(self.config)
     self.register_buffer("inv_freq", inv_freq, persistent=False)
+    self.original_inv_freq = self.inv_freq
 
   @torch.no_grad()
-  @xp.trace_me("DeepseekV3RotaryEmbedding")
   def forward(self, x: torch.Tensor, position_ids: torch.Tensor):
     inv_freq_expanded = (
       self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
     )
     position_ids_expanded = position_ids[:, None, :].float()
+
     device_type = x.device.type
     device_type = (
       device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
@@ -68,8 +69,8 @@ class DeepseekV3RotaryEmbedding(nn.Module):
         1, 2
       )
       emb = torch.cat((freqs, freqs), dim=-1)
-      cos = emb.cos()
-      sin = emb.sin()
+      cos = emb.cos() * self.attention_scaling
+      sin = emb.sin() * self.attention_scaling
     return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -224,6 +225,9 @@ class DeepseekV3MoE(nn.Module):
         weighted_output = expert_output * expert_weights.unsqueeze(-1)
         final_hidden_states.index_add_(0, token_indices, weighted_output)
 
+    # in original deepseek, the output of the experts are gathered once we leave this module
+    # thus the moe module is itelsf an IsolatedParallel module
+    # and all expert are "local" meaning we shard but we don't gather
     return final_hidden_states.type(hidden_states.dtype)
 
   @xp.trace_me("DeepseekV3MoE")
@@ -240,28 +244,30 @@ class DeepseekV3MoE(nn.Module):
 
 
 class DeepseekV3Attention(nn.Module):
-  """Multi-headed attention with optional LoRA projections."""
+  """Multi-headed latent attention."""
 
   def __init__(self, config: DictConfig, layer_idx: int | None = None):
     super().__init__()
     self.config = config
     self.attention_block = AttentionModule(config)
     self.layer_idx = layer_idx
+    self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+    self.attention_dropout = config.attention_dropout # this is not used in the current implementation
     self.num_heads = config.num_attention_heads
-    self.head_dim = config.qk_head_dim
-    self.num_key_value_heads = config.num_key_value_heads
-    self.num_key_value_groups = self.num_heads // self.num_key_value_heads
     self.rope_theta = config.rope_theta
+    #############
+    self.q_lora_rank = config.q_lora_rank
+    self.qk_rope_head_dim = config.qk_rope_head_dim
+    self.kv_lora_rank = config.kv_lora_rank
+    self.v_head_dim = config.v_head_dim
+    self.qk_nope_head_dim = config.qk_nope_head_dim
+    #############
+    self.qk_head_dim = config.qk_head_dim
+
     self.is_causal = True
-
-    if self.head_dim * self.num_heads != config.hidden_size:
-      raise ValueError(
-        f"hidden_size must be divisible by num_heads (got hidden_size: {config.hidden_size} and num_heads: {self.num_heads})"
-      )
-
     if config.q_lora_rank is None:
       self.q_proj = nn.Linear(
-        config.hidden_size, self.num_heads * self.head_dim, bias=False
+        config.hidden_size, self.num_heads * self.qk_head_dim, bias=False
       )
     else:
       self.q_a_proj = nn.Linear(
@@ -269,7 +275,7 @@ class DeepseekV3Attention(nn.Module):
       )
       self.q_a_layernorm = DeepseekV3RMSNorm(config.q_lora_rank)
       self.q_b_proj = nn.Linear(
-        config.q_lora_rank, self.num_heads * self.head_dim, bias=False
+        config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False
       )
 
     self.kv_a_proj_with_mqa = nn.Linear(
@@ -287,7 +293,8 @@ class DeepseekV3Attention(nn.Module):
     self.o_proj = nn.Linear(
       self.num_heads * config.v_head_dim, config.hidden_size, bias=config.attention_bias
     )
-    self.scaling = self.head_dim ** (-0.5)
+
+    self.scaling = self.qk_head_dim ** (-0.5)
     if config.rope_scaling is not None:
       mscale_all_dim = config.rope_scaling.get("mscale_all_dim", 0)
       scaling_factor = config.rope_scaling["factor"]
@@ -304,7 +311,7 @@ class DeepseekV3Attention(nn.Module):
     position_ids: torch.Tensor | None = None,
   ) -> torch.Tensor:
     batch_size, seq_length = hidden_states.shape[:2]
-    query_shape = (batch_size, seq_length, -1, self.head_dim)
+    query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
     key_shape = (
       batch_size,
       seq_length,
@@ -402,13 +409,7 @@ class DeepseekV3Model(nn.Module):
       ]
     )
     self.norm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-    rope_scaling = config.get("rope_scaling", None)
-    head_dim = config.qk_head_dim
-    if rope_scaling is not None:
-      rope_scaling = RopeScaling(**rope_scaling)
-    self.rotary_emb = DeepseekV3RotaryEmbedding(
-      head_dim=head_dim, rope_theta=config.rope_theta, scaling=rope_scaling
-    )
+    self.rotary_emb = DeepseekV3RotaryEmbedding(config=config)
 
   @xp.trace_me("DeepseekV3Model")
   def forward(
