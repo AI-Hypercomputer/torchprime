@@ -1,3 +1,3 @@
-from .model import DeepseekForCausalLM
+from .model import DeepseekV3ForCausalLM
 
-__all__ = ["DeepseekForCausalLM"]
+__all__ = ["DeepseekV3ForCausalLM"]

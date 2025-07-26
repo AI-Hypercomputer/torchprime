@@ -462,6 +462,3 @@ class DeepseekV3ForCausalLM(BaseCausalLM):
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
     return logits, loss
-
-
-__all__ = ["DeepseekV3ForCausalLM"]
