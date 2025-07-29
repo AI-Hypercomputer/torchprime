@@ -1,7 +1,7 @@
 # TPU vs. GPU: Accuracy Equivalence Despite the Precision Difference
 
 In this tutorial, you'll learn the basics of numerical precision on GPUs and
-TPUs and demonstrates that a model trained on an Nvidia GPU achieves equivalent
+TPUs and demonstrate that a model trained on an Nvidia GPU achieves equivalent
 accuracy to one trained on a Google TPU.
 
 ## Understanding Numerical Differences: TPU vs. GPU
@@ -51,9 +51,9 @@ and
 ### Model and Dataset
 
 To provide a clear and focused comparison, we use the well-established
-**ResNet-18** model. For the dataset, we use a **CelebA** from huggingface. The
-data is split into 90/10 for training and testing, ensuring that images for
-every identity are present in both sets. Implementaion detail can be found in
+**ResNet-18** model. For the dataset, we use a **CelebA**. The data is split
+into 90/10 for training and testing, ensuring that images for every identity are
+present in both sets. Implementation details can be found in
 [model.py](model.py) and [data.py](../../torch_xla_vision_models/data.py).
 
 
@@ -61,8 +61,8 @@ every identity are present in both sets. Implementaion detail can be found in
 ### Methodology
 
 Our methodology is designed to provide a fair comparison of the numerical
-differences between **hardware platforms** by using a robust, production-like
-training approach.
+differences between **hardware platforms** by using a realistic training
+approach.
 
 #### Training Approaches
 
@@ -95,7 +95,7 @@ a rigorous process:
     type, allowing for a more reliable comparison than one based on a single
     run.
 
-2.  **Statistical Analysis (t-test)**: A t-test is a statistical tool used to
+2.  **Statistical Analysis (t-test)**: A t-test is a statistical toolå used to
     determine if there is a significant difference between the average results
     of two groups. We use an independent two-sample t-test to compare the final
     model accuracies from our multiple TPU and GPU runs. This is crucial because
