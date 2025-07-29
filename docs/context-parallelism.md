@@ -60,9 +60,7 @@ The primary communication costs in CP are the same as in FSDP (all-gathering wei
 
 Assuming Grouped-Query Attention (GQA), the ratio of additional computation to communication can be analyzed as follows:
 
-* **Compute (Local Attention)**: $$O(4 \cdot \text{batch} \cdot \frac{\text{seq\_len}^2}{\|CP\|} \cdot \text{query\_heads} \cdot \text{head\_dim})$$
-* **Communication (KV All-Gather)**:$$O(4 \cdot \text{batch} \cdot \text{seq\_len} \cdot \text{kv\_heads} \cdot \text{head\_dim})$$
-* **Compute-to-Comm Ratio**:$$ \frac{\text{seq\_len} \cdot \text{query\_heads}}{\text{kv\_heads} \cdot \|CP\|} $$
+<img width="672" height="372" alt="Screenshot 2025-07-29 at 2 04 35 PM" src="https://github.com/user-attachments/assets/326fd181-70ac-4889-9130-acd16dbeafda" />
 
 Where:
 * `seq_len`: The full sequence length.
@@ -94,7 +92,7 @@ To enable load-balanced Context Parallelism, simply set the `load_balance_cp` fl
 # ...
 load_balance_cp: True
 # ...
-
+```
 
 
 <!-- xrefs -->
