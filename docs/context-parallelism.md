@@ -21,6 +21,7 @@ CP is essential when facing two primary constraints in large-scale model trainin
 Sharding the sequence dimension introduces unique challenges, particularly within the attention mechanism.
 
 ### The Attention Challenge: Queries, Keys, and Values
+<img width="970" height="933" alt="Screenshot 2025-07-30 at 11 33 52 AM" src="https://github.com/user-attachments/assets/371582c8-46da-47c7-b018-03743d929bef" />
 
 In a standard attention operation, every query token must attend to every key/value token. When we shard the sequence dimension:
 1.  The **queries (Q)** are sharded along the sequence dimension and each chunk of the sharded sequnence will remain local to the assigned device.
@@ -47,8 +48,10 @@ For example, with 4 devices and 8 chunks of data `[0, 1, 2, 3, 4, 5, 6, 7]`, the
 * **Device 4**: Gets chunks `[3, 4]`
 
 ### Picture showing the change of the masking
-Before loading balancing:
+Before loading balancing:<img width="655" height="523" alt="Screenshot 2025-07-30 at 11 34 16 AM" src="https://github.com/user-attachments/assets/d399293f-104d-4e13-ace9-7aabd1825d82" />
+
 After loading balancing:
+<img width="648" height="531" alt="Screenshot 2025-07-30 at 11 34 35 AM" src="https://github.com/user-attachments/assets/fb90417f-06b3-4b64-b853-1294e9de4b07" />
 
 
 
