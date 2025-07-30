@@ -83,7 +83,7 @@ This implementation is a practical and performant flavor of Context Parallelism.
 2. Update model config to set correct flags values [pointer][model-setting]
 3. In the attention part, since the generated k/v was using the permuted activations, we need to unpermute the k/v before attention compuation in each layer. [pointer][kv-unpermuate]
 4. When load balanced CP is enabled, we need to pass in custom casual mask with correct sharded masking for each device. [pointer][custom-mask]
-5. In the splash attention kernel wrapper, make sure passing in correct q block tile size: [pointer][q-block-size] and apply correct sharding of the kernel call[pointer][link1], essentially, the input "Q" needs to have an extra sharding on the sequence length dimension [pointer][link2]. The output (input of the next layer) will also have the extra sharding on sequence length [pointer][link3]. The splash attention kernel wrapper itself should be sharded by (tensor, context) since it actually store a pytree object of the multi-head mask. [pointer][link4]
+5. In the splash attention kernel wrapper, make sure passing in correct q block tile size: [pointer][q-block-size] and apply correct sharding of the kernel call [pointer][link1], essentially, the input "Q" needs to have an extra sharding on the sequence length dimension [pointer][link2]. The output (input of the next layer) will also have the extra sharding on sequence length [pointer][link3]. The splash attention kernel wrapper itself should be sharded by (tensor, context) since it actually store a pytree object of the multi-head mask. [pointer][link4]
 
 ---
 
