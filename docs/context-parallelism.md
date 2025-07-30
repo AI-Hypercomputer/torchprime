@@ -3,7 +3,7 @@
 
 **Context Parallelism (CP)** is a memory-saving distributed training technique designed for models with very long input sequences. It works by sharding the **sequence dimension** of activations and inputs across multiple devices.
 
-This approach is an alternative to Fully Sharded Data Parallelism (FSDP), which shards the *batch dimension*. By sharding the sequence length, CP allows for a much smaller memory footprint per device, enabling training with extremely long contexts even when the per-device batch size is small (e.g., less than 1).
+This approach is orthogonal to Fully Sharded Data Parallelism (FSDP), which shards the *batch dimension*. By sharding the sequence length, CP allows for a much smaller memory footprint per device, enabling training with extremely long contexts even when the per-device batch size is small (e.g., less than 1).
 
 ---
 
