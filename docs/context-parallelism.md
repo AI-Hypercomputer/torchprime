@@ -22,9 +22,10 @@ Sharding the sequence dimension introduces unique challenges, particularly withi
 
 ### The Attention Challenge: Queries, Keys, and Values
 
+In a standard attention operation, every query token must attend to every key/value token. When we shard the sequence dimension:
+
 <img width="970" height="933" alt="Screenshot 2025-07-30 at 11 33 52 AM" src="https://github.com/user-attachments/assets/371582c8-46da-47c7-b018-03743d929bef" />
 
-In a standard attention operation, every query token must attend to every key/value token. When we shard the sequence dimension:
 1.  The **queries (Q)** are sharded along the sequence dimension and each chunk of the sharded sequnence will remain local to the assigned device.
 2.  The **keys (K)** and **values (V)** must be gathered from all other devices (`all-gather`) before the attention computation can be performed.
 
