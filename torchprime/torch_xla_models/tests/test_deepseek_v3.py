@@ -88,19 +88,87 @@ def test_forward_our_model_against_hf_model(transform):
       hf_output.logits,
       deepseek_xla_logits,
       atol=1e-2,
-      rtol=1e-4,
+      rtol=1e-6,
       msg="logits are not equal",
     )
     torch.testing.assert_close(
       hf_output.loss,
       deepseek_xla_loss,
       atol=1e-2,
-      rtol=1e-4,
+      rtol=1e-6,
       msg="loss is not equal",
     )
 
 
-def test_forward_torch_xla_against_native():
+@pytest.mark.parametrize("transform", [noop, scan_decoders])
+def test_layers_by_layer_against_hf_model(transform):
+  fixture = get_deepseek_v3_dummy()
+  device = torch_xla.device()
+  model_xla = copy.deepcopy(fixture.model).to(device)
+  model_xla = transform(model_xla)
+  hf_model_xla = copy.deepcopy(fixture.hf_model).to(device)
+
+  seq_len = 4
+  input_ids = torch.randint(fixture.vocab_size, (2, seq_len)).to(device)
+  attention_mask = torch.ones_like(input_ids)
+
+  inputs_embeds_xla = model_xla.model.embed_tokens(input_ids)
+  inputs_embeds_hf = hf_model_xla.model.embed_tokens(input_ids)
+  torch.testing.assert_close(
+    inputs_embeds_xla, inputs_embeds_hf, msg="emb layer outputs not equal"
+  )
+
+  position_ids = torch.arange(seq_len, device=device).unsqueeze(0).float()
+  causal_mask = (
+    torch.triu(torch.full((seq_len, seq_len), float("-inf"), device=device), diagonal=1)
+    .unsqueeze(0)
+    .unsqueeze(0)
+  )
+  causal_mask = causal_mask * attention_mask[:, None, None, :]
+
+  pos_embeds_xla = model_xla.model.rotary_emb(inputs_embeds_xla, position_ids)
+  pos_embeds_hf = hf_model_xla.model.rotary_emb(inputs_embeds_hf, position_ids)
+  torch.testing.assert_close(
+    pos_embeds_xla[0], pos_embeds_hf[0], msg="rotary_emb layer outputs not equal"
+  )
+  torch.testing.assert_close(
+    pos_embeds_xla[1], pos_embeds_hf[1], msg="rotary_emb layer outputs not equal"
+  )
+
+  hidden_xla = inputs_embeds_xla
+  hidden_hf = inputs_embeds_hf
+  for idx, (layer_xla, layer_hf) in enumerate(
+    zip(model_xla.model.layers, hf_model_xla.model.layers, strict=True)
+  ):
+    hidden_xla = layer_xla(
+      hidden_xla,
+      attention_mask=causal_mask,
+      position_ids=position_ids,
+      position_embeddings=pos_embeds_xla,
+    )
+    hidden_hf = layer_hf(
+      hidden_hf,
+      attention_mask=causal_mask,
+      position_ids=position_ids,
+      position_embeddings=pos_embeds_hf,
+    )[0]
+    torch_xla.sync()
+    torch.testing.assert_close(
+      hidden_xla,
+      hidden_hf,
+      atol=1e-3,
+      rtol=1e-6,
+      msg=f"decoder layer {idx} outputs not equal",
+    )
+
+  hidden_xla = model_xla.model.norm(hidden_xla)
+  hidden_hf = hf_model_xla.model.norm(hidden_hf)
+  torch.testing.assert_close(
+    hidden_xla, hidden_hf, atol=2e-2, rtol=1e-6, msg="norm layer outputs not equal"
+  )
+
+
+def test_forward_torch_xla_against_native_cpu():
   fixture = get_deepseek_v3_dummy()
   input_size = 8
   device = torch.device("cpu")
@@ -121,14 +189,14 @@ def test_forward_torch_xla_against_native():
   torch.testing.assert_close(
     native_logits,
     xla_logits.to("cpu"),
-    atol=1e-2,
-    rtol=1e-4,
+    atol=1e-4,
+    rtol=1e-6,
     msg="CPU run and XLA run logits are not equal",
   )
   torch.testing.assert_close(
     native_loss,
     xla_loss.to("cpu"),
-    atol=1e-2,
-    rtol=1e-4,
+    atol=1e-4,
+    rtol=1e-6,
     msg="CPU run and XLA run loss is not equal",
   )
