@@ -23,7 +23,7 @@ Sharding the sequence dimension introduces unique challenges, particularly withi
 ### The Attention Challenge: Queries, Keys, and Values
 
 In a standard attention operation, every query token must attend to every key/value token. When we shard the sequence dimension:
-1.  The **queries (Q)** are sharded along the sequence dimension and remain local to each device.
+1.  The **queries (Q)** are sharded along the sequence dimension and each chunk of the sharded sequnence will remain local to the assigned device.
 2.  The **keys (K)** and **values (V)** must be gathered from all other devices (`all-gather`) before the attention computation can be performed.
 
 While this `all-gather` operation introduces communication overhead, it is a necessary step to compute the full attention score.
@@ -45,6 +45,10 @@ For example, with 4 devices and 8 chunks of data `[0, 1, 2, 3, 4, 5, 6, 7]`, the
 * **Device 2**: Gets chunks `[1, 6]`
 * **Device 3**: Gets chunks `[2, 5]`
 * **Device 4**: Gets chunks `[3, 4]`
+
+### Picture showing the change of the masking
+Before loading balancing:
+After loading balancing:
 
 
 
@@ -74,15 +78,22 @@ This ratio shows that for long sequences (`seq_len`), the computational benefit 
 
 This implementation is a practical and performant flavor of Context Parallelism. More advanced techniques like Ring Attention theoretically hide all communication costs, but come with significantly higher implementation complexity. We find this all-gather approach offers an excellent balance of performance and simplicity.
 
+### Implementation Details
+1. Sharding the activations and inputs on sequence length dimension: [pointer][ai-sharding]. When load balanced context parallelism is enabled, we need to reorder the activations sequence order here [pointer][lbcp-reorder]
+2. Update model config to set correct flags values [pointer][model-setting]
+3. In the attention part, since the generated k/v was using the permuted activations, we need to unpermute the k/v before attention compuation in each layer. [pointer][kv-unpermuate]
+4. When load balanced CP is enabled, we need to pass in custom casual mask with correct sharded masking for each device. [pointer][custom-mask]
+5. In the splash attention kernel wrapper, make sure passing in correct q block tile size: [pointer][q-block-size] and apply correct sharding of the kernel call[pointer][link1], essentially, the input "Q" needs to have an extra sharding on the sequence length dimension [pointer][link2]. The output (input of the next layer) will also have the extra sharding on sequence length [pointer][link3]. The splash attention kernel wrapper itself should be sharded by (tensor, context) since it actually store a pytree object of the multi-head mask. [pointer][link4]
+
 ---
 
 ## How to Use
 
-To use context parallelism locally, below is sample command:
+To use context parallelism locally, below is sample command to run on an 8-chips TPU vm:
 (Due to [issue][issue-data-loader], torch-xla parallel-dataloader has some bug in applying sharding on the sequence dimension of inputs. To try out cp, please refer to [this][cp-test])
 
 ```sh
-python3 torchprime/torch_xla_models/train.py     model=llama-3-8b     task=train     dataset=wikitext     task.global_batch_size=2     ici_mesh.fsdp=4    ici_mesh.context=2
+python3 torchprime/torch_xla_models/train.py     model=llama-3-8b-cp     task=train     dataset=wikitext     task.global_batch_size=2     ici_mesh.fsdp=4     ici_mesh.context=2
 ```
 
 To enable load-balanced Context Parallelism, simply set the `load_balance_cp` flag in your model configuration file.
@@ -102,3 +113,14 @@ load_balance_cp: True
 [issue-data-loader]: https://github.com/AI-Hypercomputer/torchprime/issues/353
 [cp-test]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/tests/test_spmd.py#L134
 [lbcp-test]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/tests/test_spmd.py#L228C7-L228C37
+[ai-sharding]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/model_rewriting/sharding_initialization.py#L54
+[lbcp-reorder]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/trainer/base_trainer.py#L249
+[model-setting]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/configs/model/llama-3-8b-cp.yaml#L28
+[kv-unpermuate]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/attention.py#L78
+[custom-mask]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/torch_xla_models/attention.py#L94
+[q-block-size]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/utils/kernel_utils.py#L244
+[link1]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/utils/kernel_utils.py#L301
+[link2]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/utils/kernel_utils.py#L305
+[link3]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/utils/kernel_utils.py#L312
+[link4]: https://github.com/AI-Hypercomputer/torchprime/blob/460f54266b89ce09f0497929ad728be2fa32cb18/torchprime/utils/kernel_utils.py#L298
+
