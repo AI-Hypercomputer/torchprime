@@ -7,7 +7,7 @@ model_id: deepseek-v3
 model_class: deepseek_v3.DeepseekV3ForCausalLM
 tokenizer_name: deepseek-ai/deepseek-v3
 # choose attention_kernel from: [flash_attention, splash_attention, null]
-attention_kernel: flash_attention
+attention_kernel: null
 
 # Configuration automatically generated from HF 
 vocab_size: 129280
