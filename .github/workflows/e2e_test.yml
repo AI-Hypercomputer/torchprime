@@ -32,7 +32,7 @@ jobs:
       llama-3-8b-ddp-fsdp-name: ${{ steps.run-llama-3-8b-ddp-fsdp.outputs.name }}
       llama-3-8b-fsdp-cp-name: ${{ steps.run-llama-3-8b-fsdp-cp.outputs.name }}
       mixtral-8x7b-name: ${{ steps.run-mixtral-8x7b.outputs.name }}
-      ds-v3-debug-name: ${{ steps.run-ds-v3-debug.outputs.name }}
+      ds-v3-shallow-name: ${{ steps.run-ds-v3-shallow.outputs.name }}
       artifact-dir: ${{ steps.artifacts.outputs.artifact_dir }}
     steps:
       - name: Record artifact dir
@@ -287,22 +287,26 @@ jobs:
             ici_mesh.fsdp=4 \
             profile_start_step=3
 
-      - name: Run Deepseek v3 Debug Model
-        id: run-ds-v3-debug
+      - name: Run Deepseek v3 Shallow
+        id: run-ds-v3-shallow
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
         run: |
-          name=$(e2e_testing/gen_name.py ds-v3-debug)
+          name=$(e2e_testing/gen_name.py ds-v3-shallow)
           echo "name=$name" >> "$GITHUB_OUTPUT"
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            model=deepseek-v3-mini \
+            model=deepseek-v3-shallow \
+            model.attention_kernel=splash_attention \
+            model.num_hidden_layers=5 \
+            model.first_k_dense_replace=3 \
             dataset=wikitext \
+            dataset.block_size=128 \
             task=train \
-            task.global_batch_size=8 \
+            task.global_batch_size=4 \
             task.lr_scheduler.type=constant \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
@@ -359,7 +363,7 @@ jobs:
           matrix.config.benchmark == 'llama-3-8b-2-slice' && needs.tp-run.outputs.llama-3-8b-2-slice-name ||
           matrix.config.benchmark == 'llama-3-8b-ddp-fsdp' && needs.tp-run.outputs.llama-3-8b-ddp-fsdp-name ||
           matrix.config.benchmark == 'llama-3-8b-fsdp-cp' && needs.tp-run.outputs.llama-3-8b-fsdp-cp-name ||
-          matrix.config.benchmark == 'ds-v3-debug' && needs.tp-run.outputs.ds-v3-debug-name
+          matrix.config.benchmark == 'ds-v3-shallow' && needs.tp-run.outputs.ds-v3-shallow-name
         }}
       artifact_dir: ${{ needs.tp-run.outputs.artifact-dir }}
       step_time_lower_bound: ${{ matrix.config.lower_bound }}

@@ -125,7 +125,7 @@ def match_llama_3_8b_fsdp_cp(row):
 def match_ds_v3_debug(row):
   config = json.loads(row.configs_framework)
   return (
-    row.run_id.startswith("ds-v3-debug")
+    row.run_id.startswith("ds-v3-shallow")
     and config["ici_mesh"]["fsdp"] == 4
     and config["ici_mesh"]["tensor"] == 1
   )
@@ -156,7 +156,7 @@ STEP_ID_MAPPING = {
   "Llama 3.0 8B SFT": "llama-3-8b-sft",
   "Llama 3.0 8B (ddp + fsdp)": "llama-3-8b-ddp-fsdp",
   "Llama 3.0 8B (fsdp + cp)": "llama-3-8b-fsdp-cp",
-  "Deepseek v3 Debug Model": "ds-v3-debug",
+  "Deepseek v3 Debug Model": "ds-v3-shallow",
 }
 """Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
 
