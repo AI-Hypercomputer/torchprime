@@ -147,3 +147,4 @@ moe_layers:
 - 47
 attention_chunk_size: 8192
 attention_kernel: flash_attention
+moe_implementation: expert_parallelism

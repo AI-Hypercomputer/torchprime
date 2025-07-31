@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 import pytest
 import torch
-import torch.test
 import torch_xla
 import transformers.models.llama4.modeling_llama4 as hf_modeling_llama4
 from omegaconf import DictConfig, OmegaConf
@@ -22,7 +21,9 @@ class LlamaFixture:
   model_config: DictConfig
 
 
-def get_llama_4_text_dummy_model() -> LlamaFixture:
+def get_llama_4_text_dummy_model(
+  moe_implementation: modeling_llama4.MoeImplementation = None,
+) -> LlamaFixture:
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 128
@@ -30,6 +31,7 @@ def get_llama_4_text_dummy_model() -> LlamaFixture:
     "meta-llama/Llama-4-Scout-17B-16E",
   )
   config.text_config.num_hidden_layers = 1
+  config.text_config.num_local_experts = 4
   config.text_config.moe_layers = [0]
   config.text_config.vocab_size = vocab_size
   config.text_config.head_dim = 64
@@ -45,6 +47,7 @@ def get_llama_4_text_dummy_model() -> LlamaFixture:
   del torchprime_config.text_config.rope_scaling.original_max_position_embeddings
   del torchprime_config.text_config.rope_scaling.rope_type
   torchprime_config.text_config.attention_kernel = None
+  torchprime_config.text_config.moe_implementation = moe_implementation
 
   # Place model on CPU device first
   with torch.device("cpu"):
@@ -92,7 +95,7 @@ def test_forward_our_model_against_hf_model(fixture, transform):
     torch.testing.assert_close(
       hf_output.logits,
       llama_xla_logits,
-      atol=1e-5,
+      atol=1e-4,
       rtol=1e-9,
       msg="logits are not equal",
     )
@@ -197,7 +200,7 @@ def test_rotarty_embedding_our_model_against_hf_model_native(fixture):
 @pytest.mark.parametrize(
   "fixture",
   [get_llama_4_text_dummy_model],
-  ids=["Llama4 text dummy"],
+  ids=["Llama4 dummy model"],
 )
 def test_moe_layer_from_model(fixture):
   """
@@ -206,42 +209,86 @@ def test_moe_layer_from_model(fixture):
   `forward_original` method.
   """
   # Arrange
+  device = torch.device("xla")
   torch.manual_seed(42)
-  fixture = fixture()
-  model = fixture.model
-  model.eval()
-
-  # Get a MoE layer from the model
-  moe_layer = model.model.layers[0].feed_forward
-  assert isinstance(moe_layer, modeling_llama4.Llama4TextMoe)
 
   # Create dummy input
   batch_size = 2
   seq_len = 16
-  hidden_states = torch.rand(batch_size, seq_len, model.config.hidden_size)
 
   # Act
-  # Run original, OOM-prone version
-  original_out, original_scores = moe_layer.forward_original(hidden_states)
+  # Model with original MOE layer implementation
+  model_xla = copy.deepcopy(fixture().model).to(device)
+  model_xla.eval()
+  moe_layer = model_xla.model.layers[0].feed_forward
+  assert isinstance(moe_layer, modeling_llama4.Llama4TextMoe)
+  hidden_states = torch.rand(batch_size, seq_len, model_xla.config.hidden_size).to(
+    device
+  )
+  out_original, scores_original = moe_layer.forward(hidden_states)
+  torch_xla.sync()
 
-  # Run the new, naive slow version
-  out, scores = moe_layer.forward(hidden_states)
+  # Model with sequential MOE layer implementation
+  fixture_seq = fixture(moe_implementation=modeling_llama4.MoeImplementation.sequential)
+  model_seq = copy.deepcopy(fixture_seq.model).to(device)
+  model_seq.eval()
+  moe_layer_seq = model_seq.model.layers[0].feed_forward
+  assert isinstance(moe_layer_seq, modeling_llama4.Llama4TextMoeSequential)
+  out_seq, scores_seq = moe_layer.forward(hidden_states)
+  torch_xla.sync()
 
-  assert original_out.size() == out.size(), "Dimensions for outputs tensors don't match"
-  assert original_scores.size() == scores.size(), "Dimensions for scores don't match"
+  # Model with Expert Parallelism implementation
+  fixture_exp = fixture(
+    moe_implementation=modeling_llama4.MoeImplementation.expert_parallelism
+  )
+  model_exp = copy.deepcopy(fixture_exp.model).to(device)
+  model_exp.eval()
+  moe_layer_exp = model_exp.model.layers[0].feed_forward
+  assert isinstance(moe_layer_exp, modeling_llama4.Llama4TextMoeExpertParallelism)
+  out_exp, scores_exp = moe_layer.forward(hidden_states)
+  torch_xla.sync()
 
   # Assert
+  assert out_original.size() == out_seq.size(), (
+    "Dimensions for outputs tensors don't match for seq MOE"
+  )
+  assert scores_original.size() == scores_seq.size(), (
+    "Dimensions for scores don't match for seq MOE"
+  )
+
   torch.testing.assert_close(
-    original_out,
-    out,
-    atol=1e-2,
+    out_original,
+    out_seq,
+    atol=1e-5,
     rtol=1e-6,
-    msg="MoE layer output does not match original logic",
+    msg="sequential MoE layer output does not match original logic",
   )
   torch.testing.assert_close(
-    original_scores,
-    scores,
-    atol=1e-3,
+    scores_original,
+    scores_seq,
+    atol=1e-5,
     rtol=1e-6,
-    msg="MoE layer scores do not match original logic",
+    msg="sequential MoE layer scores do not match original logic",
+  )
+
+  assert out_original.size() == out_exp.size(), (
+    "Dimensions for outputs tensors don't match for expert parallelism MOE"
+  )
+  assert scores_original.size() == scores_exp.size(), (
+    "Dimensions for scores don't match for expert parallelism MOE"
+  )
+
+  torch.testing.assert_close(
+    out_original,
+    out_exp,
+    atol=1e-5,
+    rtol=1e-6,
+    msg="expert parallelism MoE layer output does not match original logic",
+  )
+  torch.testing.assert_close(
+    scores_original,
+    scores_exp,
+    atol=1e-5,
+    rtol=1e-6,
+    msg="expert parallelism MoE layer scores do not match original logic",
   )

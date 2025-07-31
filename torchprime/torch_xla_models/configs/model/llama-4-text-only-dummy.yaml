@@ -54,3 +54,4 @@ moe_layers:
 - 1
 attention_chunk_size: 8192
 attention_kernel: null
+moe_implementation: sequential

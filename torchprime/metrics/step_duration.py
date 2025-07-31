@@ -7,31 +7,116 @@ import logging
 import os
 import statistics
 import sys
+from datetime import datetime
+from urllib.parse import urlparse
 
 from torchprime.metrics.xplane_pb2 import XSpace  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 
-def step_duration_from_latest_profile(profile_dir: str) -> float:
-  profile_dir = os.path.abspath(profile_dir)
-  profiles = [
-    (f, os.path.getctime(f))
-    for f in glob.glob(f"{profile_dir}/**/*.xplane.pb", recursive=True)
-  ]
-  newest_profile, _time = max(profiles, key=lambda v: v[1])
-  return analyze_step_duration(newest_profile)
+def get_latest_profile_path(profile_dir: str) -> str:
+  """Finds the most recently updated .xplane.pb file in a directory or GCS bucket.
+
+  Args:
+      profile_dir: Local directory path (e.g., '/path/to/profiles/') or GCS path (e.g., 'gs://my-data-bucket/profiles/').
+
+  Returns:
+      Path to the newest .xplane.pb file (local path for local files, gs:// path for GCS).
+
+  Raises:
+      ValueError: If no .xplane.pb files are found.
+  """
+  if profile_dir.startswith("gs://"):
+    from google.cloud import storage
+
+    # Parse GCS path
+    parsed = urlparse(profile_dir, scheme="gs")
+    bucket_name = parsed.netloc
+    prefix = parsed.path.lstrip("/").rstrip("/") + "/" if parsed.path.strip("/") else ""
+
+    # Initialize GCS client
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    # List objects matching the glob pattern
+    blobs = bucket.list_blobs(match_glob=f"{prefix}**/*.xplane.pb")
+
+    # Find the blob with the latest updated timestamp
+    newest_blob = None
+    latest_time = datetime.min
+    for blob in blobs:
+      if blob.updated > latest_time:
+        newest_blob = blob
+        latest_time = blob.updated
+
+    if not newest_blob:
+      raise ValueError(f"No .xplane.pb files found in {profile_dir}")
+
+    # Return gs:// path
+    return f"gs://{bucket_name}/{newest_blob.name}"
+
+  else:
+    # Local filesystem path
+    profile_dir = os.path.abspath(profile_dir)
+    profiles = [
+      (f, os.path.getctime(f))
+      for f in glob.glob(f"{profile_dir}/**/*.xplane.pb", recursive=True)
+    ]
+    if not profiles:
+      raise ValueError(f"No .xplane.pb files found in {profile_dir}")
+    newest_profile, _time = max(profiles, key=lambda v: v[1])
+    return newest_profile
 
 
 def analyze_step_duration(file_path: str) -> float:
+  """Analyzes the step duration from an .xplane.pb file.
+
+  Args:
+      file_path: Path to the .xplane.pb file (local path or gs:// path).
+
+  Returns:
+      Float value representing the step duration.
+  """
   xspace = XSpace()
 
-  # Read and parse the xplane proto
-  with open(file_path, "rb") as f:
-    print(f"Parsing {file_path}", file=sys.stderr)
-    xspace.ParseFromString(f.read())
+  if file_path.startswith("gs://"):
+    from google.cloud import storage
 
+    # Parse GCS path
+    parsed = urlparse(file_path, scheme="gs")
+    bucket_name = parsed.netloc
+    blob_name = parsed.path.lstrip("/")
+
+    # Read file content from GCS
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    logger.info("Downloading %s", file_path)
+    file_content = blob.download_as_bytes()
+  else:
+    # Read local file
+    logger.info("Loading %s", file_path)
+    with open(file_path, "rb") as f:
+      file_content = f.read()
+
+  # Parse the xplane proto
+  xspace.ParseFromString(file_content)
   return analyze_step_duration_from_pb(xspace)
+
+
+def step_duration_from_latest_profile(profile_dir: str) -> float:
+  """Finds the most recently updated .xplane.pb file in a directory or GCS bucket and analyzes its step duration.
+
+  Args:
+      profile_dir: Local directory path (e.g., '/path/to/profiles/') or GCS path (e.g., 'gs://my-data-bucket/profiles/').
+
+  Returns:
+      Float value from analyze_step_duration for the newest profile.
+  """
+  file_path = get_latest_profile_path(profile_dir)
+  logging.info("Found newest profile: %s", file_path)
+  return analyze_step_duration(file_path)
 
 
 def analyze_step_duration_from_pb(xspace: XSpace) -> float:
