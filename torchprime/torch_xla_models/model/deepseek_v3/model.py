@@ -230,7 +230,7 @@ class DeepseekV3MoE(nn.Module):
     return final_hidden_states.type(hidden_states.dtype)
 
   @xp.trace_me("DeepseekV3MoE")
-  def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+  def forward_old(self, hidden_states: torch.Tensor) -> torch.Tensor:
     residuals = hidden_states
     orig_shape = hidden_states.shape
     topk_indices, topk_weights = self.gate(hidden_states)
@@ -240,6 +240,42 @@ class DeepseekV3MoE(nn.Module):
     )
     hidden_states = hidden_states + self.shared_experts(residuals)
     return hidden_states
+
+  @xp.trace_me("DeepseekV3MoE")
+  def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    # ------------------------------------------------------------------
+    # 1) Flatten tokens   [B, S, D]  →  [T, D]
+    # ------------------------------------------------------------------
+    B, S, D = hidden_states.shape
+    hidden_flat = hidden_states.reshape(-1, D)  # [T,D]
+
+    # ------------------------------------------------------------------
+    # 2) Top-k indices & weights   (still bf16)
+    # ------------------------------------------------------------------
+    topk_idx, topk_w = self.gate(hidden_flat)  # [T,K]
+    topk_w = topk_w.to(hidden_flat.dtype)
+    T, K = topk_idx.shape
+    E = len(self.experts)
+
+    weight = torch.zeros(T, E, dtype=hidden_states.dtype, device=hidden_states.device)
+    weight.scatter_(1, topk_idx, topk_w)  # [T,E]
+
+    # ------------------------------------------------------------------
+    # 3) Run every expert once; scale & accumulate
+    # ------------------------------------------------------------------
+    fused_out = torch.zeros_like(hidden_flat)  # [T,D]
+
+    for e_id, expert in enumerate(self.experts):  # static loop
+      out_e = expert(hidden_flat)  # [T,D] bf16
+      fused_out.add_(out_e * weight[:, e_id : e_id + 1])  # bf16·bf16
+
+    # ------------------------------------------------------------------
+    # 4) Shared-expert path and reshape back
+    # ------------------------------------------------------------------
+    fused_out = fused_out.reshape(B, S, D)
+    fused_out = fused_out + self.shared_experts(hidden_states)
+
+    return fused_out
 
 
 class DeepseekV3Attention(nn.Module):

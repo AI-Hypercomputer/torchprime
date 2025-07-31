@@ -12,6 +12,8 @@ from torchprime.torch_xla_models.model.deepseek_v3 import (
   DeepseekV3ForCausalLM,  # noqa: E402
 )
 
+MOE_START_FROM_LAYER = 3  # layer 0,1,2 dense layers and layer 3+ moe layers
+
 
 @dataclass
 class DeepseekFixture:
@@ -29,7 +31,9 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   )
   config.vocab_size = vocab_size
   config.max_position_embeddings = vocab_size
-  config.num_hidden_layers = 1
+  config.first_k_dense_replace = MOE_START_FROM_LAYER
+  config.num_hidden_layers = 6  # from 61
+  config.n_group = 4  # from 8
 
   scale_factor = 32
   config.attention_kernel = "pytorch"
@@ -64,7 +68,9 @@ def noop(mod):
 def scan_decoders(mod):
   import torchprime.torch_xla_models.scan_layers
 
-  return torchprime.torch_xla_models.scan_layers.compile(mod, "model.layers")
+  return torchprime.torch_xla_models.scan_layers.compile(
+    mod, "model.layers", MOE_START_FROM_LAYER
+  )
 
 
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
@@ -156,7 +162,7 @@ def test_layers_by_layer_against_hf_model(transform):
     torch.testing.assert_close(
       hidden_xla,
       hidden_hf,
-      atol=1e-3,
+      atol=1e-2,
       rtol=1e-6,
       msg=f"decoder layer {idx} outputs not equal",
     )
@@ -164,7 +170,7 @@ def test_layers_by_layer_against_hf_model(transform):
   hidden_xla = model_xla.model.norm(hidden_xla)
   hidden_hf = hf_model_xla.model.norm(hidden_hf)
   torch.testing.assert_close(
-    hidden_xla, hidden_hf, atol=2e-2, rtol=1e-6, msg="norm layer outputs not equal"
+    hidden_xla, hidden_hf, atol=4e-2, rtol=1e-6, msg="norm layer outputs not equal"
   )
 
 

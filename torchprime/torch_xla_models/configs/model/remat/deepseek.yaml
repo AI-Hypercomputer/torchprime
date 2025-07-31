@@ -1,0 +1,5 @@
+activation_checkpoint_layers:
+ - DeepseekV3DecoderLayer
+
+optimization_barrier_layers:
+ - DeepseekV3DecoderLayer

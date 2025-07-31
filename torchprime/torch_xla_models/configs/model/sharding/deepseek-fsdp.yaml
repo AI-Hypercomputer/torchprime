@@ -1,0 +1,33 @@
+# Weights
+model.embed_tokens.weight: [fsdp, null]
+
+model.layers.*.self_attn.q_a_proj.weight: [fsdp, null]
+model.layers.*.self_attn.q_a_layernorm.weight: [fsdp]
+model.layers.*.self_attn.q_b_proj.weight: [fsdp, null]
+model.layers.*.self_attn.kv_a_proj_with_mqa.weight: [fsdp, null]
+model.layers.*.self_attn.kv_a_layernorm.weight: [fsdp]
+model.layers.*.self_attn.kv_b_proj.weight: [null, fsdp]
+model.layers.*.self_attn.o_proj.weight: [null, fsdp]
+
+model.layers.*.mlp.gate_proj.weight: [fsdp, null]
+model.layers.*.mlp.up_proj.weight: [fsdp, null]
+model.layers.*.mlp.down_proj.weight: [null, fsdp]
+
+model.layers.*.mlp.gate.weight: [null, fsdp]
+model.layers.*.mlp.experts.*.gate_proj.weight: [fsdp, null]
+model.layers.*.mlp.experts.*.up_proj.weight: [fsdp, null]
+model.layers.*.mlp.experts.*.down_proj.weight: [null, fsdp]
+
+model.layers.*.mlp.shared_experts.gate_proj.weight: [fsdp, null]
+model.layers.*.mlp.shared_experts.up_proj.weight: [fsdp, null]
+model.layers.*.mlp.shared_experts.down_proj.weight: [null, fsdp]
+
+model.layers.*.input_layernorm.weight: [fsdp]
+model.layers.*.post_attention_layernorm.weight: [fsdp]
+
+model.norm.weight: [fsdp]
+lm_head.weight: [fsdp, null]
+
+# Activations
+model.layers.*: [[data, fsdp], null, null]
+lm_head: [[data, fsdp], null, null]

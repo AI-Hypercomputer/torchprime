@@ -64,6 +64,13 @@ benchmarks:
     confidence_interval: 0.02427
     average: 1.618
     sample_size: 175
+  ds-v3-debug:
+    name: Deepseek v3 Debug Model # dummy number
+    step_time_lower_bound: 1.0
+    step_time_upper_bound: 3.0
+    confidence_interval: 1.0
+    average: 2.5
+    sample_size: 10
 metadata:
   query_start: '2025-07-17T16:41:39-07:00'
   query_end: '2025-07-20T00:00:00-07:00'
