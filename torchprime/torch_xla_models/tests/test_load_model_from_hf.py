@@ -22,26 +22,29 @@ from torchprime.torch_xla_models.model.model_utils import initialize_model_class
 @pytest.mark.integration
 @pytest.mark.parametrize(
   "config_file, hf_model, skip_on_ci",
-  [
+  "skip_no_hf_token"[
     (
       "llama-1b-random-for-test.yaml",
       "hf-internal-testing/tiny-random-LlamaForCausalLM",
+      False,
       False,
     ),
     (
       "llama-3-8b.yaml",
       "meta-llama/Meta-Llama-3-8B",
       True,
+      True,
     ),
   ],
 )
-def test_llama3_8b_from_pretrained_param_count(config_file, hf_model, skip_on_ci):
-  if skip_on_ci and (
-    os.environ.get("CI") or not os.environ.get("HF_TOKEN")
-  ):  # set export CI=true in GitHub Actions
-    pytest.skip(
-      f"Skipping {hf_model} in CI due to resource limits or because HF_TOKEN is not set."
-    )
+def test_llama3_8b_from_pretrained_param_count(
+  config_file, hf_model, skip_on_ci, skip_no_hf_token
+):
+  if skip_on_ci and os.environ.get("CI"):  # set export CI=true in GitHub Actions
+    pytest.skip(f"Skipping {hf_model} test in CI due to resource limits.")
+
+  if skip_no_hf_token and not os.environ.get("HF_TOKEN"):
+    pytest.skip(f"Skipping {hf_model} test without HF_TOKEN.")
 
   config_path = os.path.join(
     "torchprime", "torch_xla_models", "configs", "model", config_file
