@@ -21,8 +21,8 @@ from torchprime.torch_xla_models.model.model_utils import initialize_model_class
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-  "config_file, hf_model, skip_on_ci",
-  "skip_no_hf_token"[
+  "config_file, hf_model, skip_on_ci, skip_no_hf_token",
+  [
     (
       "llama-1b-random-for-test.yaml",
       "hf-internal-testing/tiny-random-LlamaForCausalLM",
