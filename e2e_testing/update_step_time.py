@@ -11,7 +11,8 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import click
+from absl import app
+from absl import flags
 import numpy as np
 import scipy
 import yaml
@@ -246,66 +247,36 @@ def compute_bounds(step_times, confidence_level):
   return lower_bound, upper_bound
 
 
-@click.command()
-@click.option(
-  "--bq-project",
-  default="tpu-pytorch",
-  help="BigQuery project ID",
+FLAGS = flags.FLAGS
+flags.DEFINE_string("bq_project", "tpu-pytorch", "BigQuery project ID")
+flags.DEFINE_string("bq_dataset", "benchmark_dataset_test", "BigQuery dataset name")
+flags.DEFINE_string("bq_table", "torchprime-e2e-tests", "BigQuery table name")
+flags.DEFINE_string(
+    "start_time",
+    parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
+    "Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
+    "Can also accept common datetime formats which will be converted. "
+    "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
+    "Defaults to 5 days ago.",
 )
-@click.option(
-  "--bq-dataset",
-  default="benchmark_dataset_test",
-  help="BigQuery dataset name",
+flags.DEFINE_string(
+    "end_time",
+    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
+    "Can also accept common datetime formats which will be converted. "
+    "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
+    "Defaults to the current time.",
 )
-@click.option(
-  "--bq-table",
-  default="torchprime-e2e-tests",
-  help="BigQuery table name",
+flags.DEFINE_integer("limit", 1200, "Maximum number of rows to retrieve")
+flags.DEFINE_string(
+    "output",
+    "e2e_testing/step_time_bounds.yaml",
+    "Output YAML file path",
 )
-@click.option(
-  "--start-time",
-  default=parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
-  help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted. "
-  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
-  "Defaults to 5 days ago.",
-)
-@click.option(
-  "--end-time",
-  default=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-  help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted. "
-  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
-  "Defaults to the current time.",
-)
-@click.option(
-  "--limit",
-  default=1200,
-  type=int,
-  help="Maximum number of rows to retrieve",
-)
-@click.option(
-  "--output",
-  default="e2e_testing/step_time_bounds.yaml",
-  type=click.Path(),
-  help="Output YAML file path",
-)
-@click.option(
-  "--confidence_level",
-  default=99.0,
-  type=float,
-  help="Confidence level, default is 99%",
-)
-def main(
-  bq_project,
-  bq_dataset,
-  bq_table,
-  start_time,
-  end_time,
-  limit,
-  output,
-  confidence_level,
-):
+flags.DEFINE_float("confidence_level", 99.0, "Confidence level, default is 99%")
+
+
+def main(argv):
   """
   Query BigQuery for E2E test results and compute step time bounds.
 
@@ -314,19 +285,19 @@ def main(
   the results to a YAML file for use in GitHub Actions.
   """
   console = Console()
-  confidence_level = confidence_level / 100.0
+  confidence_level = FLAGS.confidence_level / 100.0
 
   # Parse datetime inputs
-  start_time = parse_datetime(start_time)
-  end_time = parse_datetime(end_time)
+  start_time = parse_datetime(FLAGS.start_time)
+  end_time = parse_datetime(FLAGS.end_time)
 
   console.print("[bold]Querying BigQuery:[/bold]")
-  console.print(f"  Project: {bq_project}")
-  console.print(f"  Dataset: {bq_dataset}")
-  console.print(f"  Table: {bq_table}")
+  console.print(f"  Project: {FLAGS.bq_project}")
+  console.print(f"  Dataset: {FLAGS.bq_dataset}")
+  console.print(f"  Table: {FLAGS.bq_table}")
   console.print(f"  Start: {start_time}")
   console.print(f"  End: {end_time}")
-  console.print(f"  Limit: {limit}")
+  console.print(f"  Limit: {FLAGS.limit}")
 
   client = bigquery.Client()
 
@@ -335,7 +306,7 @@ def main(
   SELECT
     *
   FROM
-    `{bq_project}`.`{bq_dataset}`.`{bq_table}`
+    `{FLAGS.bq_project}`.`{FLAGS.bq_dataset}`.`{FLAGS.bq_table}`
   WHERE
     software_id = '{TORCHPRIME_SOFTWARE_ID}' AND
     update_timestamp >= TIMESTAMP('{start_time}') AND
@@ -343,7 +314,7 @@ def main(
   ORDER BY
     update_timestamp DESC
   LIMIT
-    {limit};
+    {FLAGS.limit};
   """
 
   query_job = client.query(query)
@@ -421,7 +392,7 @@ def main(
   console.print(table)
 
   # Write to file
-  output_path = Path(output)
+  output_path = Path(FLAGS.output)
   output_path.parent.mkdir(exist_ok=True, parents=True)
 
   with open(output_path, "w") as f:
@@ -443,4 +414,4 @@ def main(
 
 
 if __name__ == "__main__":
-  main()
+  app.run(main)

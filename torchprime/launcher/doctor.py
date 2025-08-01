@@ -11,9 +11,7 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
-import click
-
-ConfigT = TypeVar("ConfigT", bound="Config")  # noqa: F821
+ConfigT = TypeVar("ConfigT", bound="Config")
 
 
 class CheckFailedError(Exception):
@@ -155,7 +153,7 @@ def check_gke_cluster_exist(config: ConfigT | None = None):
 
 
 def check_all(config: ConfigT | None = None):
-  click.echo("Checking environment...")
+  print("Checking environment...")
   check_list = [
     check_docker,
     check_gcloud_auth_login,
@@ -168,20 +166,20 @@ def check_all(config: ConfigT | None = None):
     check_list.append(check_gke_cluster_exist)
   for check in check_list:
     assert check.__doc__ is not None
-    click.echo(check.__doc__ + "..", nl=False)
+    print(check.__doc__ + "..", end="")
     try:
       try:
         check(config)
       except TypeError:
         check()
     except CheckFailedError as e:
-      click.echo()
-      click.echo()
-      click.echo(f"❌ Error during {check.__name__} ❌")
-      click.echo(e)
+      print()
+      print()
+      print(f"❌ Error during {check.__name__} ❌")
+      print(e)
       sys.exit(-1)
-    click.echo(" ✅")
-  click.echo(
+    print(" ✅")
+  print(
     "🎉 All checks passed. You should be ready to launch distributed training. 🎉"
   )
 
