@@ -1,5 +1,6 @@
 import copy
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 import torch
@@ -27,9 +28,8 @@ def get_llama_4_text_dummy_model(
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 128
-  config = AutoConfig.from_pretrained(
-    "meta-llama/Llama-4-Scout-17B-16E",
-  )
+  config_path = Path(__file__).parent / "hf_model_config" / "llama-4-scout-17b-16e"
+  config = AutoConfig.from_pretrained(config_path)
   config.text_config.num_hidden_layers = 1
   config.text_config.num_local_experts = 4
   config.text_config.moe_layers = [0]

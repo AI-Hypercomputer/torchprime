@@ -36,8 +36,12 @@ from torchprime.torch_xla_models.model.model_utils import initialize_model_class
   ],
 )
 def test_llama3_8b_from_pretrained_param_count(config_file, hf_model, skip_on_ci):
-  if skip_on_ci and os.environ.get("CI"):  # set export CI=true in GitHub Actions
-    pytest.skip(f"Skipping {hf_model} test in CI due to resource limits.")
+  if skip_on_ci and (
+    os.environ.get("CI") or not os.environ.get("HF_TOKEN")
+  ):  # set export CI=true in GitHub Actions
+    pytest.skip(
+      f"Skipping {hf_model} in CI due to resource limits or because HF_TOKEN is not set."
+    )
 
   config_path = os.path.join(
     "torchprime", "torch_xla_models", "configs", "model", config_file

@@ -1,5 +1,6 @@
 import copy
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 import torch
@@ -23,8 +24,9 @@ def get_mixtral_8x7b() -> MixtralFixture:
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 128
+  config_path = Path(__file__).parent / "hf_model_config" / "mixtral-8x7b-v0.1"
   config = AutoConfig.from_pretrained(
-    "mistralai/Mixtral-8x7B-v0.1",
+    config_path,
     head_dim=64,
     num_hidden_layers=1,
     num_attention_heads=8,

@@ -1,5 +1,6 @@
 import copy
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 import torch
@@ -24,8 +25,9 @@ def get_llama_3_8b() -> LlamaFixture:
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 128
+  config_path = Path(__file__).parent / "hf_model_config" / "meta-llama-3-8b"
   config = AutoConfig.from_pretrained(
-    "meta-llama/Meta-Llama-3-8B",
+    config_path,
     head_dim=64,
     num_hidden_layers=1,
     num_attention_heads=8,
@@ -64,8 +66,9 @@ def get_llama_3_1_405b() -> LlamaFixture:
   torch.manual_seed(42)
   torch_xla.manual_seed(42)
   vocab_size = 256
+  config_path = Path(__file__).parent / "hf_model_config" / "meta-llama-3.1-405b"
   config = AutoConfig.from_pretrained(
-    "meta-llama/Meta-Llama-3.1-405B",
+    config_path,
     head_dim=64,
     num_hidden_layers=2,
     num_attention_heads=8,
