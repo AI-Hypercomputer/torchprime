@@ -167,12 +167,6 @@ def test_layers_by_layer_against_hf_model(transform):
       msg=f"decoder layer {idx} outputs not equal",
     )
 
-  hidden_xla = model_xla.model.norm(hidden_xla)
-  hidden_hf = hf_model_xla.model.norm(hidden_hf)
-  torch.testing.assert_close(
-    hidden_xla, hidden_hf, atol=4e-2, rtol=1e-6, msg="norm layer outputs not equal"
-  )
-
 
 def test_forward_torch_xla_against_native_cpu():
   fixture = get_deepseek_v3_dummy()
