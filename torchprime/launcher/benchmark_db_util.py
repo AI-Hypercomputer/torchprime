@@ -1,9 +1,9 @@
 import os
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 
-import click
 from omegaconf import OmegaConf
 
 from torchprime.metrics.metrics import Metrics
@@ -36,7 +36,7 @@ def get_metrics(base_artifact_path: str, jobset_name_for_outputs: str) -> dict |
     )
   )
   if not metric_file_path.exists():
-    click.echo(f"Metrics file not found at {metric_file_path}", err=True)
+    print(f"Metrics file not found at {metric_file_path}", file=sys.stderr)
     return None
 
   metrics_data = Metrics.load(metric_file_path)
@@ -71,7 +71,7 @@ def get_config(base_artifact_path: str, jobset_name_for_outputs: str) -> dict | 
   )
 
   if not config_file_path.exists():
-    click.echo(f"Config file not found at {config_file_path}", err=True)
+    print(f"Config file not found at {config_file_path}", file=sys.stderr)
     return None
 
   # Load the JSON configuration file and convert it to a Python dictionary
@@ -106,7 +106,7 @@ def prepare_benchmark_summary(
   hardware_num_chips, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_type)
   hardware_id = tpu_type.split("-")[0]  # Extract the TPU generation (e.g., v4, v5e)
 
-  click.echo(
+  print(
     f"Tpu type: {tpu_type}, hardware_num_chips: {hardware_num_chips}, tflops_per_chip: {tflops_per_chip}"
   )
 
