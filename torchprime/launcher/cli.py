@@ -14,15 +14,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from absl import app
-from absl import flags
 import toml
+from absl import app, flags
 from dataclasses_json import dataclass_json
 from pathspec import PathSpec
 from pathspec.patterns import GitWildMatchPattern
+from rich.text import Text
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from rich.text import Text
 
 import torchprime.launcher.doctor
 from torchprime.launcher.buildpush import buildpush
@@ -63,20 +62,20 @@ flags.DEFINE_boolean(
 flags.DEFINE_string("cluster", None, "Name of the XPK cluster")
 flags.DEFINE_string("project", None, "GCP project the cluster belongs to")
 flags.DEFINE_string("zone", None, "Compute zone the cluster is located in")
-flags.DEFINE_integer("num_slices", 1, "Number of TPU slice to use by default. Defaults to 1")
-flags.DEFINE_string("tpu_type", None, "The TPU accelerator type in each slice. E.g. v6e-256 for a 256 chip Trillium pod")
-flags.DEFINE_string("artifact_dir", None, "A Google Cloud Storage directory where artifacts such as profiles will be stored. E.g. gs://foo/bar")
-flags.DEFINE_boolean("upload_metrics", False, "If given, uploads metrics to the database ")
-flags.DEFINE_string("bq_project", "tpu-pytorch", "A bigquery project to upload metrics.")
-flags.DEFINE_string("bq_dataset", "benchmark_dataset_test", "A bigquery dataset to upload metrics.")
-flags.DEFINE_string("bq_table", "benchmark_experiment", "A bigquery table to upload metrics.")
-flags.DEFINE_string("docker_project", None, "GCP project to upload docker containers to. If not set, defaults to the cluster's GCP project")
+flags.DEFINE_integer("num-slices", 1, "Number of TPU slice to use by default. Defaults to 1")
+flags.DEFINE_string("tpu-type", None, "The TPU accelerator type in each slice. E.g. v6e-256 for a 256 chip Trillium pod")
+flags.DEFINE_string("artifact-dir", None, "A Google Cloud Storage directory where artifacts such as profiles will be stored. E.g. gs://foo/bar")
+flags.DEFINE_boolean("upload-metrics", False, "If given, uploads metrics to the database ")
+flags.DEFINE_string("bq-project", "tpu-pytorch", "A bigquery project to upload metrics.")
+flags.DEFINE_string("bq-dataset", "benchmark_dataset_test", "A bigquery dataset to upload metrics.")
+flags.DEFINE_string("bq-table", "benchmark_experiment", "A bigquery table to upload metrics.")
+flags.DEFINE_string("docker-project", None, "GCP project to upload docker containers to. If not set, defaults to the cluster's GCP project")
 
 # Flags for `run` command
 flags.DEFINE_string("name", None, "Name of the workload (jobset). If not specified, defaults to one based on the date and time.")
-flags.DEFINE_string("base_docker_url", None, "If specified, `tp run` will use this PyTorch/XLA base docker image instead of the one pinned inside `pyproject.toml`")
-flags.DEFINE_boolean("use_hf", False, "Use HuggingFace transformer")
-flags.DEFINE_boolean("use_local_wheel", False, "Use local torch and torch_xla wheels under folder local_dist/")
+flags.DEFINE_string("base-docker-url", None, "If specified, `tp run` will use this PyTorch/XLA base docker image instead of the one pinned inside `pyproject.toml`")
+flags.DEFINE_boolean("use-hf", False, "Use HuggingFace transformer")
+flags.DEFINE_boolean("use-local-wheel", False, "Use local torch and torch_xla wheels under folder local_dist/")
 flags.DEFINE_string("comments", None, "Optional description of the training run, stored in the database.")
 
 
@@ -93,19 +92,19 @@ def use():
     cluster=FLAGS.cluster,
     project=FLAGS.project,
     zone=FLAGS.zone,
-    num_slices=FLAGS.num_slices,
-    tpu_type=FLAGS.tpu_type,
-    artifact_dir=FLAGS.artifact_dir,
-    upload_metrics=FLAGS.upload_metrics,
-    bq_project=FLAGS.bq_project,
-    bq_dataset=FLAGS.bq_dataset,
-    bq_table=FLAGS.bq_table,
-    docker_project=FLAGS.docker_project,
+    num_slices=FLAGS['num-slices'].value,
+    tpu_type=FLAGS['tpu-type'].value,
+    artifact_dir=FLAGS['artifact-dir'].value,
+    upload_metrics=FLAGS['upload-metrics'].value,
+    bq_project=FLAGS['bq-project'].value,
+    bq_dataset=FLAGS['bq-dataset'].value,
+    bq_table=FLAGS['bq-table'].value,
+    docker_project=FLAGS['docker-project'].value,
   )
   gcloud_config_name = f"torchprime-{FLAGS.project}-{FLAGS.zone}"
   create_and_activate_gcloud(gcloud_config_name, config)
-  assert FLAGS.artifact_dir.startswith("gs://"), (
-    f"{FLAGS.artifact_dir} must be in a GCS bucket (start with gs://)"
+  assert FLAGS['artifact-dir'].value.startswith("gs://"), (
+    f"{FLAGS['artifact-dir'].value} must be in a GCS bucket (start with gs://)"
   )
 
   path = write_config(config)
@@ -186,7 +185,7 @@ def docker_run(argv):
   print(get_project_dir().absolute())
 
   # Build docker image.
-  build_arg = ["USE_TRANSFORMERS=true"] if FLAGS.use_hf else None
+  build_arg = ["USE_TRANSFORMERS=true"] if FLAGS['use-hf'].value else None
   placeholder_url = "torchprime-dev:local"
   docker_url = buildpush(
     push_docker=False, placeholder_url=placeholder_url, build_arg=build_arg
@@ -227,9 +226,9 @@ def run(argv):
 
   # Build docker image.
   build_arg = []
-  if FLAGS.use_hf:
+  if FLAGS['use-hf'].value:
     build_arg.append("USE_TRANSFORMERS=true")
-  if FLAGS.use_local_wheel:
+  if FLAGS['use-local-wheel'].value:
     build_arg.append("USE_LOCAL_WHEEL=true")
   docker_project = config.docker_project
   if docker_project is None:
@@ -237,7 +236,7 @@ def run(argv):
   docker_url = buildpush(
     torchprime_project_id=docker_project,
     build_arg=build_arg,
-    base_docker_url=FLAGS.base_docker_url,
+    base_docker_url=FLAGS['base-docker-url'].value,
   )
 
   # Submit xpk workload
@@ -261,7 +260,7 @@ def run(argv):
 
   command = ["python", "torchprime/launcher/thunk.py"] + list(argv[1:])
 
-  num_slices = FLAGS.num_slices
+  num_slices = FLAGS['num-slices'].value
   if num_slices is None:
     num_slices = config.num_slices
 

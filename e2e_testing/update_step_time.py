@@ -11,11 +11,10 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from absl import app
-from absl import flags
 import numpy as np
 import scipy
 import yaml
+from absl import app, flags
 from google.cloud import bigquery
 from rich.console import Console
 from rich.table import Table
@@ -248,11 +247,11 @@ def compute_bounds(step_times, confidence_level):
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("bq_project", "tpu-pytorch", "BigQuery project ID")
-flags.DEFINE_string("bq_dataset", "benchmark_dataset_test", "BigQuery dataset name")
-flags.DEFINE_string("bq_table", "torchprime-e2e-tests", "BigQuery table name")
+flags.DEFINE_string("bq-project", "tpu-pytorch", "BigQuery project ID")
+flags.DEFINE_string("bq-dataset", "benchmark_dataset_test", "BigQuery dataset name")
+flags.DEFINE_string("bq-table", "torchprime-e2e-tests", "BigQuery table name")
 flags.DEFINE_string(
-    "start_time",
+    "start-time",
     parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
     "Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
     "Can also accept common datetime formats which will be converted. "
@@ -260,7 +259,7 @@ flags.DEFINE_string(
     "Defaults to 5 days ago.",
 )
 flags.DEFINE_string(
-    "end_time",
+    "end-time",
     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     "End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
     "Can also accept common datetime formats which will be converted. "
@@ -288,8 +287,8 @@ def main(argv):
   confidence_level = FLAGS.confidence_level / 100.0
 
   # Parse datetime inputs
-  start_time = parse_datetime(FLAGS.start_time)
-  end_time = parse_datetime(FLAGS.end_time)
+  start_time = parse_datetime(FLAGS['start-time'].value)
+  end_time = parse_datetime(FLAGS['end-time'].value)
 
   console.print("[bold]Querying BigQuery:[/bold]")
   console.print(f"  Project: {FLAGS.bq_project}")

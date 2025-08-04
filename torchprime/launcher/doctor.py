@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
+from torchprime.launcher.cli import Config
+
 ConfigT = TypeVar("ConfigT", bound="Config")
 
 
