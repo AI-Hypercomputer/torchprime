@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import importlib
 import json
 import logging
@@ -30,6 +31,20 @@ HF_MODEL_CONFIG_FILES = [
   "config.json",
   "generation_config.json",
 ]
+
+_TEMP_DIRS_TO_CLEAN = []
+
+
+def _cleanup_temp_dirs():
+  """Removes all temporary directories created by this module."""
+  for d in _TEMP_DIRS_TO_CLEAN:
+    try:
+      logger.info(f"Cleaning up temporary directory: {d}")
+      shutil.rmtree(d)
+    except OSError as e:
+      logger.warning(f"Failed to remove temporary directory {d}: {e}")
+
+atexit.register(_cleanup_temp_dirs)
 
 
 def load_safetensors_to_state_dict(model_dir: str) -> dict:
@@ -484,3 +499,25 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
   save_dir = Path(save_dir)
   save_dir.mkdir(parents=True, exist_ok=True)
   tokenizer.save_pretrained(save_dir)
+
+
+def download_gcs_dir_if_needed(path_or_repo: str) -> str:
+  """If a path is a GCS path, download it to a local temp dir and return the local path."""
+  if path_or_repo.startswith("gs://"):
+    local_dir = tempfile.mkdtemp()
+    _TEMP_DIRS_TO_CLEAN.append(local_dir)
+    logger.info(f"Downloading {path_or_repo} to temporary directory {local_dir}")
+
+    # Using gsutil for efficient, parallel downloads.
+    # The '/*' at the end of the GCS path ensures the contents are copied, not the directory itself.
+    command = ["gsutil", "-m", "cp", "-r", path_or_repo.rstrip("/") + "/*", local_dir]
+    try:
+      subprocess.run(command, check=True, capture_output=True, text=True)
+      logger.info(f"Successfully downloaded assets from {path_or_repo}.")
+      return local_dir
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+      stderr = getattr(e, "stderr", str(e))
+      logger.error(f"Failed to download from GCS using gsutil. Error: {stderr}")
+      raise RuntimeError(f"Could not download {path_or_repo}") from e
+
+  return path_or_repo

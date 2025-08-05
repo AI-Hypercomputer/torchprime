@@ -17,12 +17,14 @@ from pathlib import Path
 import click
 import toml
 from dataclasses_json import dataclass_json
+from huggingface_hub.errors import RepositoryNotFoundError
 from pathspec import PathSpec
 from pathspec.patterns import GitWildMatchPattern  # type: ignore
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import torchprime.launcher.doctor
+from torchprime.launcher import save_hf_tokenizer_and_model
 from torchprime.launcher.buildpush import buildpush
 from torchprime.launcher.util import run_docker
 
@@ -75,6 +77,43 @@ def cli(ctx, interactive):
   """
   ctx.ensure_object(dict)
   ctx.obj["interactive"] = interactive
+
+
+@cli.command("save-hf-tokenizers-to-gcs")
+@click.option(
+  "--tokenizer-name",
+  type=str,
+  required=True,
+  multiple=True,
+  help="Hugging Face tokenizer name (e.g., 'meta-llama/Llama-3-8B-hf'). Can be specified multiple times.",
+)
+@click.option(
+  "--gcs-base-path",
+  type=str,
+  required=True,
+  help="Base GCS path for the tokenizers (e.g., 'gs://bucket/tokenizers').",
+)
+def save_hf_tokenizers_to_gcs(tokenizer_name: tuple[str], gcs_base_path: str):
+  """
+  Downloads one or more tokenizers from Hugging Face Hub and saves them to a
+  Google Cloud Storage (GCS) bucket.
+  """
+  for name in tokenizer_name:
+    # Create a safe directory name from the repo ID by replacing slashes
+    safe_dir_name = name.replace("/", "--")
+    gcs_path = f"{gcs_base_path.rstrip('/')}/{safe_dir_name}"
+
+    click.echo(f"\nPreparing to save tokenizer from '{name}' to '{gcs_path}'...")
+    try:
+      save_hf_tokenizer_and_model.save_tokenizer_to_gcs(name, gcs_path)
+      click.secho(f"  -> Successfully saved tokenizer to {gcs_path}", fg="green")
+    except RepositoryNotFoundError:
+      click.secho(f"\n❌ Error: Tokenizer '{name}' not found.", fg="red")
+      click.echo("Please check the following:")
+      click.echo(f"1. The tokenizer name '{name}' is spelled correctly.")
+      click.echo("2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN.")
+    except Exception as e:
+      click.secho(f"\n❌ An unexpected error occurred for tokenizer '{name}': {e}", fg="red")
 
 
 @cli.command()

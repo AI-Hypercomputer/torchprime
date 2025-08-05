@@ -43,7 +43,7 @@ jobs:
     - name: Run PyTest
       env:
         # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        # HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         export PJRT_DEVICE=CPU
         export JAX_PLATFORMS=cpu
@@ -52,7 +52,7 @@ jobs:
     - name: Run model forward
       env:
         # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        # HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         export PJRT_DEVICE=CPU
         export JAX_PLATFORMS=cpu
