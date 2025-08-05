@@ -44,6 +44,7 @@ def _cleanup_temp_dirs():
     except OSError as e:
       logger.warning(f"Failed to remove temporary directory {d}: {e}")
 
+
 atexit.register(_cleanup_temp_dirs)
 
 

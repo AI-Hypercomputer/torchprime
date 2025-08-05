@@ -111,9 +111,13 @@ def save_hf_tokenizers_to_gcs(tokenizer_name: tuple[str], gcs_base_path: str):
       click.secho(f"\n❌ Error: Tokenizer '{name}' not found.", fg="red")
       click.echo("Please check the following:")
       click.echo(f"1. The tokenizer name '{name}' is spelled correctly.")
-      click.echo("2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN.")
+      click.echo(
+        "2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN."
+      )
     except Exception as e:
-      click.secho(f"\n❌ An unexpected error occurred for tokenizer '{name}': {e}", fg="red")
+      click.secho(
+        f"\n❌ An unexpected error occurred for tokenizer '{name}': {e}", fg="red"
+      )
 
 
 @cli.command()

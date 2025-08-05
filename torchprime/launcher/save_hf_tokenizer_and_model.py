@@ -37,7 +37,9 @@ def save_tokenizer_to_gcs(tokenizer_name: str, gcs_path: str):
     # Re-saving the tokenizer ensures it's in a standardized format, which is a good practice.
     # This will only download tokenizer-related files, not the large model weights.
     logger.info(f"Standardizing tokenizer for '{tokenizer_name}'...")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, token=os.environ.get("HF_TOKEN"))
+    tokenizer = AutoTokenizer.from_pretrained(
+      tokenizer_name, token=os.environ.get("HF_TOKEN")
+    )
     tokenizer.save_pretrained(str(local_path))
 
     logger.info(f"Tokenizer for '{tokenizer_name}' downloaded and prepared locally.")
