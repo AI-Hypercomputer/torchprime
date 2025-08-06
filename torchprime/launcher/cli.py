@@ -120,6 +120,45 @@ def save_hf_tokenizers_to_gcs(tokenizer_name: tuple[str], gcs_base_path: str):
       )
 
 
+@cli.command("save-hf-model-to-gcs")
+@click.option(
+  "--model-name",
+  type=str,
+  required=True,
+  help="Hugging Face model name (e.g., 'meta-llama/Llama-3-8B').",
+)
+@click.option(
+  "--gcs-path",
+  type=str,
+  required=True,
+  help="Target GCS path for the model (e.g., 'gs://bucket/models/Llama-3-8B').",
+)
+@click.option(
+  "--temp-dir",
+  type=str,
+  default=None,
+  help="Path to a temporary directory with sufficient space. Defaults to system temp.",
+)
+def save_hf_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None):
+  """
+  Downloads a full model from Hugging Face Hub and saves it to a
+  Google Cloud Storage (GCS) bucket.
+  """
+  click.echo(f"Preparing to save model from '{model_name}' to '{gcs_path}'...")
+  try:
+    save_hf_tokenizer_and_model.save_model_to_gcs(model_name, gcs_path, temp_dir=temp_dir)
+    click.secho(f"  -> Successfully saved model to {gcs_path}", fg="green")
+  except RepositoryNotFoundError:
+    click.secho(f"\n❌ Error: Model '{model_name}' not found.", fg="red")
+    click.echo("Please check the following:")
+    click.echo(f"1. The model name '{model_name}' is spelled correctly.")
+    click.echo("2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN.")
+  except Exception as e:
+    click.secho(
+      f"\n❌ An unexpected error occurred for model '{model_name}': {e}", fg="red"
+    )
+
+
 @cli.command()
 @click.option("--cluster", required=True, help="Name of the XPK cluster")
 @click.option("--project", required=True, help="GCP project the cluster belongs to")

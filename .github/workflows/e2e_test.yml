@@ -256,6 +256,7 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             --config-name llama-3-8b-sft-w-gsm8k \
+            model.pretrained_model=gs://torchprime/jackoh-exp/models/Llama-3-8B \
             model.tokenizer_name=gs://torchprime/jackoh-exp/tokenizers/meta-llama--Meta-Llama-3-8B \
             ici_mesh.fsdp=4 \
             task.max_steps=50 \

@@ -113,14 +113,15 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    if os.path.isdir(model_path_or_repo):
-      model_dir = model_path_or_repo
-    else:
+    # Convert GCS path  to gcsfuse path if necessary. This allows us to treat
+    # GCS paths like local directories for the subsequent logic.
+    model_dir = model_utils.download_gcs_dir_if_needed(model_path_or_repo)
+
+    if not os.path.isdir(model_dir):
       model_dir = huggingface_hub.snapshot_download(
-        repo_id=model_path_or_repo,
+        repo_id=model_dir,
         allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
       )
-
     # Load weights
     state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)

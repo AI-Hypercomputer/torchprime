@@ -463,6 +463,9 @@ def copy_hf_config_files(model_path_or_repo: str, save_dir: Path) -> None:
   """
   patterns = HF_MODEL_CONFIG_FILES
 
+  # Convert GCS path to gcsfuse path if necessary. This allows us to treat
+  # GCS paths like local directories for the subsequent logic.
+  model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   if os.path.isdir(model_path_or_repo):
     model_dir = Path(model_path_or_repo)
   else:
@@ -496,6 +499,8 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
           model repo ID (e.g., "meta-llama/Llama-2-7b-hf").
       save_dir: Directory where the tokenizer files will be saved.
   """
+  # If it's a GCS path, convert it to the gcsfuse mount path.
+  model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   tokenizer = AutoTokenizer.from_pretrained(model_path_or_repo)
   save_dir = Path(save_dir)
   save_dir.mkdir(parents=True, exist_ok=True)
@@ -503,22 +508,62 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
 
 
 def download_gcs_dir_if_needed(path_or_repo: str) -> str:
-  """If a path is a GCS path, download it to a local temp dir and return the local path."""
-  if path_or_repo.startswith("gs://"):
+  """Resolves a GCS path to a local path, trying gcsfuse first and falling back to download."""
+  if not path_or_repo.startswith("gs://"):
+    return path_or_repo
+
+  from urllib.parse import urlparse
+
+  # Consistently parse the GCS path to get the path inside the bucket.
+  path_inside_bucket = urlparse(path_or_repo).path.lstrip("/")
+
+  # Strategy 1: Try to use the gcsfuse mount point. This is the most efficient.
+  fuse_path = os.path.join("/tmp/gcs-mount", path_inside_bucket)
+  if os.path.exists(fuse_path):
+    logger.info("Found existing gcsfuse mount for %s at %s", path_or_repo, fuse_path)
+    return fuse_path
+
+  # Strategy 2: Fallback to downloading if the fuse mount doesn't exist.
+  logger.warning(
+    "gcsfuse path %s not found. Falling back to downloading from %s.",
+    fuse_path,
+    path_or_repo,
+  )
+  from google.cloud import storage
+
+  try:
     local_dir = tempfile.mkdtemp()
     _TEMP_DIRS_TO_CLEAN.append(local_dir)
-    logger.info(f"Downloading {path_or_repo} to temporary directory {local_dir}")
 
-    # Using gsutil for efficient, parallel downloads.
-    # The '/*' at the end of the GCS path ensures the contents are copied, not the directory itself.
-    command = ["gsutil", "-m", "cp", "-r", path_or_repo.rstrip("/") + "/*", local_dir]
-    try:
-      subprocess.run(command, check=True, capture_output=True, text=True)
-      logger.info(f"Successfully downloaded assets from {path_or_repo}.")
-      return local_dir
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-      stderr = getattr(e, "stderr", str(e))
-      logger.error(f"Failed to download from GCS using gsutil. Error: {stderr}")
-      raise RuntimeError(f"Could not download {path_or_repo}") from e
+    # Parse GCS path to get bucket and prefix for listing blobs.
+    parsed_url = urlparse(path_or_repo, scheme="gs")
+    bucket_name = parsed_url.netloc
+    prefix = path_inside_bucket
+    if prefix and not prefix.endswith("/"):
+      prefix += "/"
 
-  return path_or_repo
+    storage_client = storage.Client()
+    blobs = list(storage_client.list_blobs(bucket_name, prefix=prefix))
+
+    if not blobs:
+      raise FileNotFoundError(f"No objects found at GCS path: {path_or_repo}")
+
+    for blob in blobs:
+      # Recreate the directory structure locally.
+      relative_path = os.path.relpath(blob.name, prefix)
+      dest_path = os.path.join(local_dir, relative_path)
+
+      # Handle subdirectories explicitly.
+      if blob.name.endswith("/"):
+        os.makedirs(dest_path, exist_ok=True)
+        continue
+
+      os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+      blob.download_to_filename(dest_path)
+
+    logger.info("Successfully downloaded assets from %s to %s.", path_or_repo, local_dir)
+    return local_dir
+  except Exception as e:
+    logger.error("Failed to download from GCS using google-cloud-storage. Error: %s", e)
+    shutil.rmtree(local_dir)  # Clean up failed download
+    raise RuntimeError(f"Could not download {path_or_repo}") from e
