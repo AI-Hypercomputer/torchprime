@@ -561,7 +561,9 @@ def download_gcs_dir_if_needed(path_or_repo: str) -> str:
       os.makedirs(os.path.dirname(dest_path), exist_ok=True)
       blob.download_to_filename(dest_path)
 
-    logger.info("Successfully downloaded assets from %s to %s.", path_or_repo, local_dir)
+    logger.info(
+      "Successfully downloaded assets from %s to %s.", path_or_repo, local_dir
+    )
     return local_dir
   except Exception as e:
     logger.error("Failed to download from GCS using google-cloud-storage. Error: %s", e)

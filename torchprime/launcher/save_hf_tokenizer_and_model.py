@@ -47,7 +47,8 @@ def save_tokenizer_to_gcs(tokenizer_name: str, gcs_path: str):
 
     # Upload the directory contents to the specified GCS path.
     _upload_directory_to_gcs(local_path, gcs_path)
-    
+
+
 def save_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None = None):
   """Downloads a model from a Hugging Face repo and uploads to GCS."""
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
@@ -63,11 +64,11 @@ def save_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None = Non
     # We explicitly list the patterns for files we need to ensure we don't download
     # unnecessary files like READMEs or large non-safetensors model weights.
     allow_patterns = [
-        "*.safetensors*",
-        "config.json",
-        "generation_config.json",
-        "tokenizer*.json",
-        "special_tokens_map.json",
+      "*.safetensors*",
+      "config.json",
+      "generation_config.json",
+      "tokenizer*.json",
+      "special_tokens_map.json",
     ]
     snapshot_path = snapshot_download(
       repo_id=model_name,

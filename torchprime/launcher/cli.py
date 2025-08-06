@@ -146,13 +146,17 @@ def save_hf_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None):
   """
   click.echo(f"Preparing to save model from '{model_name}' to '{gcs_path}'...")
   try:
-    save_hf_tokenizer_and_model.save_model_to_gcs(model_name, gcs_path, temp_dir=temp_dir)
+    save_hf_tokenizer_and_model.save_model_to_gcs(
+      model_name, gcs_path, temp_dir=temp_dir
+    )
     click.secho(f"  -> Successfully saved model to {gcs_path}", fg="green")
   except RepositoryNotFoundError:
     click.secho(f"\n❌ Error: Model '{model_name}' not found.", fg="red")
     click.echo("Please check the following:")
     click.echo(f"1. The model name '{model_name}' is spelled correctly.")
-    click.echo("2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN.")
+    click.echo(
+      "2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN."
+    )
   except Exception as e:
     click.secho(
       f"\n❌ An unexpected error occurred for model '{model_name}': {e}", fg="red"
