@@ -158,7 +158,6 @@ class BaseCausalLM(nn.Module):
     if xr.process_index() == 0:
       logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
       model_utils.copy_hf_config_files(config.model.pretrained_model, save_dir)
-      # model_utils.save_hf_tokenizer(config.model.pretrained_model, save_dir)
       model_utils.save_hf_tokenizer(config.model.tokenizer_name, save_dir)
 
     # Step 4: Initialize torch.distributed process group

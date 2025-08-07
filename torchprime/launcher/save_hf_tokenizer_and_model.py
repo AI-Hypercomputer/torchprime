@@ -32,14 +32,12 @@ def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
     raise ValueError("GCS path must start with gs://")
 
   logger.info(f"Uploading contents of '{local_path}' to '{gcs_path}'...")
-  # Using gsutil for efficient, parallel uploads.
-  # The '/*' at the end of local_path ensures the contents are copied, not the directory itself.
   command = ["gsutil", "-m", "cp", "-r", f"{str(local_path).rstrip('/')}/*", gcs_path]
   try:
     subprocess.run(command, check=True, capture_output=True, text=True)
     logger.info(f"Successfully uploaded assets to {gcs_path}.")
   except subprocess.CalledProcessError as e:
-    logger.error(f"Failed to upload to GCS. Error: {e.stderr}")
+    logger.error(f"Failed to upload {local_path} to {gcs_path}. Error: {e.stderr}")
     raise
 
 
