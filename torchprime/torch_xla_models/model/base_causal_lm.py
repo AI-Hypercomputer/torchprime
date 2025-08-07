@@ -134,9 +134,7 @@ class BaseCausalLM(nn.Module):
         for root, _, files in os.walk(model_dir):
           relative_root = os.path.relpath(root, model_dir)
           for name in files:
-            logger.info(
-              "  - %s", os.path.join(relative_root, name).lstrip("./")
-            )
+            logger.info("  - %s", os.path.join(relative_root, name).lstrip("./"))
 
       logger.info("Loading safetensors on rank 0...")
       state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
