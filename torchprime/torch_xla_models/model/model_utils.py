@@ -463,8 +463,6 @@ def copy_hf_config_files(model_path_or_repo: str, save_dir: Path) -> None:
   """
   patterns = HF_MODEL_CONFIG_FILES
 
-  # Convert GCS path to gcsfuse path if necessary. This allows us to treat
-  # GCS paths like local directories for the subsequent logic.
   model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   if os.path.isdir(model_path_or_repo):
     model_dir = Path(model_path_or_repo)
@@ -499,7 +497,6 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
           model repo ID (e.g., "meta-llama/Llama-2-7b-hf").
       save_dir: Directory where the tokenizer files will be saved.
   """
-  # If it's a GCS path, convert it to the gcsfuse mount path.
   model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   tokenizer = AutoTokenizer.from_pretrained(model_path_or_repo)
   save_dir = Path(save_dir)

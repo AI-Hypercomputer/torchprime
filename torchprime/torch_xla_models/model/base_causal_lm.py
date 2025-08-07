@@ -107,9 +107,8 @@ class BaseCausalLM(nn.Module):
     It supports both local directories and remote repositories hosted on the Hugging Face Hub.
 
     Note:
-        In distributed training setups, to avoid I/O contention on shared
-        filesystems, only rank 0 loads data from disk. The state dict is then
-        broadcast to all other ranks.
+        In distributed training setups, ensure that all replicas perform the loading operation
+        to synchronize model weights across processes.
 
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.

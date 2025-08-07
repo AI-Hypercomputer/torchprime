@@ -30,9 +30,6 @@ on:
     secrets:
       GCP_SA_KEY:
         required: true
-      # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Remove and burn the token.
-      # HF_TOKEN:
-        # required: true
 
 jobs:
   results:
