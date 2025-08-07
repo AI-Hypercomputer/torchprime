@@ -508,64 +508,33 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
 
 
 def download_gcs_dir_if_needed(path_or_repo: str) -> str:
-  """Resolves a GCS path to a local path, trying gcsfuse first and falling back to download."""
+  """Resolves a GCS path to a local path by downloading its contents using gsutil."""
   if not path_or_repo.startswith("gs://"):
     return path_or_repo
 
-  from urllib.parse import urlparse
+  if not shutil.which("gsutil"):
+    raise RuntimeError(
+      "gsutil command not found, but is required for downloading from GCS. "
+      "Please install the Google Cloud SDK."
+    )
 
-  # Consistently parse the GCS path to get the path inside the bucket.
-  path_inside_bucket = urlparse(path_or_repo).path.lstrip("/")
-
-  # Strategy 1: Try to use the gcsfuse mount point. This is the most efficient.
-  fuse_path = os.path.join("/tmp/gcs-mount", path_inside_bucket)
-  if os.path.exists(fuse_path):
-    logger.info("Found existing gcsfuse mount for %s at %s", path_or_repo, fuse_path)
-    return fuse_path
-
-  # Strategy 2: Fallback to downloading if the fuse mount doesn't exist.
-  logger.warning(
-    "gcsfuse path %s not found. Falling back to downloading from %s.",
-    fuse_path,
-    path_or_repo,
-  )
-  from google.cloud import storage
-
+  local_dir = tempfile.mkdtemp()
+  _TEMP_DIRS_TO_CLEAN.append(local_dir)
   try:
-    local_dir = tempfile.mkdtemp()
-    _TEMP_DIRS_TO_CLEAN.append(local_dir)
-
-    # Parse GCS path to get bucket and prefix for listing blobs.
-    parsed_url = urlparse(path_or_repo, scheme="gs")
-    bucket_name = parsed_url.netloc
-    prefix = path_inside_bucket
-    if prefix and not prefix.endswith("/"):
-      prefix += "/"
-
-    storage_client = storage.Client()
-    blobs = list(storage_client.list_blobs(bucket_name, prefix=prefix))
-
-    if not blobs:
-      raise FileNotFoundError(f"No objects found at GCS path: {path_or_repo}")
-
-    for blob in blobs:
-      # Recreate the directory structure locally.
-      relative_path = os.path.relpath(blob.name, prefix)
-      dest_path = os.path.join(local_dir, relative_path)
-
-      # Handle subdirectories explicitly.
-      if blob.name.endswith("/"):
-        os.makedirs(dest_path, exist_ok=True)
-        continue
-
-      os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-      blob.download_to_filename(dest_path)
+    gcs_path = path_or_repo.rstrip("/") + "/*"
+    command = ["gsutil", "-m", "cp", "-r", gcs_path, local_dir]
+    subprocess.run(command, check=True)
 
     logger.info(
-      "Successfully downloaded assets from %s to %s.", path_or_repo, local_dir
+      "Successfully downloaded files from %s to %s using gsutil.",
+      path_or_repo,
+      local_dir,
     )
     return local_dir
-  except Exception as e:
-    logger.error("Failed to download from GCS using google-cloud-storage. Error: %s", e)
-    shutil.rmtree(local_dir)  # Clean up failed download
-    raise RuntimeError(f"Could not download {path_or_repo}") from e
+  except (subprocess.CalledProcessError, Exception):
+    # Clean up the partially created directory on failure.
+    shutil.rmtree(local_dir)
+    logger.error(
+      "gsutil download failed for %s. See gsutil output above for details.",
+      path_or_repo,
+    )

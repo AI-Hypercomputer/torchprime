@@ -79,59 +79,24 @@ def cli(ctx, interactive):
   ctx.obj["interactive"] = interactive
 
 
-@cli.command("save-hf-tokenizers-to-gcs")
+@cli.command("save-hf-model-files-to-gcs")
 @click.option(
-  "--tokenizer-name",
+  "--repo-id",
   type=str,
   required=True,
-  multiple=True,
-  help="Hugging Face tokenizer name (e.g., 'meta-llama/Llama-3-8B-hf'). Can be specified multiple times.",
-)
-@click.option(
-  "--gcs-base-path",
-  type=str,
-  required=True,
-  help="Base GCS path for the tokenizers (e.g., 'gs://bucket/tokenizers').",
-)
-def save_hf_tokenizers_to_gcs(tokenizer_name: tuple[str], gcs_base_path: str):
-  """
-  Downloads one or more tokenizers from Hugging Face Hub and saves them to a
-  Google Cloud Storage (GCS) bucket.
-  """
-  for name in tokenizer_name:
-    # Create a safe directory name from the repo ID by replacing slashes
-    safe_dir_name = name.replace("/", "--")
-    gcs_path = f"{gcs_base_path.rstrip('/')}/{safe_dir_name}"
-
-    click.echo(f"\nPreparing to save tokenizer from '{name}' to '{gcs_path}'...")
-    try:
-      save_hf_tokenizer_and_model.save_tokenizer_to_gcs(name, gcs_path)
-      click.secho(f"  -> Successfully saved tokenizer to {gcs_path}", fg="green")
-    except RepositoryNotFoundError:
-      click.secho(f"\n❌ Error: Tokenizer '{name}' not found.", fg="red")
-      click.echo("Please check the following:")
-      click.echo(f"1. The tokenizer name '{name}' is spelled correctly.")
-      click.echo(
-        "2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN."
-      )
-    except Exception as e:
-      click.secho(
-        f"\n❌ An unexpected error occurred for tokenizer '{name}': {e}", fg="red"
-      )
-
-
-@cli.command("save-hf-model-to-gcs")
-@click.option(
-  "--model-name",
-  type=str,
-  required=True,
-  help="Hugging Face model name (e.g., 'meta-llama/Llama-3-8B').",
+  help="Hugging Face model or tokenizer repo ID (e.g., 'meta-llama/Llama-3-8B-hf').",
 )
 @click.option(
   "--gcs-path",
   type=str,
   required=True,
-  help="Target GCS path for the model (e.g., 'gs://bucket/models/Llama-3-8B').",
+  help="Target GCS path for the model files (e.g., 'gs://bucket/models/Llama-3-8B-hf').",
+)
+@click.option(
+  "--file-type",
+  type=click.Choice(["tokenizer", "model", "all"], case_sensitive=False),
+  default="all",
+  help="Type of files to save. 'tokenizer' for tokenizer files, 'model' for model weights and configs, 'all' for both.",
 )
 @click.option(
   "--temp-dir",
@@ -139,27 +104,28 @@ def save_hf_tokenizers_to_gcs(tokenizer_name: tuple[str], gcs_base_path: str):
   default=None,
   help="Path to a temporary directory with sufficient space. Defaults to system temp.",
 )
-def save_hf_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None):
-  """
-  Downloads a full model from Hugging Face Hub and saves it to a
-  Google Cloud Storage (GCS) bucket.
-  """
-  click.echo(f"Preparing to save model from '{model_name}' to '{gcs_path}'...")
+def save_hf_model_files_to_gcs(
+  repo_id: str, gcs_path: str, file_type: str, temp_dir: str | None
+):
+  """Downloads model and tokenizer files from Hugging Face Hub and saves them to Google Cloud Storage."""
+  click.echo(
+    f"Preparing to save '{file_type}' files from '{repo_id}' to '{gcs_path}'..."
+  )
   try:
-    save_hf_tokenizer_and_model.save_model_to_gcs(
-      model_name, gcs_path, temp_dir=temp_dir
+    save_hf_tokenizer_and_model.save_hf_model_files_to_gcs(
+      repo_id, gcs_path, file_type=file_type, temp_dir=temp_dir
     )
-    click.secho(f"  -> Successfully saved model to {gcs_path}", fg="green")
+    click.secho(f"  -> Successfully saved files to {gcs_path}", fg="green")
   except RepositoryNotFoundError:
-    click.secho(f"\n❌ Error: Model '{model_name}' not found.", fg="red")
+    click.secho(f"\n❌ Error: Repository '{repo_id}' not found.", fg="red")
     click.echo("Please check the following:")
-    click.echo(f"1. The model name '{model_name}' is spelled correctly.")
+    click.echo(f"1. The repository ID '{repo_id}' is spelled correctly.")
     click.echo(
       "2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN."
     )
   except Exception as e:
     click.secho(
-      f"\n❌ An unexpected error occurred for model '{model_name}': {e}", fg="red"
+      f"\n❌ An unexpected error occurred for repository '{repo_id}': {e}", fg="red"
     )
 
 

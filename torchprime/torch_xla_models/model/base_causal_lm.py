@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import tempfile
 from pathlib import Path
 
 import huggingface_hub
@@ -115,51 +114,19 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    tmp_path = ""
-    state_dict = None
-    if xr.process_index() == 0:
-      # On rank 0, resolve the model path (which may involve downloading)
-      # and load the state dictionary from disk.
-      model_dir = model_utils.download_gcs_dir_if_needed(model_path_or_repo)
-      logger.info("Loading model from %s", model_dir)
+    local_path = model_utils.download_gcs_dir_if_needed(model_path_or_repo)
+    logger.info("Loading model from %s", local_path)
 
-      if not os.path.isdir(model_dir):
-        model_dir = huggingface_hub.snapshot_download(
-          repo_id=model_dir,
-          allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
-        )
+    if os.path.isdir(local_path):
+      model_dir = local_path
+    else:
+      model_dir = huggingface_hub.snapshot_download(
+        repo_id=local_path,
+        allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
+      )
 
-      if os.path.isdir(model_dir):
-        logger.info("Listing contents of model directory: %s", model_dir)
-        for root, _, files in os.walk(model_dir):
-          relative_root = os.path.relpath(root, model_dir)
-          for name in files:
-            logger.info("  - %s", os.path.join(relative_root, name).lstrip("./"))
-
-      logger.info("Loading safetensors on rank 0...")
-      state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
-      logger.info("Finished loading safetensors on rank 0.")
-
-      # Save state_dict to a temporary file on a fast local filesystem
-      # to avoid broadcast issues with large objects.
-      with tempfile.NamedTemporaryFile(delete=False, suffix=".pt") as tmp:
-        tmp_path = tmp.name
-        logger.info("Saving state_dict to temporary file: %s", tmp_path)
-        torch.save(state_dict, tmp_path)
-      del state_dict  # Free memory
-
-    if xr.process_count() > 1:
-      # Rendezvous can be used to broadcast small amounts of data like a path string.
-      tmp_path = xm.rendezvous("broadcast_tmp_path", tmp_path)
-
-    state_dict = torch.load(tmp_path, map_location="cpu")
-
-    if xr.process_count() > 1:
-      xm.rendezvous("wait_for_state_dict_load")
-
-    if xr.process_index() == 0:
-      os.remove(tmp_path)
-
+    # Load weights
+    state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
     self.load_state_dict(state_dict)
 
   def _maybe_save_checkpoint(self, config: DictConfig) -> None:
@@ -191,7 +158,8 @@ class BaseCausalLM(nn.Module):
     if xr.process_index() == 0:
       logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
       model_utils.copy_hf_config_files(config.model.pretrained_model, save_dir)
-      model_utils.save_hf_tokenizer(config.model.pretrained_model, save_dir)
+      # model_utils.save_hf_tokenizer(config.model.pretrained_model, save_dir)
+      model_utils.save_hf_tokenizer(config.model.tokenizer_name, save_dir)
 
     # Step 4: Initialize torch.distributed process group
     if not dist.is_initialized():

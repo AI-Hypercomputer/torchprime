@@ -38,6 +38,7 @@ class SFTTrainer(Trainer):
       if xr.process_index() == 0:
         logger.info("Loading model weights from %s", self.pretrained_model)
       model.from_pretrained(self.pretrained_model)
+      logger.info("Model loaded from %s", self.pretrained_model)
       xm.mark_step()
     else:
       logger.warning(

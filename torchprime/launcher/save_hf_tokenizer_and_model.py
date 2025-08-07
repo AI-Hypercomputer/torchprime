@@ -7,9 +7,23 @@ import tempfile
 from pathlib import Path
 
 from huggingface_hub import snapshot_download
-from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
+
+TOKENIZER_PATTERNS = [
+  "tokenizer.json",
+  "tokenizer_config.json",
+  "special_tokens_map.json",
+  "*.model",  # For sentencepiece tokenizers
+  "vocab.txt",  # For WordPiece/BERT tokenizers
+  "merges.txt",  # For BPE tokenizers
+]
+
+MODEL_PATTERNS = [
+  "*.safetensors*",
+  "config.json",
+  "generation_config.json",
+]
 
 
 def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
@@ -29,55 +43,35 @@ def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
     raise
 
 
-def save_tokenizer_to_gcs(tokenizer_name: str, gcs_path: str):
-  """Downloads a tokenizer from a Hugging Face repo and uploads to GCS."""
-  with tempfile.TemporaryDirectory() as tmpdir:
-    local_path = Path(tmpdir)
-    logger.info(f"Created temporary directory: {local_path}")
+def save_hf_model_files_to_gcs(
+  repo_id: str,
+  gcs_path: str,
+  file_type: str,
+  temp_dir: str | None = None,
+):
+  """Downloads model and tokenizer files from a Hugging Face repo and uploads to GCS."""
+  allow_patterns = []
+  if file_type in ("tokenizer", "all"):
+    allow_patterns.extend(TOKENIZER_PATTERNS)
+  if file_type in ("model", "all"):
+    allow_patterns.extend(MODEL_PATTERNS)
 
-    # Re-saving the tokenizer ensures it's in a standardized format, which is a good practice.
-    # This will only download tokenizer-related files, not the large model weights.
-    logger.info(f"Standardizing tokenizer for '{tokenizer_name}'...")
-    tokenizer = AutoTokenizer.from_pretrained(
-      tokenizer_name, token=os.environ.get("HF_TOKEN")
-    )
-    tokenizer.save_pretrained(str(local_path))
+  if not allow_patterns:
+    raise ValueError("file_type must be one of 'tokenizer', 'model', or 'all'")
 
-    logger.info(f"Tokenizer for '{tokenizer_name}' downloaded and prepared locally.")
-
-    # Upload the directory contents to the specified GCS path.
-    _upload_directory_to_gcs(local_path, gcs_path)
-
-
-def save_model_to_gcs(model_name: str, gcs_path: str, temp_dir: str | None = None):
-  """Downloads a model from a Hugging Face repo and uploads to GCS."""
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
-    # tmpdir is the root for the temporary cache.
     logger.info(f"Created temporary directory: {tmpdir}")
 
-    logger.info(f"Downloading model snapshot for '{model_name}'...")
-    # We use the temporary directory as the cache_dir to ensure that the
-    # files are downloaded directly into it. This avoids a copy operation
-    # from the default Hugging Face cache (~/.cache/huggingface) to /tmp,
-    # which can fail if /tmp and /home are on different filesystems and /tmp
-    # has limited space. The function returns the path to the actual snapshot directory.
-    # We explicitly list the patterns for files we need to ensure we don't download
-    # unnecessary files like READMEs or large non-safetensors model weights.
-    allow_patterns = [
-      "*.safetensors*",
-      "config.json",
-      "generation_config.json",
-      "tokenizer*.json",
-      "special_tokens_map.json",
-    ]
+    logger.info(f"Downloading files for '{repo_id}' with patterns: {allow_patterns}")
     snapshot_path = snapshot_download(
-      repo_id=model_name,
+      repo_id=repo_id,
       cache_dir=str(tmpdir),
       token=os.environ.get("HF_TOKEN"),
       allow_patterns=allow_patterns,
+      ignore_patterns=["*.bin*"],  # Avoid large pytorch_model.bin files
     )
 
-    logger.info(f"Model '{model_name}' downloaded locally to '{snapshot_path}'.")
+    logger.info(f"Files for '{repo_id}' downloaded locally to '{snapshot_path}'.")
 
     # Upload the directory contents to the specified GCS path.
     _upload_directory_to_gcs(Path(snapshot_path), gcs_path)
