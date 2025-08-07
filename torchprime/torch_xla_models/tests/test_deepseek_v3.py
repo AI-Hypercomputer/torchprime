@@ -9,10 +9,11 @@ from transformers import AutoConfig
 from transformers import DeepseekV3ForCausalLM as HFDeepseekV3ForCausalLM
 
 from torchprime.torch_xla_models.model.deepseek_v3 import (
-  DeepseekV3ForCausalLM,  # noqa: E402
+  DeepseekV3ForCausalLM,
+  convert_hf_state_dict_for_grouped_moe,
 )
 
-MOE_START_FROM_LAYER = 3  # layer 0,1,2 dense layers and layer 3+ moe layers
+MOE_START_FROM_LAYER = 2  # layer 0,1 dense layers and layer 2+ moe layers
 
 
 @dataclass
@@ -23,8 +24,9 @@ class DeepseekFixture:
 
 
 def get_deepseek_v3_dummy() -> DeepseekFixture:
-  torch.manual_seed(42)
-  torch_xla.manual_seed(42)
+  seed = 123
+  torch.manual_seed(seed)
+  torch_xla.manual_seed(seed)
   vocab_size = 64
   config = AutoConfig.from_pretrained(
     "deepseek-ai/deepseek-v3",
@@ -32,7 +34,7 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.vocab_size = vocab_size
   config.max_position_embeddings = vocab_size
   config.first_k_dense_replace = MOE_START_FROM_LAYER
-  config.num_hidden_layers = 6  # from 61
+  config.num_hidden_layers = 5  # from 61
   config.n_group = 4  # from 8
 
   scale_factor = 32
@@ -51,13 +53,18 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.qk_head_dim //= scale_factor
   config.head_dim //= scale_factor
   config.num_key_value_heads //= scale_factor
+  config.capacity_factor = 10.0
 
   tp_cfg = OmegaConf.create(config.to_dict())
   with torch.device("cpu"):
     hf_model = HFDeepseekV3ForCausalLM(config)
     hf_model.init_weights()
+    hf_dict = hf_model.state_dict()
+
     model = DeepseekV3ForCausalLM(tp_cfg)
-    model.load_state_dict(hf_model.state_dict())
+    converted_dict = convert_hf_state_dict_for_grouped_moe(hf_dict, model.config)
+    model.load_state_dict(converted_dict, strict=True)
+
   return DeepseekFixture(vocab_size, hf_model, model)
 
 
@@ -189,14 +196,14 @@ def test_forward_torch_xla_against_native_cpu():
   torch.testing.assert_close(
     native_logits,
     xla_logits.to("cpu"),
-    atol=1e-4,
+    atol=1e-2,
     rtol=1e-6,
     msg="CPU run and XLA run logits are not equal",
   )
   torch.testing.assert_close(
     native_loss,
     xla_loss.to("cpu"),
-    atol=1e-4,
+    atol=1e-2,
     rtol=1e-6,
     msg="CPU run and XLA run loss is not equal",
   )

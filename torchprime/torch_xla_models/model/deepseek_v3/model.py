@@ -652,3 +652,58 @@ class DeepseekV3ForCausalLM(BaseCausalLM):
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
     return logits, loss
+
+
+def convert_hf_state_dict_for_grouped_moe(hf_state_dict, config):
+  """
+  Converts a Hugging Face state_dict with per-expert weights in-place
+  to use the grouped weight format.
+
+  Args:
+    hf_state_dict (dict): The state_dict from the Hugging Face model.
+    config: The model configuration, used to get the number of experts.
+
+  Returns:
+    dict: The modified state_dict.
+  """
+  # Find all unique MoE layer prefixes (e.g., "model.layers.0.mlp.", "model.layers.1.mlp.", etc.)
+  moe_prefixes = set()
+  for key in hf_state_dict.keys():  # noqa: SIM118
+    if "experts.0.gate_proj.weight" in key:
+      # Assumes key format is like '...<prefix>.experts.0.gate_proj.weight'
+      prefix = key.split("experts.0.gate_proj.weight")[0]
+      moe_prefixes.add(prefix)
+
+  if not moe_prefixes:
+    print("No MoE layers with per-expert weights found to convert.")
+    return hf_state_dict
+
+  E = config.n_routed_experts
+
+  print(f"Found and converting {len(moe_prefixes)} MoE layers with {E} experts each...")
+
+  for prefix in moe_prefixes:
+    # Pop all the old per-expert weights from the dictionary, transposing them
+    w_g_list = [
+      hf_state_dict.pop(f"{prefix}experts.{e}.gate_proj.weight").t() for e in range(E)
+    ]
+    w_u_list = [
+      hf_state_dict.pop(f"{prefix}experts.{e}.up_proj.weight").t() for e in range(E)
+    ]
+    w_d_list = [
+      hf_state_dict.pop(f"{prefix}experts.{e}.down_proj.weight").t() for e in range(E)
+    ]
+
+    # Stack them to create the new grouped tensors
+    Wg = torch.stack(w_g_list, dim=0)
+    Wu = torch.stack(w_u_list, dim=0)
+    Wd = torch.stack(w_d_list, dim=0)
+
+    # Add the new grouped weight keys to the dictionary
+    hf_state_dict[f"{prefix}grouped.W_gate"] = Wg
+    hf_state_dict[f"{prefix}grouped.W_up"] = Wu
+    hf_state_dict[f"{prefix}grouped.W_down"] = Wd
+
+    print(f"  - Converted weights for prefix: {prefix}")
+
+  return hf_state_dict
