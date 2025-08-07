@@ -1,6 +1,6 @@
 defaults:
   - _self_  # refers to this config file
-  - sharding: deepseek-fsdp-tp  # refers to sharding/deepseek-fsdp-tp.yaml
+  - sharding: deepseek-fsdp-tp-ep  # refers to sharding/deepseek-fsdp-tp.yaml
   - remat: deepseek  # refers to remat/deepseek.yaml
 
 model_id: deepseek-v3
@@ -8,6 +8,7 @@ model_class: deepseek_v3.DeepseekV3ForCausalLM
 tokenizer_name: deepseek-ai/deepseek-v3
 # choose attention_kernel from: [splash_attention, null] # flash_attention does not work with DeepSeek V3
 attention_kernel: splash_attention
+capacity_factor: 1.25
 
 # Configuration automatically generated from HF 
 vocab_size: 129280

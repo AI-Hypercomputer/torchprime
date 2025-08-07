@@ -25,18 +25,19 @@ from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 from torchprime.torch_xla_models.model.llama.model import apply_rotary_pos_emb
 
 logger = logging.get_logger(__name__)
+BF16 = torch.bfloat16
 
 
 class DeepseekV3RMSNorm(nn.Module):
   def __init__(self, hidden_size: int, eps: float = 1e-6):
     super().__init__()
-    self.weight = nn.Parameter(torch.ones(hidden_size))
+    self.weight = nn.Parameter(torch.ones(hidden_size, dtype=BF16))
     self.variance_epsilon = eps
 
   @xp.trace_me("DeepseekV3RMSNorm")
   def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     input_dtype = hidden_states.dtype
-    hidden_states = hidden_states.to(torch.float32)
+    # hidden_states = hidden_states.to(torch.float32)
     variance = hidden_states.pow(2).mean(-1, keepdim=True)
     hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
     return self.weight * hidden_states.to(input_dtype)
@@ -49,22 +50,22 @@ class DeepseekV3RotaryEmbedding(nn.Module):
     super().__init__()
     self.config = config
     inv_freq, self.attention_scaling = deepseek_v3_rope_init_fn(self.config)
-    self.register_buffer("inv_freq", inv_freq, persistent=False)
+    self.register_buffer("inv_freq", inv_freq.to(BF16), persistent=False)
     self.original_inv_freq = self.inv_freq
 
   @torch.no_grad()
   def forward(self, x: torch.Tensor, position_ids: torch.Tensor):
     inv_freq_expanded = (
-      self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+      self.inv_freq[None, :, None].to(BF16).expand(position_ids.shape[0], -1, 1)
     )
-    position_ids_expanded = position_ids[:, None, :].float()
+    position_ids_expanded = position_ids[:, None, :].to(BF16)
 
     device_type = x.device.type
     device_type = (
       device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
     )
     with torch.autocast(device_type=device_type, enabled=False):
-      freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(
+      freqs = (inv_freq_expanded.to(BF16) @ position_ids_expanded.to(BF16)).transpose(
         1, 2
       )
       emb = torch.cat((freqs, freqs), dim=-1)
@@ -143,8 +144,12 @@ class DeepseekV3TopkRouter(nn.Module):
     self.topk_group = config.topk_group
     self.norm_topk_prob = config.norm_topk_prob
 
-    self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-    self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+    self.weight = nn.Parameter(
+      torch.empty((self.n_routed_experts, config.hidden_size), dtype=BF16)
+    )
+    self.register_buffer(
+      "e_score_correction_bias", torch.zeros(self.n_routed_experts, dtype=BF16)
+    )
 
   @torch.no_grad()
   def get_topk_indices(self, scores: torch.Tensor) -> torch.Tensor:
@@ -171,7 +176,7 @@ class DeepseekV3TopkRouter(nn.Module):
   @xp.trace_me("DeepseekV3TopkRouter")
   def forward(self, hidden_states: torch.Tensor):
     hidden_states = hidden_states.view(-1, self.config.hidden_size)
-    router_logits = F.linear(hidden_states.float(), self.weight.float())
+    router_logits = F.linear(hidden_states.to(BF16), self.weight.to(BF16))
     scores = router_logits.sigmoid()
     topk_indices = self.get_topk_indices(scores)
     topk_weights = scores.gather(1, topk_indices)
@@ -182,100 +187,247 @@ class DeepseekV3TopkRouter(nn.Module):
     return topk_indices, topk_weights
 
 
+class GroupedMoEWeights(nn.Module):
+  """Grouped expert weights that can be sharded along the expert dim (E)."""
+
+  def __init__(self, E: int, D: int, H: int, dtype: torch.dtype):
+    super().__init__()
+    self.W_gate = nn.Parameter(torch.empty(E, D, H, dtype=dtype))
+    self.W_up = nn.Parameter(torch.empty(E, D, H, dtype=dtype))
+    self.W_down = nn.Parameter(torch.empty(E, H, D, dtype=dtype))
+    nn.init.kaiming_uniform_(self.W_gate, a=math.sqrt(5))
+    nn.init.kaiming_uniform_(self.W_up, a=math.sqrt(5))
+    nn.init.kaiming_uniform_(self.W_down, a=math.sqrt(5))
+
+
 class DeepseekV3MoE(nn.Module):
-  """A mixture of experts module."""
+  """
+  Mixture-of-Experts with grouped einsum over existing per-expert weights.
+
+  XLA-friendly:
+    - No dynamic-shape ops (no masked_select/index_select/bincount/repeat_interleave)
+    - Uses sort + scatter_add_ (int32) + gather + einsum + index_add_
+    - Capacity dropping without compaction (dropped -> dummy slot with weight=0)
+  Checkpoint-compatible:
+    - Keeps self.experts ModuleList with gate/up/down Linear weights and maps to grouped params
+  """
 
   def __init__(self, config: DictConfig):
     super().__init__()
     self.config = config
-    self.experts = nn.ModuleList(
-      [
-        DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size)
-        for _ in range(config.n_routed_experts)
-      ]
-    )
+    self.E = config.n_routed_experts
+    self.K = config.num_experts_per_tok
+    self.D = config.hidden_size
+    self.I = config.moe_intermediate_size
+    self.capacity_factor = getattr(config, "capacity_factor", 1.25)
+
+    # Router (unchanged keys)
     self.gate = DeepseekV3TopkRouter(config)
+
+    # # Experts (preserve parameter names/keys for checkpoint compatibility)
+    # self.experts = nn.ModuleList(
+    #   [DeepseekV3MLP(config, intermediate_size=self.I) for _ in range(self.E)]
+    # )
+
+    # Grouped weights used in the hot path (shardable along E)
+    # Use bf16 by default; adjust if you run fp16/fp32.
+    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=BF16)
+
+    # Shared path (unchanged)
     self.shared_experts = DeepseekV3MLP(
-      config=config,
-      intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
+      config=config, intermediate_size=self.I * config.n_shared_experts
     )
 
-  def moe(
-    self,
-    hidden_states: torch.Tensor,
-    topk_indices: torch.Tensor,
-    topk_weights: torch.Tensor,
-  ):
-    final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-    expert_mask = torch.nn.functional.one_hot(
-      topk_indices, num_classes=len(self.experts)
+    self.act_fn = ACT2FN[config.hidden_act]
+
+    # Optional static capacity: set config.static_capacity to a positive int to avoid recompiles
+    self.static_capacity = int(getattr(config, "static_capacity", 0))
+
+    # # Register state-dict hooks to keep old checkpoint format working
+    # # 1) POST-SAVE hook (adds old keys when *saving*)
+    # # Correct signature: hook(module, state_dict, prefix, local_metadata)
+    # self._register_state_dict_hook(
+    #     lambda module, state_dict, prefix, local_metadata:
+    #         self._post_state_dict_old_keys(state_dict, prefix)
+    # )
+
+    # # 2) PRE-LOAD hook (maps old keys into grouped params when *loading*)
+    # # with_module=False signature:
+    # #   hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+    # self._register_load_state_dict_pre_hook(
+    #     lambda state_dict, prefix, *args:
+    #         self._pre_load_old_keys(state_dict, prefix),
+    #     with_module=False,
+    # )
+
+  # -------------------- checkpoint compatibility helpers --------------------
+
+  @torch.no_grad()
+  def _pre_load_old_keys(self, state_dict, prefix: str):
+    """When loading, if old per-expert keys exist, copy them into grouped params."""
+    has_old = any(
+      k.startswith(prefix + "experts.0.gate_proj.weight")
+      for k in state_dict.keys()  # noqa: SIM118
     )
-    expert_mask = expert_mask.permute(2, 0, 1)
-
-    for expert_idx in range(len(self.experts)):
-      expert = self.experts[expert_idx]
-      mask = expert_mask[expert_idx]
-      token_indices, weight_indices = torch.where(mask)
-
-      if token_indices.numel() > 0:
-        expert_weights = topk_weights[token_indices, weight_indices]
-        expert_input = hidden_states[token_indices]
-        expert_output = expert(expert_input)
-        weighted_output = expert_output * expert_weights.unsqueeze(-1)
-        final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-    # in original deepseek, the output of the experts are gathered once we leave this module
-    # thus the moe module is itelsf an IsolatedParallel module
-    # and all expert are "local" meaning we shard but we don't gather
-    return final_hidden_states.type(hidden_states.dtype)
-
-  @xp.trace_me("DeepseekV3MoE")
-  def forward_old(self, hidden_states: torch.Tensor) -> torch.Tensor:
-    residuals = hidden_states
-    orig_shape = hidden_states.shape
-    topk_indices, topk_weights = self.gate(hidden_states)
-    hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-    hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(
-      *orig_shape
+    if not has_old:
+      return
+    E = self.E
+    Wg = torch.stack(
+      [state_dict[f"{prefix}experts.{e}.gate_proj.weight"].t() for e in range(E)], dim=0
     )
-    hidden_states = hidden_states + self.shared_experts(residuals)
-    return hidden_states
+    Wu = torch.stack(
+      [state_dict[f"{prefix}experts.{e}.up_proj.weight"].t() for e in range(E)], dim=0
+    )
+    Wd = torch.stack(
+      [state_dict[f"{prefix}experts.{e}.down_proj.weight"].t() for e in range(E)], dim=0
+    )
+    # Cast to grouped dtype
+    Wg = Wg.to(self.grouped.W_gate.dtype)
+    Wu = Wu.to(self.grouped.W_up.dtype)
+    Wd = Wd.to(self.grouped.W_down.dtype)
+    self.grouped.W_gate.copy_(Wg.contiguous())
+    self.grouped.W_up.copy_(Wu.contiguous())
+    self.grouped.W_down.copy_(Wd.contiguous())
+
+  @torch.no_grad()
+  def _post_state_dict_old_keys(self, state_dict, prefix: str):
+    """When saving, also write old per-expert keys so external tools remain compatible."""
+    E = self.E
+    for e in range(E):
+      state_dict[f"{prefix}experts.{e}.gate_proj.weight"] = (
+        self.grouped.W_gate[e].t().contiguous().to(BF16)
+      )
+      state_dict[f"{prefix}experts.{e}.up_proj.weight"] = (
+        self.grouped.W_up[e].t().contiguous().to(BF16)
+      )
+      state_dict[f"{prefix}experts.{e}.down_proj.weight"] = (
+        self.grouped.W_down[e].t().contiguous().to(BF16)
+      )
+
+  # @torch.no_grad()
+  # def pack_from_modulelist(self):
+  #   """One-time pack after loading old checkpoints (if not using hooks)."""
+  #   E = self.E
+  #   Wg = torch.stack([self.experts[e].gate_proj.weight.t() for e in range(E)], dim=0)
+  #   Wu = torch.stack([self.experts[e].up_proj.weight.t()   for e in range(E)], dim=0)
+  #   Wd = torch.stack([self.experts[e].down_proj.weight.t() for e in range(E)], dim=0)
+  #   self.grouped.W_gate.copy_(Wg.to(self.grouped.W_gate.dtype).contiguous())
+  #   self.grouped.W_up.copy_(Wu.to(self.grouped.W_up.dtype).contiguous())
+  #   self.grouped.W_down.copy_(Wd.to(self.grouped.W_down.dtype).contiguous())
+
+  # ------------------------------ core MoE path ------------------------------
+
+  @torch.no_grad()
+  def _compute_capacity(self, T: int) -> int:
+    if self.static_capacity > 0:
+      return self.static_capacity
+    return int(math.ceil(self.capacity_factor * T / self.E))
+
+  def _grouped_weights(self, dtype: torch.dtype):
+    # Ensure einsum inputs match activation dtype (bf16 recommended on TPU)
+    return (
+      self.grouped.W_gate.to(dtype),
+      self.grouped.W_up.to(dtype),
+      self.grouped.W_down.to(dtype),
+    )
 
   @xp.trace_me("DeepseekV3MoE")
   def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-    # ------------------------------------------------------------------
-    # 1) Flatten tokens   [B, S, D]  →  [T, D]
-    # ------------------------------------------------------------------
     B, S, D = hidden_states.shape
-    hidden_flat = hidden_states.reshape(-1, D)  # [T,D]
+    assert D == self.D
+    device, dtype = hidden_states.device, hidden_states.dtype
+    T = B * S
+    E, K = self.E, self.K
 
-    # ------------------------------------------------------------------
-    # 2) Top-k indices & weights   (still bf16)
-    # ------------------------------------------------------------------
-    topk_idx, topk_w = self.gate(hidden_flat)  # [T,K]
-    topk_w = topk_w.to(hidden_flat.dtype)
-    T, K = topk_idx.shape
-    E = len(self.experts)
+    # Flatten tokens
+    x = hidden_states.reshape(T, D)
 
-    weight = torch.zeros(T, E, dtype=hidden_states.dtype, device=hidden_states.device)
-    weight.scatter_(1, topk_idx, topk_w)  # [T,E]
+    # Router (cast back to bf16 if topk forced f32)
+    topk_idx, topk_w = self.gate(x)  # [T,K], [T,K]
+    topk_w = topk_w.to(dtype)
 
-    # ------------------------------------------------------------------
-    # 3) Run every expert once; scale & accumulate
-    # ------------------------------------------------------------------
-    fused_out = torch.zeros_like(hidden_flat)  # [T,D]
+    # ---------- Fixed-shape packing (XLA-safe) ----------
+    # Build flat arrays of length N=T*K
+    token_ids = (
+      torch.arange(T, device=device, dtype=torch.long)
+      .view(T, 1)
+      .expand(T, K)
+      .reshape(-1)
+    )  # [N]
+    expert_ids = topk_idx.reshape(-1).to(torch.long)  # [N]
+    weights = topk_w.reshape(-1)  # [N]
 
-    for e_id, expert in enumerate(self.experts):  # static loop
-      out_e = expert(hidden_flat)  # [T,D] bf16
-      fused_out.add_(out_e * weight[:, e_id : e_id + 1])  # bf16·bf16
+    # Sort tokens by expert
+    expert_ids_sorted, sort_ix = torch.sort(expert_ids)  # [N], [N]
+    token_ids = torch.gather(token_ids, 0, sort_ix)  # [N]
+    weights = torch.gather(weights, 0, sort_ix)  # [N]
 
-    # ------------------------------------------------------------------
-    # 4) Shared-expert path and reshape back
-    # ------------------------------------------------------------------
-    fused_out = fused_out.reshape(B, S, D)
-    fused_out = fused_out + self.shared_experts(hidden_states)
+    # Per-expert counts via scatter_add_ (int32 robust on XLA)
+    counts_i32 = torch.zeros(E, device=device, dtype=torch.int32)
+    ones_i32 = torch.ones_like(expert_ids_sorted, dtype=torch.int32)
+    counts_i32.scatter_add_(0, expert_ids_sorted.to(torch.int32), ones_i32)  # [E]
+    counts = counts_i32.to(torch.long)  # [E]
 
-    return fused_out
+    # Start offset of each expert's segment
+    group_start = torch.cumsum(
+      torch.cat([counts.new_zeros(1), counts[:-1]], dim=0), dim=0
+    )  # [E], long
+
+    # Position within expert after sort
+    N = expert_ids_sorted.numel()
+    arangeN = torch.arange(N, device=device, dtype=torch.long)  # [N]
+    offsets_rep = torch.gather(group_start, 0, expert_ids_sorted)  # [N]
+    pos_in_exp = arangeN - offsets_rep  # [N], long
+
+    # Capacity & destination slot (dropped → expert's slot 0 with weight=0)
+    C = self._compute_capacity(T)
+    C_long = torch.tensor(C, device=device, dtype=torch.long)
+    valid = pos_in_exp < C_long  # [N] bool
+    dest = expert_ids_sorted * C_long + torch.minimum(pos_in_exp, C_long - 1)  # [N]
+    dest = torch.where(
+      valid, dest, expert_ids_sorted * C_long + torch.zeros_like(pos_in_exp)
+    )  # route dropped to slot 0
+
+    # Slot tables of length EC = E*C
+    EC = E * C
+    slots_token = torch.zeros(EC, device=device, dtype=torch.long)  # token id per slot
+    slots_w = torch.zeros(EC, device=device, dtype=dtype)  # gate weight per slot
+    slot_fill = torch.zeros(
+      EC, device=device, dtype=dtype
+    )  # 1.0 if slot filled else 0.0
+
+    valid_f = valid.to(dtype)
+    valid_l = valid.to(torch.long)
+
+    # Unique mapping ensures no collisions among valid slots
+    slots_token.index_add_(
+      0, dest, token_ids * valid_l
+    )  # int add; valid rows write token id
+    slots_w.index_add_(0, dest, weights * valid_f)  # write gate weights at valid slots
+    slot_fill.index_add_(0, dest, valid_f)  # 1.0 for valid slots
+
+    # Gather packed inputs [E, C, D]; dummy slots point to token 0 (weight 0 → no contribution)
+    gather_idx = slots_token.view(-1, 1).expand(EC, D)  # [EC, D]
+    X_packed = torch.gather(x, 0, gather_idx).view(E, C, D)  # [E, C, D]
+
+    # ---------- Grouped MLP via einsum ----------
+    W_gate, W_up, W_down = self._grouped_weights(dtype)  # [E,D,I], [E,D,I], [E,I,D]
+    # dims: e=experts, c=capacity, d=hidden, i=intermediate
+    G = torch.einsum("ecd,edi->eci", X_packed, W_gate)  # [E, C, I]
+    U = torch.einsum("ecd,edi->eci", X_packed, W_up)  # [E, C, I]
+    A = self.act_fn(G) * U  # [E, C, I]
+    Y_packed = torch.einsum("eci,eid->ecd", A, W_down)  # [E, C, D]
+
+    # Apply per-slot gate weight (dropped → weight 0 → no contribution)
+    Y_flat = Y_packed.view(EC, D) * slots_w.unsqueeze(-1)  # [EC, D]
+
+    # One global scatter back to [T, D]
+    out = torch.zeros(T, D, device=device, dtype=dtype)
+    out.index_add_(0, slots_token, Y_flat)  # [T, D]
+
+    # Shared path + reshape
+    out = out.view(B, S, D) + self.shared_experts(hidden_states)
+    return out
 
 
 class DeepseekV3Attention(nn.Module):
@@ -455,7 +607,7 @@ class DeepseekV3Model(nn.Module):
     inputs_embeds = self.embed_tokens(input_ids)
     seq_length = inputs_embeds.size(1)
     position_ids = (
-      torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).float()
+      torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).to(BF16)
     )
 
     causal_mask = torch.triu(

@@ -301,10 +301,8 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=deepseek-v3-shallow \
             model.attention_kernel=splash_attention \
-            model.num_hidden_layers=5 \
-            model.first_k_dense_replace=3 \
             dataset=wikitext \
-            dataset.block_size=128 \
+            dataset.block_size=1024 \
             task=train \
             task.global_batch_size=4 \
             task.lr_scheduler.type=constant \

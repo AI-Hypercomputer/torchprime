@@ -27,13 +27,13 @@ model.layers.*.mlp.up_proj.weight: [fsdp, tensor]
 model.layers.*.mlp.down_proj.weight: [tensor, fsdp]
 
 # n_routed_experts, hidden_size
-model.layers.*.mlp.gate.weight: [null, fsdp]
+model.layers.*.mlp.gate.weight: [expert, fsdp]
 # n_routed_experts, hidden_size, moe_intermediate_size
-model.layers.*.mlp.grouped.W_gate: [null, tensor, fsdp]   
+model.layers.*.mlp.grouped.W_gate: [expert, tensor, fsdp]   
 # n_routed_experts, hidden_size, moe_intermediate_size
-model.layers.*.mlp.grouped.W_up: [null, tensor, fsdp]  
+model.layers.*.mlp.grouped.W_up: [expert, tensor, fsdp]  
 # n_routed_experts, moe_intermediate_size, hidden_size
-model.layers.*.mlp.grouped.W_down: [null, fsdp, tensor]  
+model.layers.*.mlp.grouped.W_down: [expert, fsdp, tensor]  
 
 # moe_intermediate_size, hidden_size
 model.layers.*.mlp.shared_experts.gate_proj.weight: [fsdp, tensor]
