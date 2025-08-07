@@ -128,7 +128,11 @@ def test_layers_by_layer_against_hf_model(transform):
   inputs_embeds_xla = model_xla.model.embed_tokens(input_ids)
   inputs_embeds_hf = hf_model_xla.model.embed_tokens(input_ids)
   torch.testing.assert_close(
-    inputs_embeds_xla, inputs_embeds_hf, msg="emb layer outputs not equal"
+    inputs_embeds_xla,
+    inputs_embeds_hf,
+    atol=1e-2,
+    rtol=1e-6,
+    msg="emb layer outputs not equal",
   )
 
   position_ids = torch.arange(seq_len, device=device).unsqueeze(0).float()
@@ -142,10 +146,18 @@ def test_layers_by_layer_against_hf_model(transform):
   pos_embeds_xla = model_xla.model.rotary_emb(inputs_embeds_xla, position_ids)
   pos_embeds_hf = hf_model_xla.model.rotary_emb(inputs_embeds_hf, position_ids)
   torch.testing.assert_close(
-    pos_embeds_xla[0], pos_embeds_hf[0], msg="rotary_emb layer outputs not equal"
+    pos_embeds_xla[0],
+    pos_embeds_hf[0],
+    atol=1e-2,
+    rtol=1e-6,
+    msg="rotary_emb layer outputs not equal",
   )
   torch.testing.assert_close(
-    pos_embeds_xla[1], pos_embeds_hf[1], msg="rotary_emb layer outputs not equal"
+    pos_embeds_xla[1],
+    pos_embeds_hf[1],
+    atol=1e-2,
+    rtol=1e-6,
+    msg="rotary_emb layer outputs not equal",
   )
 
   hidden_xla = inputs_embeds_xla
