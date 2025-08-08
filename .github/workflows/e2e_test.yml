@@ -306,9 +306,9 @@ jobs:
             task=train \
             task.global_batch_size=4 \
             task.lr_scheduler.type=constant \
-            task.max_steps=20 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_start_step=10
+            profile_start_step=5
 
   # Load reference step times
   load-benchmarks:
