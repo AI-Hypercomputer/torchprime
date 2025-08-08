@@ -50,10 +50,9 @@ def main(config: omegaconf.DictConfig):
   logger.info(f"Profiling server started: {str(server)}")
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Add tokenizers to torchprime.
-  tokenizer_name = config.model.tokenizer_name
-  tokenizer_path_or_repo = model_utils.copy_gcs_to_local(tokenizer_name)
+  tokenizer_name = model_utils.copy_gcs_to_local(config.model.tokenizer_name)
   tokenizer = retry.retry(
-    lambda: transformers.AutoTokenizer.from_pretrained(tokenizer_path_or_repo)
+    lambda: transformers.AutoTokenizer.from_pretrained(tokenizer_name)
   )
 
   assert config.torch_dtype == "bfloat16", "Currently only bfloat16 is supported"

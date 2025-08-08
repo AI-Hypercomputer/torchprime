@@ -113,14 +113,13 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    local_path = model_utils.copy_gcs_to_local(model_path_or_repo)
-    logger.info("Loading model from %s", local_path)
+    model_path_or_repo = model_utils.copy_gcs_to_local(model_path_or_repo)
 
-    if os.path.isdir(local_path):
-      model_dir = local_path
+    if os.path.isdir(model_path_or_repo):
+      model_dir = model_path_or_repo
     else:
       model_dir = huggingface_hub.snapshot_download(
-        repo_id=local_path,
+        repo_id=model_path_or_repo,
         allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
       )
 
@@ -156,8 +155,12 @@ class BaseCausalLM(nn.Module):
     # Step 3: Save the HF config files and tokenizer
     if xr.process_index() == 0:
       logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
+      # Copy to local if in GCS
+      tokenizer_path_or_repo = model_utils.copy_gcs_to_local(
+        config.model.tokenizer_name
+      )
       model_path_or_repo = model_utils.copy_gcs_to_local(config.model.pretrained_model)
-      model_utils.copy_hf_config_files(model_path_or_repo, save_dir)
+      model_utils.copy_hf_config_files(tokenizer_path_or_repo, save_dir)
       model_utils.save_hf_tokenizer(model_path_or_repo, save_dir)
 
     # Step 4: Initialize torch.distributed process group
