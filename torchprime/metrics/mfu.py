@@ -267,7 +267,7 @@ def compute_mfu(
 
     torch_dtype: data type used for training (e.g. `bfloat16`).
   """
-  if "deepseek" in config["model_id"]:
+  if "model_id" in config and "deepseek" in config["model_id"]:
     total_tflops = calculate_tflops_training_per_device_deepseek(
       per_device_batch_size=batch_size,
       seq_len=sequence_length,
