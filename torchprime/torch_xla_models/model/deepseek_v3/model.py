@@ -241,7 +241,6 @@ class DeepseekV3MoE(nn.Module):
     # Optional static capacity: set config.static_capacity to a positive int to avoid recompiles
     self.static_capacity = int(getattr(config, "static_capacity", 0))
 
-
   @torch.no_grad()
   def _pre_load_old_keys(self, state_dict, prefix: str):
     """When loading, if old per-expert keys exist, copy them into grouped params."""

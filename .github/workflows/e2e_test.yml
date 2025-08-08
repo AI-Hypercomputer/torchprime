@@ -306,7 +306,7 @@ jobs:
             task=train \
             task.global_batch_size=4 \
             task.lr_scheduler.type=constant \
-            task.max_steps=15 \
+            task.max_steps=13 \
             ici_mesh.fsdp=4 \
             profile_start_step=5
 

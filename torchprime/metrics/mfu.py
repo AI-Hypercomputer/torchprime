@@ -134,9 +134,6 @@ def calculate_tflops_training_per_device(config: Config, log=True):
   return total_tflops
 
 
-# ---------------------------------------------------------------------------
-# DeepSeek-v3 FLOPs model (BF16, MLA FFN, gated-MoE, two-stage KV projection)
-# ---------------------------------------------------------------------------
 def calculate_tflops_training_per_device_deepseek(
   *,
   per_device_batch_size: int,
@@ -157,6 +154,7 @@ def calculate_tflops_training_per_device_deepseek(
   n_shared_experts: int,
   num_experts_per_tok: int,
   vocab_size: int,
+  capacity_factor: float = 1.5,
   gradient_accumulation_steps: int = 1,
   include_softmax: bool = False,
 ) -> float:
@@ -190,7 +188,7 @@ def calculate_tflops_training_per_device_deepseek(
 
   # Per-expert MLA FFN (K experts/token)
   moe_ffn_tok = 3 * H * moe_intermediate_size * BF16 + moe_intermediate_size
-  moe_ffn_flops = moe_ffn_tok * tokens * num_experts_per_tok * L_moe
+  moe_ffn_flops = moe_ffn_tok * tokens * num_experts_per_tok * L_moe * capacity_factor
 
   # Shared-expert MLA FFN (runs on *all* tokens in every MoE layer)
   M_shared = moe_intermediate_size * n_shared_experts
@@ -269,27 +267,8 @@ def compute_mfu(
 
     torch_dtype: data type used for training (e.g. `bfloat16`).
   """
-  total_tflops = calculate_tflops_training_per_device(
-    Config(
-      per_device_batch_size=batch_size,
-      max_target_length=sequence_length,
-      mlp_dim=int(config["intermediate_size"]),
-      emb_dim=int(config["hidden_size"]),
-      mlp_activations=["silu", "linear"],
-      num_experts=int(config.get("num_local_experts", 1)),
-      num_experts_per_tok=int(config.get("num_experts_per_tok", 1)),
-      num_query_heads=int(config["num_attention_heads"]),
-      num_kv_heads=int(config["num_key_value_heads"]),
-      head_dim=int(config["hidden_size"] / config["num_attention_heads"]),
-      num_decoder_layers=int(config["num_hidden_layers"]),
-      vocab_size=int(config["vocab_size"]),
-      gradient_accumulation_steps=gradient_accumulation_steps,
-    ),
-    log=True,
-  )
-
-  try:
-    total_tflops_deepseek = calculate_tflops_training_per_device_deepseek(
+  if "deepseek" in config["model_id"]:
+    total_tflops = calculate_tflops_training_per_device_deepseek(
       per_device_batch_size=batch_size,
       seq_len=sequence_length,
       hidden_size=int(config["hidden_size"]),
@@ -308,12 +287,29 @@ def compute_mfu(
       n_shared_experts=int(config["n_shared_experts"]),
       num_experts_per_tok=int(config["num_experts_per_tok"]),
       vocab_size=int(config["vocab_size"]),
+      capacity_factor=float(config.get("capacity_factor", 1.5)),
       gradient_accumulation_steps=1,
       include_softmax=True,
     )
-    total_tflops = total_tflops_deepseek
-  except Exception as e:
-    print(f"Error occurred while calculating TFLOPs: {e}")
+  else:
+    total_tflops = calculate_tflops_training_per_device(
+      Config(
+        per_device_batch_size=batch_size,
+        max_target_length=sequence_length,
+        mlp_dim=int(config["intermediate_size"]),
+        emb_dim=int(config["hidden_size"]),
+        mlp_activations=["silu", "linear"],
+        num_experts=int(config.get("num_local_experts", 1)),
+        num_experts_per_tok=int(config.get("num_experts_per_tok", 1)),
+        num_query_heads=int(config["num_attention_heads"]),
+        num_kv_heads=int(config["num_key_value_heads"]),
+        head_dim=int(config["hidden_size"] / config["num_attention_heads"]),
+        num_decoder_layers=int(config["num_hidden_layers"]),
+        vocab_size=int(config["vocab_size"]),
+        gradient_accumulation_steps=gradient_accumulation_steps,
+      ),
+      log=True,
+    )
 
   assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 
