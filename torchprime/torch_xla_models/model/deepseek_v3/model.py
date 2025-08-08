@@ -230,10 +230,8 @@ class DeepseekV3MoE(nn.Module):
     # )
 
     # Grouped weights used in the hot path (shardable along E)
-    # Use bf16 by default; adjust if you run fp16/fp32.
     self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=BF16)
 
-    # Shared path (unchanged)
     self.shared_experts = DeepseekV3MLP(
       config=config, intermediate_size=self.I * config.n_shared_experts
     )
@@ -243,24 +241,6 @@ class DeepseekV3MoE(nn.Module):
     # Optional static capacity: set config.static_capacity to a positive int to avoid recompiles
     self.static_capacity = int(getattr(config, "static_capacity", 0))
 
-    # # Register state-dict hooks to keep old checkpoint format working
-    # # 1) POST-SAVE hook (adds old keys when *saving*)
-    # # Correct signature: hook(module, state_dict, prefix, local_metadata)
-    # self._register_state_dict_hook(
-    #     lambda module, state_dict, prefix, local_metadata:
-    #         self._post_state_dict_old_keys(state_dict, prefix)
-    # )
-
-    # # 2) PRE-LOAD hook (maps old keys into grouped params when *loading*)
-    # # with_module=False signature:
-    # #   hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
-    # self._register_load_state_dict_pre_hook(
-    #     lambda state_dict, prefix, *args:
-    #         self._pre_load_old_keys(state_dict, prefix),
-    #     with_module=False,
-    # )
-
-  # -------------------- checkpoint compatibility helpers --------------------
 
   @torch.no_grad()
   def _pre_load_old_keys(self, state_dict, prefix: str):
@@ -304,17 +284,6 @@ class DeepseekV3MoE(nn.Module):
         self.grouped.W_down[e].t().contiguous().to(BF16)
       )
 
-  # @torch.no_grad()
-  # def pack_from_modulelist(self):
-  #   """One-time pack after loading old checkpoints (if not using hooks)."""
-  #   E = self.E
-  #   Wg = torch.stack([self.experts[e].gate_proj.weight.t() for e in range(E)], dim=0)
-  #   Wu = torch.stack([self.experts[e].up_proj.weight.t()   for e in range(E)], dim=0)
-  #   Wd = torch.stack([self.experts[e].down_proj.weight.t() for e in range(E)], dim=0)
-  #   self.grouped.W_gate.copy_(Wg.to(self.grouped.W_gate.dtype).contiguous())
-  #   self.grouped.W_up.copy_(Wu.to(self.grouped.W_up.dtype).contiguous())
-  #   self.grouped.W_down.copy_(Wd.to(self.grouped.W_down.dtype).contiguous())
-
   # ------------------------------ core MoE path ------------------------------
 
   @torch.no_grad()
@@ -346,7 +315,6 @@ class DeepseekV3MoE(nn.Module):
     topk_idx, topk_w = self.gate(x)  # [T,K], [T,K]
     topk_w = topk_w.to(dtype)
 
-    # ---------- Fixed-shape packing (XLA-safe) ----------
     # Build flat arrays of length N=T*K
     token_ids = (
       torch.arange(T, device=device, dtype=torch.long)
