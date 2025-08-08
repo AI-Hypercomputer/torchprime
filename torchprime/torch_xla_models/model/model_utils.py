@@ -463,7 +463,6 @@ def copy_hf_config_files(model_path_or_repo: str, save_dir: Path) -> None:
   """
   patterns = HF_MODEL_CONFIG_FILES
 
-  model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   if os.path.isdir(model_path_or_repo):
     model_dir = Path(model_path_or_repo)
   else:
@@ -497,15 +496,30 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
           model repo ID (e.g., "meta-llama/Llama-2-7b-hf").
       save_dir: Directory where the tokenizer files will be saved.
   """
-  model_path_or_repo = download_gcs_dir_if_needed(model_path_or_repo)
   tokenizer = AutoTokenizer.from_pretrained(model_path_or_repo)
   save_dir = Path(save_dir)
   save_dir.mkdir(parents=True, exist_ok=True)
   tokenizer.save_pretrained(save_dir)
 
 
-def download_gcs_dir_if_needed(path_or_repo: str) -> str:
-  """Resolves a GCS path to a local path by downloading its contents using gsutil."""
+def copy_gcs_to_local(path_or_repo: str) -> str:
+  """Download gcs content to local temporaily directory.
+
+  If the input `path_or_repo` starts with 'gs://', this function will download
+  the contents of the GCS directory to a temporary local directory using the
+  `gsutil` command-line tool. The local directory will be automatically cleaned
+  up when the program exits.
+
+  If the input is not a GCS path, it is assumed to be a local path or huggingface repo ID, and is
+  returned unmodified.
+
+  Args:
+      path_or_repo: The path to resolve. Can be a GCS URI (e.g.,
+        'gs://bucket/data') or a local file path.
+
+  Returns:
+      A string containing the path to the local temporary directory.
+  """
   if not path_or_repo.startswith("gs://"):
     return path_or_repo
 
@@ -535,3 +549,4 @@ def download_gcs_dir_if_needed(path_or_repo: str) -> str:
       "gsutil download failed for %s. See gsutil output above for details.",
       path_or_repo,
     )
+    raise

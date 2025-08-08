@@ -51,7 +51,7 @@ def main(config: omegaconf.DictConfig):
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Add tokenizers to torchprime.
   tokenizer_name = config.model.tokenizer_name
-  tokenizer_path_or_repo = model_utils.download_gcs_dir_if_needed(tokenizer_name)
+  tokenizer_path_or_repo = model_utils.copy_gcs_to_local(tokenizer_name)
   tokenizer = retry.retry(
     lambda: transformers.AutoTokenizer.from_pretrained(tokenizer_path_or_repo)
   )

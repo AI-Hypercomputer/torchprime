@@ -14,9 +14,9 @@ TOKENIZER_PATTERNS = [
   "tokenizer.json",
   "tokenizer_config.json",
   "special_tokens_map.json",
-  "*.model",  # For sentencepiece tokenizers
-  "vocab.txt",  # For WordPiece/BERT tokenizers
-  "merges.txt",  # For BPE tokenizers
+  "*.model",
+  "vocab.txt",
+  "merges.txt",
 ]
 
 MODEL_PATTERNS = [
@@ -27,7 +27,12 @@ MODEL_PATTERNS = [
 
 
 def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
-  """Uploads the contents of a local directory to GCS using gsutil."""
+  """Uploads the contents of a local directory to GCS using gsutil.
+
+  Args:
+      local_path: The local directory whose contents will be uploaded.
+      gcs_path: The destination GCS path (e.g., 'gs://my-bucket/models/').
+  """
   if not gcs_path.startswith("gs://"):
     raise ValueError("GCS path must start with gs://")
 
@@ -47,7 +52,23 @@ def save_hf_model_files_to_gcs(
   file_type: str,
   temp_dir: str | None = None,
 ):
-  """Downloads model and tokenizer files from a Hugging Face repo and uploads to GCS."""
+  """Downloads model or tokenizer files from Hugging Face and uploads them to GCS.
+
+  This function uses `huggingface_hub.snapshot_download` to fetch specific
+  files based on predefined patterns for models and tokenizers. The downloaded
+  files are then uploaded to the specified GCS path.
+
+  Args:
+      repo_id: The ID of the Hugging Face repository (e.g., 'meta-llama/Llama-3-8B-hf').
+      gcs_path: The target GCS path for the files (e.g., 'gs://bucket/models/Llama-3-8B-hf').
+      file_type: The type of files to download. Must be one of 'tokenizer',
+        'model', or 'all'.
+      temp_dir: An optional path to a temporary directory for downloading. If
+        None, the system's default temporary directory is used.
+
+  Raises:
+      ValueError: If an invalid `file_type` is provided.
+  """
   allow_patterns = []
   if file_type in ("tokenizer", "all"):
     allow_patterns.extend(TOKENIZER_PATTERNS)
@@ -66,10 +87,8 @@ def save_hf_model_files_to_gcs(
       cache_dir=str(tmpdir),
       token=os.environ.get("HF_TOKEN"),
       allow_patterns=allow_patterns,
-      ignore_patterns=["*.bin*"],  # Avoid large pytorch_model.bin files
     )
 
     logger.info(f"Files for '{repo_id}' downloaded locally to '{snapshot_path}'.")
 
-    # Upload the directory contents to the specified GCS path.
     _upload_directory_to_gcs(Path(snapshot_path), gcs_path)

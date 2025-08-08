@@ -115,18 +115,16 @@ def save_hf_model_files_to_gcs(
     save_hf_tokenizer_and_model.save_hf_model_files_to_gcs(
       repo_id, gcs_path, file_type=file_type, temp_dir=temp_dir
     )
-    click.secho(f"  -> Successfully saved files to {gcs_path}", fg="green")
+    click.echo(f"  -> Successfully saved files to {gcs_path}")
   except RepositoryNotFoundError:
-    click.secho(f"\n❌ Error: Repository '{repo_id}' not found.", fg="red")
+    click.echo(f"\n❌ Error: Repository '{repo_id}' not found.")
     click.echo("Please check the following:")
     click.echo(f"1. The repository ID '{repo_id}' is spelled correctly.")
     click.echo(
       "2. If it's a gated repository, ensure you are authenticated by running 'huggingface-cli login' or exporting your HF_TOKEN."
     )
   except Exception as e:
-    click.secho(
-      f"\n❌ An unexpected error occurred for repository '{repo_id}': {e}", fg="red"
-    )
+    click.echo(f"\n❌ An unexpected error occurred for repository '{repo_id}': {e}")
 
 
 @cli.command()
