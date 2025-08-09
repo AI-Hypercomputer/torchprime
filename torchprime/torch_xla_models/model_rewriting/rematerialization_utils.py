@@ -96,7 +96,9 @@ def add_activation_checkpointing_and_scan(
       names_to_offload=offload_tensors,
     )
   )
-  return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn, start_from_layer=start_from_layer)
+  return scan_layers.compile(
+    model, layers_to_scan, partition_fn=partition_fn, start_from_layer=start_from_layer
+  )
 
 
 def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module:
