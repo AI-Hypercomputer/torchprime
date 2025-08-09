@@ -614,7 +614,7 @@ class DeepseekV3ForCausalLM(BaseCausalLM):
   ) -> tuple[torch.Tensor, torch.Tensor | None]:
     hidden_states = self.model(input_ids=input_ids, attention_mask=attention_mask)
     logits = self.lm_head(hidden_states)
-    logits = logits.float()
+    # logits = logits.float()
     if labels is None:
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)

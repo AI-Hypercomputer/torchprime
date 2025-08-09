@@ -300,15 +300,11 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=deepseek-v3-shallow \
-            model.attention_kernel=splash_attention \
-            dataset=wikitext \
             dataset.block_size=1024 \
-            task=train \
             task.global_batch_size=4 \
-            task.lr_scheduler.type=constant \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
-            profile_start_step=3
+            profile_start_step=5
 
   # Load reference step times
   load-benchmarks:
