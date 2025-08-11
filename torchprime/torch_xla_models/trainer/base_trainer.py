@@ -33,7 +33,6 @@ from transformers import (
   default_data_collator,
   get_scheduler,
 )
-from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
@@ -151,10 +150,10 @@ class Trainer:
       #   scale_parameter=False,
       # )
       optimizer = torch.optim.SGD(
-          params=model_parameters,
-          lr=config.task.optimizer.learning_rate,
-          # It's good practice to support momentum, default to 0 if not provided
-          momentum=getattr(config.task.optimizer, 'momentum', 0.0)
+        params=model_parameters,
+        lr=config.task.optimizer.learning_rate,
+        # It's good practice to support momentum, default to 0 if not provided
+        momentum=getattr(config.task.optimizer, "momentum", 0.0),
       )
     else:
       raise AssertionError("Impossible code branch reached.")

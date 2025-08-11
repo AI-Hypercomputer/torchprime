@@ -9,6 +9,7 @@ tokenizer_name: deepseek-ai/deepseek-v3
 # choose attention_kernel from: [splash_attention, null] # flash_attention does not work with DeepSeek V3
 attention_kernel: splash_attention
 capacity_factor: 1.25
+static_capacity: 16
 
 # Configuration automatically generated from HF 
 vocab_size: 129280
