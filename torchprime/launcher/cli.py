@@ -302,6 +302,12 @@ def docker_run(args, use_hf: bool):
   default=None,
 )
 @click.option(
+  "--priority",
+  required=False,
+  help="Priority of the workload (jobset). If not specified, defaults to 'medium'.",
+  default="medium",
+)
+@click.option(
   "--base-docker-url",
   required=False,
   help="If specified, `tp run` will use this PyTorch/XLA base docker image instead of "
@@ -334,6 +340,7 @@ def run(
   name: str | None,
   base_docker_url: str | None,
   num_slices: int | None,
+  priority: str | None,
   use_hf: bool,
   use_local_wheel: bool,
   comments: str | None,
@@ -438,6 +445,8 @@ def run(
       config.tpu_type,
       "--num-slices",
       str(num_slices),
+      "--priority",
+      priority if priority else "medium",
       "--zone",
       config.zone,
       "--project",

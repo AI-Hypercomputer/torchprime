@@ -305,7 +305,8 @@ jobs:
             task.max_steps=20 \
             ici_mesh.fsdp=4 \
             profile_start_step=3 \
-            profile_end_step=18
+            profile_end_step=18 \ 
+            model.static_capacity=10
 
   # Load reference step times
   load-benchmarks:
