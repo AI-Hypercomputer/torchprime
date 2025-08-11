@@ -302,10 +302,9 @@ jobs:
             model=deepseek-v3-shallow \
             dataset.block_size=512 \
             task.global_batch_size=4 \
-            task.max_steps=20 \
+            task.max_steps=10 \
             ici_mesh.fsdp=4 \
-            profile_start_step=3 \
-            profile_end_step=18
+            profile_start_step=3 
 
   # Load reference step times
   load-benchmarks:

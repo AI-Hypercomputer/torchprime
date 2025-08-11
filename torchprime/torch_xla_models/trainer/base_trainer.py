@@ -33,6 +33,7 @@ from transformers import (
   default_data_collator,
   get_scheduler,
 )
+from transformers.optimization import Adafactor
 
 from torchprime.metrics.mfu import compute_mfu
 from torchprime.metrics.step_duration import step_duration_from_latest_profile
@@ -143,17 +144,11 @@ class Trainer:
       if "weight_decay" in config.task.optimizer:
         raise ValueError("Adafactor does not support weight decay.")
 
-      # optimizer = Adafactor(
-      #   params=model_parameters,
-      #   lr=config.task.optimizer.learning_rate,
-      #   relative_step=False,
-      #   scale_parameter=False,
-      # )
-      optimizer = torch.optim.SGD(
+      optimizer = Adafactor(
         params=model_parameters,
         lr=config.task.optimizer.learning_rate,
-        # It's good practice to support momentum, default to 0 if not provided
-        momentum=getattr(config.task.optimizer, "momentum", 0.0),
+        relative_step=False,
+        scale_parameter=False,
       )
     else:
       raise AssertionError("Impossible code branch reached.")
