@@ -300,9 +300,13 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=deepseek-v3-shallow \
+            dataset=wikitext \
             dataset.block_size=512 \
+            task=train \
+            task.global_batch_size=8 \
+            task.lr_scheduler.type=constant \
             task.global_batch_size=4 \
-            task.max_steps=10 \
+            task.max_steps=15 \
             ici_mesh.fsdp=4 \
             profile_start_step=3 
 
