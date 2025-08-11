@@ -303,7 +303,6 @@ jobs:
             dataset=wikitext \
             dataset.block_size=512 \
             task=train \
-            task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
             task.global_batch_size=4 \
             task.max_steps=15 \
