@@ -4,8 +4,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import click
-
 from torchprime.launcher import upload_metrics_to_bq
 
 # Workaround for MegaScale crash
@@ -84,7 +82,7 @@ upload_metrics = os.getenv("TORCHPRIME_UPLOAD_METRICS", "")
 
 if upload_metrics.lower() == "true" and slice_id == "0" and worker_id == "0":
   try:
-    click.echo(
+    print(
       f"Primary worker ({host_name}) attempting to upload metrics for job '{jobset_name}'...",
     )
     upload_metrics_to_bq.collect_and_upload_benchmark_summary(
@@ -93,5 +91,5 @@ if upload_metrics.lower() == "true" and slice_id == "0" and worker_id == "0":
       mounted_artifact_path_str=str(mounted_artifact_dir),
     )
   except Exception as e:
-    click.echo(f"Error uploading results to BigQuery: {e}", err=True)
+    print(f"Error uploading results to BigQuery: {e}", file=sys.stderr)
 sys.exit(process.returncode)

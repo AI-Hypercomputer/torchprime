@@ -1,7 +1,6 @@
 import json
 import os
 
-import click
 from benchmark_db_writer import bq_writer_utils
 from benchmark_db_writer.schema.workload_benchmark_v2 import (
   workload_benchmark_v2_schema,
@@ -26,7 +25,7 @@ def _write_summary_to_bq_client(
       bq_dataset: The BigQuery dataset ID.
       bq_table: The BigQuery table ID.
   """
-  click.echo("Attempting to upload benchmark results to BigQuery...")
+  print("Attempting to upload benchmark results to BigQuery...")
   client = bq_writer_utils.create_bq_writer_object(
     project=bq_project,
     dataset=bq_dataset,

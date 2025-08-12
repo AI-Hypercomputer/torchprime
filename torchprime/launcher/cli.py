@@ -172,12 +172,12 @@ def use(
   )
 
   path = write_config(config)
-  click.echo(f"Written config {path.relative_to(os.getcwd())}")
+  print(f"Written config {path.relative_to(os.getcwd())}")
   torchprime.launcher.doctor.check_all(config)
 
 
 def create_and_activate_gcloud(gcloud_config_name, config: Config):
-  click.echo("Activating gcloud config...")
+  print("Activating gcloud config...")
   ensure_command("gcloud")
   all_configurations = json.loads(
     subprocess.check_output(
@@ -254,7 +254,7 @@ def docker_run(args, use_hf: bool):
   """
   Runs the provided training command locally for quick testing.
   """
-  click.echo(get_project_dir().absolute())
+  print(get_project_dir().absolute())
 
   # Build docker image.
   build_arg = ["USE_TRANSFORMERS=true"] if use_hf else None
@@ -350,7 +350,7 @@ def run(
   """
   config = read_config()
 
-  click.echo(get_project_dir().absolute())
+  print(get_project_dir().absolute())
 
   # Build docker image.
   build_arg = []
@@ -468,7 +468,7 @@ def run(
   styled_artifacts = click.style(
     f"{config.artifact_dir}/{workload_name}", bold=True, fg="green"
   )
-  click.echo(f"""
+  print(f"""
 Workload {styled_workload} submitted to cluster {styled_cluster}
 
 Artifacts are stored at {styled_artifacts}
@@ -514,12 +514,12 @@ class CommandRunner:
       )
       self.outputs += b"\n"
     except subprocess.CalledProcessError as e:
-      click.echo("Previous command outputs:")
-      click.echo(self.outputs.decode("utf-8"))
-      click.echo()
-      click.echo(f"❌ Error running `{' '.join(command)}` ❌")
-      click.echo()
-      click.echo(e.stdout)
+      print("Previous command outputs:")
+      print(self.outputs.decode("utf-8"))
+      print()
+      print(f"❌ Error running `{' '.join(command)}` ❌")
+      print()
+      print(e.stdout)
       sys.exit(-1)
 
 
@@ -615,13 +615,13 @@ class FileChangeHandler(FileSystemEventHandler):
         self.file_modified.wait()
         last_modified_file = self.last_modified_file
       if last_modified_file:
-        click.echo(f"""
+        print(f"""
 File {last_modified_file} modified, rerunning command...
 """)
       sys.argv[1] = sys.argv[1].replace("-i", "").replace("--interactive", "").strip()
       main_command = " ".join(s for s in sys.argv[1:] if s != "")
       subprocess.run(f"tp {main_command}", shell=True, check=False)
-      click.echo(f"""
+      print(f"""
 Done running `tp {main_command}`.
 """)
 
@@ -658,7 +658,7 @@ def run_with_watcher(ctx):
       # If interactive mode is enabled, start watching for changes
       if ctx.obj.get("interactive"):
         project_dir = get_project_dir()
-        click.echo(
+        print(
           f"Watching directory {project_dir} for changes. Press Ctrl+C to stop.\n"
         )
         watch_directory(project_dir, ctx)
