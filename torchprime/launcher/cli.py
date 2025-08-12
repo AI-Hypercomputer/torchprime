@@ -2,6 +2,7 @@
 tp is a CLI for common torchprime workflows.
 """
 
+import argparse
 import getpass
 import json
 import os
@@ -14,7 +15,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-import click
 import toml
 from dataclasses_json import dataclass_json
 from pathspec import PathSpec
@@ -50,87 +50,6 @@ class Config:
   docker_project: str | None = None
 
 
-def interactive(f):
-  @click.pass_context
-  def wrapper(ctx, *args, **kwargs):
-    return run_with_watcher(ctx)(f)(*args, **kwargs)
-
-  wrapper.__name__ = f.__name__
-  wrapper.__doc__ = f.__doc__
-  return wrapper
-
-
-@click.group()
-@click.option(
-  "-i",
-  "--interactive",
-  is_flag=True,
-  default=False,
-  help="Re-run the command whenever a file is edited (useful for fast dev/test iteration)",
-)
-@click.pass_context
-def cli(ctx, interactive):
-  """
-  tp is a CLI for common torchprime workflows.
-  """
-  ctx.ensure_object(dict)
-  ctx.obj["interactive"] = interactive
-
-
-@cli.command()
-@click.option("--cluster", required=True, help="Name of the XPK cluster")
-@click.option("--project", required=True, help="GCP project the cluster belongs to")
-@click.option("--zone", required=True, help="Compute zone the cluster is located in")
-@click.option(
-  "--num-slices",
-  required=False,
-  type=int,
-  default=1,
-  help="Number of TPU slice to use by default. Defaults to 1",
-)
-@click.option(
-  "--tpu-type",
-  required=True,
-  help="The TPU accelerator type in each slice. E.g. v6e-256 for a 256 chip Trillium pod",
-)
-@click.option(
-  "--artifact-dir",
-  required=True,
-  help="A Google Cloud Storage directory where artifacts such as profiles will be stored. \
-E.g. gs://foo/bar",
-)
-@click.option(
-  "--upload-metrics",
-  required=False,
-  is_flag=True,
-  default=False,
-  help="If given, uploads metrics to the database ",
-)
-@click.option(
-  "--bq-project",
-  required=False,
-  default="tpu-pytorch",
-  help="A bigquery project to upload metrics.",
-)
-@click.option(
-  "--bq-dataset",
-  required=False,
-  default="benchmark_dataset_test",
-  help="A bigquery dataset to upload metrics.",
-)
-@click.option(
-  "--bq-table",
-  required=False,
-  default="benchmark_experiment",
-  help="A bigquery table to upload metrics.",
-)
-@click.option(
-  "--docker-project",
-  required=False,
-  default=None,
-  help="GCP project to upload docker containers to. If not set, defaults to the cluster's\
-    GCP project",
-)
 def use(
   cluster: str,
   project: str,
@@ -242,15 +161,7 @@ def create_and_activate_gcloud(gcloud_config_name, config: Config):
   )
 
 
-@cli.command(
-  name="docker-run",
-  context_settings=dict(
-    ignore_unknown_options=True,
-  ),
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
-def docker_run(args, use_hf: bool):
+def docker_run(use_hf: bool, args: list[str]):
   """
   Runs the provided training command locally for quick testing.
   """
@@ -288,55 +199,7 @@ def docker_run(args, use_hf: bool):
   run_docker(docker_command)
 
 
-@cli.command(
-  context_settings=dict(
-    ignore_unknown_options=True,
-  )
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.option(
-  "--name",
-  required=False,
-  help="Name of the workload (jobset). If not specified, "
-  "defaults to one based on the date and time.",
-  default=None,
-)
-@click.option(
-  "--priority",
-  required=False,
-  help="Priority of the workload (jobset). If not specified, defaults to 'medium'.",
-  default="medium",
-)
-@click.option(
-  "--base-docker-url",
-  required=False,
-  help="If specified, `tp run` will use this PyTorch/XLA base docker image instead of "
-  "the one pinned inside `pyproject.toml`",
-  default=None,
-)
-@click.option(
-  "--num-slices",
-  required=False,
-  type=int,
-  default=None,
-  help="Temporarily override the number of TPU slice to use for this run. "
-  "If unspecified, `tp run` will use the slice count configured in `tp use`.",
-)
-@click.option("--use-hf", is_flag=True, help="Use HuggingFace transformer")
-@click.option(
-  "--use-local-wheel",
-  is_flag=True,
-  help="Use local torch and torch_xla wheels under folder local_dist/",
-)
-@click.option(
-  "--comments",
-  required=False,
-  default=None,
-  help="Optional description of the training run, stored in the database.",
-)
-@interactive
 def run(
-  args,
   name: str | None,
   base_docker_url: str | None,
   num_slices: int | None,
@@ -344,6 +207,7 @@ def run(
   use_hf: bool,
   use_local_wheel: bool,
   comments: str | None,
+  args: list[str],
 ):
   """
   Runs the provided SPMD training command as an xpk job on a GKE cluster.
@@ -463,11 +327,9 @@ def run(
   )
   subprocess.run(xpk_command, check=True)
 
-  styled_workload = click.style(workload_name, bold=True, fg="green")
-  styled_cluster = click.style(config.cluster, bold=True, fg="green")
-  styled_artifacts = click.style(
-    f"{config.artifact_dir}/{workload_name}", bold=True, fg="green"
-  )
+  styled_workload = f"\033[1m\033[92m{workload_name}\033[0m"
+  styled_cluster = f"\033[1m\033[92m{config.cluster}\033[0m"
+  styled_artifacts = f"\033[1m\033[92m{config.artifact_dir}/{workload_name}\033[0m"
   print(f"""
 Workload {styled_workload} submitted to cluster {styled_cluster}
 
@@ -475,15 +337,8 @@ Artifacts are stored at {styled_artifacts}
 """)
 
 
-@cli.command(
-  context_settings=dict(
-    ignore_unknown_options=True,
-  )
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@interactive
-def test(args):
-  """
+def test(args: list[str]):
+  """Runs unit tests in torchprime by forwarding arguments to pytest.
   Runs unit tests in torchprime by forwarding arguments to pytest.
   """
   ensure_command("pytest")
@@ -493,10 +348,8 @@ def test(args):
     sys.exit(e.returncode)
 
 
-@cli.command()
-@interactive
 def doctor():
-  """
+  """Checks for any problems in your environment (missing packages, credentials, etc.).
   Checks for any problems in your environment (missing packages, credentials, etc.).
   """
   torchprime.launcher.doctor.check_all()
@@ -599,10 +452,9 @@ class FileChangeHandler(FileSystemEventHandler):
 
     # Debounce frequent modifications.
     current_time = time.time()
-    if current_time - self.last_trigger_time > 1:
-      self.last_trigger_time = current_time
-    else:
+    if current_time - self.last_trigger_time < 1.0:
       return
+    self.last_trigger_time = current_time
 
     # Raise a condition variable to signal that the file has been modified.
     with self.file_modified:
@@ -618,8 +470,8 @@ class FileChangeHandler(FileSystemEventHandler):
         print(f"""
 File {last_modified_file} modified, rerunning command...
 """)
-      sys.argv[1] = sys.argv[1].replace("-i", "").replace("--interactive", "").strip()
-      main_command = " ".join(s for s in sys.argv[1:] if s != "")
+      new_argv = [arg for arg in sys.argv if arg not in ("-i", "--interactive")]
+      main_command = " ".join(new_argv[1:])
       subprocess.run(f"tp {main_command}", shell=True, check=False)
       print(f"""
 Done running `tp {main_command}`.
@@ -650,26 +502,151 @@ def watch_directory(project_dir, command_context):
   observer.join()
 
 
-def run_with_watcher(ctx):
-  """Wrapper to run commands with file watching if interactive mode is enabled"""
+def main():
+  parser = argparse.ArgumentParser(
+    description="tp is a CLI for common torchprime workflows."
+  )
+  parser.add_argument(
+    "-i",
+    "--interactive",
+    action="store_true",
+    help="Re-run the command whenever a file is edited (useful for fast dev/test iteration)",
+  )
 
-  def decorator(f):
-    def wrapper(*args, **kwargs):
-      # If interactive mode is enabled, start watching for changes
-      if ctx.obj.get("interactive"):
-        project_dir = get_project_dir()
-        print(
-          f"Watching directory {project_dir} for changes. Press Ctrl+C to stop.\n"
-        )
-        watch_directory(project_dir, ctx)
-      else:
-        # Just run the command
-        return f(*args, **kwargs)
+  subparsers = parser.add_subparsers(
+    dest="command", required=True, help="sub-command help"
+  )
 
-    return wrapper
+  # `use` command
+  parser_use = subparsers.add_parser(
+    "use", help=use.__doc__, formatter_class=argparse.RawTextHelpFormatter
+  )
+  parser_use.add_argument("--cluster", required=True, help="Name of the XPK cluster")
+  parser_use.add_argument(
+    "--project", required=True, help="GCP project the cluster belongs to"
+  )
+  parser_use.add_argument(
+    "--zone", required=True, help="Compute zone the cluster is located in"
+  )
+  parser_use.add_argument(
+    "--num-slices",
+    type=int,
+    default=1,
+    help="Number of TPU slice to use by default. Defaults to 1",
+  )
+  parser_use.add_argument(
+    "--tpu-type",
+    required=True,
+    help="The TPU accelerator type in each slice. E.g. v6e-256 for a 256 chip Trillium pod",
+  )
+  parser_use.add_argument(
+    "--artifact-dir",
+    required=True,
+    help="A Google Cloud Storage directory where artifacts such as profiles will be stored. \nE.g. gs://foo/bar",
+  )
+  parser_use.add_argument(
+    "--upload-metrics",
+    action="store_true",
+    help="If given, uploads metrics to the database ",
+  )
+  parser_use.add_argument(
+    "--bq-project", default="tpu-pytorch", help="A bigquery project to upload metrics."
+  )
+  parser_use.add_argument(
+    "--bq-dataset",
+    default="benchmark_dataset_test",
+    help="A bigquery dataset to upload metrics.",
+  )
+  parser_use.add_argument(
+    "--bq-table",
+    default="benchmark_experiment",
+    help="A bigquery table to upload metrics.",
+  )
+  parser_use.add_argument(
+    "--docker-project",
+    default=None,
+    help="GCP project to upload docker containers to. If not set, defaults to the cluster's\n    GCP project",
+  )
+  parser_use.set_defaults(func=use)
 
-  return decorator
+  # `docker-run` command
+  parser_docker_run = subparsers.add_parser("docker-run", help=docker_run.__doc__)
+  parser_docker_run.add_argument(
+    "--use-hf", action="store_true", help="Use HuggingFace transformer"
+  )
+  parser_docker_run.set_defaults(func=docker_run)
+
+  # `run` command
+  parser_run = subparsers.add_parser("run", help=run.__doc__)
+  parser_run.add_argument(
+    "--name",
+    default=None,
+    help="Name of the workload (jobset). If not specified, \ndefaults to one based on the date and time.",
+  )
+  parser_run.add_argument(
+    "--priority",
+    default="medium",
+    help="Priority of the workload (jobset). If not specified, defaults to 'medium'.",
+  )
+  parser_run.add_argument(
+    "--base-docker-url",
+    default=None,
+    help="If specified, `tp run` will use this PyTorch/XLA base docker image instead of \nthe one pinned inside `pyproject.toml`",
+  )
+  parser_run.add_argument(
+    "--num-slices",
+    type=int,
+    default=None,
+    help="Temporarily override the number of TPU slice to use for this run. \nIf unspecified, `tp run` will use the slice count configured in `tp use`.",
+  )
+  parser_run.add_argument(
+    "--use-hf", action="store_true", help="Use HuggingFace transformer"
+  )
+  parser_run.add_argument(
+    "--use-local-wheel",
+    action="store_true",
+    help="Use local torch and torch_xla wheels under folder local_dist/",
+  )
+  parser_run.add_argument(
+    "--comments",
+    default=None,
+    help="Optional description of the training run, stored in the database.",
+  )
+  parser_run.set_defaults(func=run)
+
+  # `test` command
+  parser_test = subparsers.add_parser("test", help=test.__doc__)
+  parser_test.set_defaults(func=test)
+
+  # `doctor` command
+  parser_doctor = subparsers.add_parser("doctor", help=doctor.__doc__)
+  parser_doctor.set_defaults(func=doctor)
+
+  # Parse arguments
+  known_args, remaining_args = parser.parse_known_args()
+
+  func_to_run = known_args.func
+  is_interactive = known_args.interactive
+
+  # Prepare arguments for the function call
+  func_kwargs = vars(known_args)
+  del func_kwargs["command"]
+  del func_kwargs["func"]
+  del func_kwargs["interactive"]
+
+  if func_to_run in [docker_run, run, test]:
+    func_kwargs["args"] = remaining_args
+
+  def command_to_execute():
+    func_to_run(**func_kwargs)
+
+  if is_interactive and func_to_run in [run, test, doctor]:
+    project_dir = get_project_dir()
+    print(f"Watching directory {project_dir} for changes. Press Ctrl+C to stop.\n")
+    watch_directory(project_dir, None)
+  else:
+    command_to_execute()
 
 
 if __name__ == "__main__":
-  cli()
+  main()

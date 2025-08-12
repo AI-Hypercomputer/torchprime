@@ -179,9 +179,7 @@ def check_all(config: ConfigT | None = None):
       print(e)
       sys.exit(-1)
     print(" ✅")
-  print(
-    "🎉 All checks passed. You should be ready to launch distributed training. 🎉"
-  )
+  print("🎉 All checks passed. You should be ready to launch distributed training. 🎉")
 
 
 def get_kubectl_install_instructions():

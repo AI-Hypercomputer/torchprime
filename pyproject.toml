@@ -24,7 +24,6 @@ dependencies = [
     "dataclasses-json==0.6.7",
     "benchmark-db-writer @ git+https://github.com/AI-Hypercomputer/aotc.git@2ff16e670df20b497ddaf1f86920dbb5dd9f0c8f#subdirectory=src/aotc/benchmark_db_writer",
     "dacite==1.9.2",
-    "click~=8.1.8",
     "google-cloud-storage==2.19.0"
 ]
 
@@ -46,7 +45,7 @@ dev = [
 ]
 
 [project.scripts]
-tp = "torchprime.launcher.cli:cli"
+tp = "torchprime.launcher.cli:main"
 
 [tool.torchprime]
 torch_xla_version = "20250709"
