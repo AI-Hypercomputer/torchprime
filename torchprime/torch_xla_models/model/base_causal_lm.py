@@ -113,7 +113,7 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    with model_utils.gcs_to_local(model_path_or_repo) as local_model_path_or_repo:
+    with model_utils.local_path_from_gcs(model_path_or_repo) as local_model_path_or_repo:
       if os.path.isdir(local_model_path_or_repo):
         model_dir = local_model_path_or_repo
       else:
@@ -156,8 +156,8 @@ class BaseCausalLM(nn.Module):
       logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
       # Copy to local if in GCS
       with (
-        model_utils.gcs_to_local(config.model.tokenizer_name) as tokenizer_path,
-        model_utils.gcs_to_local(config.model.pretrained_model) as model_path,
+        model_utils.local_path_from_gcs(config.model.tokenizer_name) as tokenizer_path,
+        model_utils.local_path_from_gcs(config.model.pretrained_model) as model_path,
       ):
         model_utils.copy_hf_config_files(tokenizer_path, save_dir)
         model_utils.save_hf_tokenizer(model_path, save_dir)

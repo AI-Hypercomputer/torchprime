@@ -487,7 +487,7 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
 
 
 @contextmanager
-def gcs_to_local(path_or_repo: str, temp_dir: str | None = None):
+def local_path_from_gcs(path_or_repo: str, temp_dir: str | None = None):
   """A context manager to download GCS content to a local temporary directory.
 
   If the input `path_or_repo` starts with 'gs://', this function will download
