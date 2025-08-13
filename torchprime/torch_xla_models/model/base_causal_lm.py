@@ -113,7 +113,9 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    with model_utils.local_path_from_gcs(model_path_or_repo) as local_model_path_or_repo:
+    with model_utils.local_path_from_gcs(
+      model_path_or_repo
+    ) as local_model_path_or_repo:
       if os.path.isdir(local_model_path_or_repo):
         model_dir = local_model_path_or_repo
       else:
