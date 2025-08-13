@@ -50,7 +50,7 @@ def main(config: omegaconf.DictConfig):
   logger.info(f"Profiling server started: {str(server)}")
 
   # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/14): Add tokenizers to torchprime.
-  with model_utils.local_path_from_gcs(config.model.tokenizer_name) as tokenizer_path:
+  with model_utils.gcs_to_local(config.model.tokenizer_name) as tokenizer_path:
     tokenizer = retry.retry(
       lambda: transformers.AutoTokenizer.from_pretrained(tokenizer_path)
     )
