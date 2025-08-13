@@ -331,9 +331,9 @@ def run(
   styled_workload = Text(workload_name, style="bold green")
   styled_cluster = Text(config.cluster, style="bold green")
   styled_artifacts = Text(f"{config.artifact_dir}/{workload_name}", style="bold green")
-  styled_artifacts = f"{config.artifact_dir}/{workload_name}"
   print(f"""
 Workload {styled_workload} submitted to cluster {styled_cluster}
+
 Artifacts are stored at {styled_artifacts}
 """)
 
