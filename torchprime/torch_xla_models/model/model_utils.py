@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import atexit
 import importlib
 import json
 import logging
@@ -31,21 +30,6 @@ HF_MODEL_CONFIG_FILES = [
   "config.json",
   "generation_config.json",
 ]
-
-_TEMP_DIRS_TO_CLEAN = []
-
-
-def _cleanup_temp_dirs():
-  """Removes all temporary directories created by this module."""
-  for d in _TEMP_DIRS_TO_CLEAN:
-    try:
-      logger.info(f"Cleaning up temporary directory: {d}")
-      shutil.rmtree(d)
-    except OSError as e:
-      logger.warning(f"Failed to remove temporary directory {d}: {e}")
-
-
-atexit.register(_cleanup_temp_dirs)
 
 
 def load_safetensors_to_state_dict(model_dir: str) -> dict:
@@ -502,26 +486,31 @@ def save_hf_tokenizer(model_path_or_repo: str, save_dir: Path) -> None:
   tokenizer.save_pretrained(save_dir)
 
 
-def copy_gcs_to_local(path_or_repo: str) -> str:
-  """Download gcs content to local temporaily directory.
+@contextmanager
+def gcs_to_local(path_or_repo: str, temp_dir: str | None = None):
+  """A context manager to download GCS content to a local temporary directory.
 
   If the input `path_or_repo` starts with 'gs://', this function will download
   the contents of the GCS directory to a temporary local directory using the
   `gsutil` command-line tool. The local directory will be automatically cleaned
-  up when the program exits.
+  up when the context is exited.
 
-  If the input is not a GCS path, it is assumed to be a local path or huggingface repo ID, and is
-  returned unmodified.
+  If the input is not a GCS path, it is assumed to be a local path or a
+  Hugging Face repository ID, and is yielded unmodified with no cleanup.
 
   Args:
       path_or_repo: The path to resolve. Can be a GCS URI (e.g.,
         'gs://bucket/data') or a local file path.
+      temp_dir: An optional path to a directory for creating the temporary
+        download location. If None, the system's default temporary directory
+        is used.
 
-  Returns:
-      A string containing the path to the local temporary directory.
+  Yields:
+      A string containing the path to the local directory.
   """
   if not path_or_repo.startswith("gs://"):
-    return path_or_repo
+    yield path_or_repo
+    return
 
   if not shutil.which("gsutil"):
     raise RuntimeError(
@@ -529,24 +518,21 @@ def copy_gcs_to_local(path_or_repo: str) -> str:
       "Please install the Google Cloud SDK."
     )
 
-  local_dir = tempfile.mkdtemp()
-  _TEMP_DIRS_TO_CLEAN.append(local_dir)
+  local_dir = tempfile.mkdtemp(dir=temp_dir)
   try:
     gcs_path = path_or_repo.rstrip("/") + "/*"
-    command = ["gsutil", "-m", "cp", "-r", gcs_path, local_dir]
-    subprocess.run(command, check=True)
-
+    command = ["gsutil", "-m", "-q", "cp", "-r", gcs_path, local_dir]
+    subprocess.run(command, check=True, capture_output=True, text=True)
     logger.info(
-      "Successfully downloaded files from %s to %s using gsutil.",
+      "Successfully downloaded files from %s to temporary directory %s.",
       path_or_repo,
       local_dir,
     )
-    return local_dir
-  except (subprocess.CalledProcessError, Exception):
-    # Clean up the partially created directory on failure.
-    shutil.rmtree(local_dir)
-    logger.error(
-      "gsutil download failed for %s. See gsutil output above for details.",
-      path_or_repo,
-    )
+
+    yield local_dir
+  except subprocess.CalledProcessError as e:
+    logger.error("gsutil download failed for %s. Stderr:\n%s", path_or_repo, e.stderr)
     raise
+  finally:
+    logger.info(f"Cleaning up temporary directory: {local_dir}")
+    shutil.rmtree(local_dir, ignore_errors=True)

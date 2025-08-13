@@ -113,19 +113,18 @@ class BaseCausalLM(nn.Module):
     Args:
         model_path_or_repo: Path to the local directory or Hugging Face Hub repository ID.
     """
-    model_path_or_repo = model_utils.copy_gcs_to_local(model_path_or_repo)
+    with model_utils.gcs_to_local(model_path_or_repo) as local_model_path_or_repo:
+      if os.path.isdir(local_model_path_or_repo):
+        model_dir = local_model_path_or_repo
+      else:
+        model_dir = huggingface_hub.snapshot_download(
+          repo_id=local_model_path_or_repo,
+          allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
+        )
 
-    if os.path.isdir(model_path_or_repo):
-      model_dir = model_path_or_repo
-    else:
-      model_dir = huggingface_hub.snapshot_download(
-        repo_id=model_path_or_repo,
-        allow_patterns=["*.safetensors*"] + model_utils.HF_MODEL_CONFIG_FILES,
-      )
-
-    # Load weights
-    state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
-    self.load_state_dict(state_dict)
+      # Load weights
+      state_dict = model_utils.load_safetensors_to_state_dict(model_dir)
+      self.load_state_dict(state_dict)
 
   def _maybe_save_checkpoint(self, config: DictConfig) -> None:
     """Save a sharded checkpoint and optionally convert it to safetensors format.
@@ -156,12 +155,12 @@ class BaseCausalLM(nn.Module):
     if xr.process_index() == 0:
       logger.info("Saving Hugging Face configs and tokenizer to %s", save_dir)
       # Copy to local if in GCS
-      tokenizer_path_or_repo = model_utils.copy_gcs_to_local(
-        config.model.tokenizer_name
-      )
-      model_path_or_repo = model_utils.copy_gcs_to_local(config.model.pretrained_model)
-      model_utils.copy_hf_config_files(tokenizer_path_or_repo, save_dir)
-      model_utils.save_hf_tokenizer(model_path_or_repo, save_dir)
+      with (
+        model_utils.gcs_to_local(config.model.tokenizer_name) as tokenizer_path,
+        model_utils.gcs_to_local(config.model.pretrained_model) as model_path,
+      ):
+        model_utils.copy_hf_config_files(tokenizer_path, save_dir)
+        model_utils.save_hf_tokenizer(model_path, save_dir)
 
     # Step 4: Initialize torch.distributed process group
     if not dist.is_initialized():
