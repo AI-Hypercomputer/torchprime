@@ -19,6 +19,7 @@ import toml
 from dataclasses_json import dataclass_json
 from pathspec import PathSpec
 from pathspec.patterns import GitWildMatchPattern  # type: ignore
+from rich.text import Text
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -327,10 +328,12 @@ def run(
   )
   subprocess.run(xpk_command, check=True)
 
+  styled_workload = Text(workload_name, style="bold green")
+  styled_cluster = Text(config.cluster, style="bold green")
+  styled_artifacts = Text(f"{config.artifact_dir}/{workload_name}", style="bold green")
   styled_artifacts = f"{config.artifact_dir}/{workload_name}"
   print(f"""
-Workload {workload_name} submitted to cluster {config.cluster}
-
+Workload {styled_workload} submitted to cluster {styled_cluster}
 Artifacts are stored at {styled_artifacts}
 """)
 
@@ -350,7 +353,7 @@ def doctor():
   """
   Checks for any problems in your environment (missing packages, credentials, etc.).
   """
-  torchprime.launcher.doctor.check_all()
+  torchprime.launcher.doctor.check_all(config=None)
 
 
 class CommandRunner:
