@@ -327,18 +327,16 @@ def run(
   )
   subprocess.run(xpk_command, check=True)
 
-  styled_workload = f"\033[1m\033[92m{workload_name}\033[0m"
-  styled_cluster = f"\033[1m\033[92m{config.cluster}\033[0m"
-  styled_artifacts = f"\033[1m\033[92m{config.artifact_dir}/{workload_name}\033[0m"
+  styled_artifacts = f"{config.artifact_dir}/{workload_name}"
   print(f"""
-Workload {styled_workload} submitted to cluster {styled_cluster}
+Workload {workload_name} submitted to cluster {config.cluster}
 
 Artifacts are stored at {styled_artifacts}
 """)
 
 
 def test(args: list[str]):
-  """Runs unit tests in torchprime by forwarding arguments to pytest.
+  """
   Runs unit tests in torchprime by forwarding arguments to pytest.
   """
   ensure_command("pytest")
@@ -349,7 +347,7 @@ def test(args: list[str]):
 
 
 def doctor():
-  """Checks for any problems in your environment (missing packages, credentials, etc.).
+  """
   Checks for any problems in your environment (missing packages, credentials, etc.).
   """
   torchprime.launcher.doctor.check_all()
