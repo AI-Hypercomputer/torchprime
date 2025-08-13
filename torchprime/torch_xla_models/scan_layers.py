@@ -48,13 +48,32 @@ def compile_one_stack(
 
 
 def compile(
-  mod: nn.Module, sequential_to_scan: str, partition_fn=default_partition
+  mod: nn.Module,
+  sequential_to_scan: str,
+  start_from_layer: int | None = None,
+  partition_fn=default_partition,
 ) -> nn.Module:
   seq = mod.get_submodule(sequential_to_scan)
   if not isinstance(seq, HomogeneousSequential):
     raise ValueError(f"compile only supports HomogeneousSequential, got {type(seq)}")
   # Replace the submodule
-  mod.set_submodule(
-    sequential_to_scan, compile_one_stack(seq, partition_fn=partition_fn)
-  )
+  if start_from_layer is None or start_from_layer == 0:
+    # Whole block is scanned
+    mod.set_submodule(
+      sequential_to_scan, compile_one_stack(seq, partition_fn=partition_fn)
+    )
+  else:
+    # Split: prefix stays, tail gets scanned
+    prefix_layers = seq[:start_from_layer]
+    tail_layers = seq[start_from_layer:]
+
+    # Compile the tail
+    scanned_tail = compile_one_stack(
+      HomogeneousSequential(*tail_layers), partition_fn=partition_fn
+    )
+
+    # Reconstruct full sequence
+    new_seq = HomogeneousSequential(*prefix_layers, *scanned_tail)
+    mod.set_submodule(sequential_to_scan, new_seq)
+
   return mod

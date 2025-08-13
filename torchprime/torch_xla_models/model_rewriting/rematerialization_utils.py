@@ -56,6 +56,7 @@ def add_activation_checkpointing_and_scan(
   )
   layers_to_scan = remat_config.get("scan_layers", None)
   offload_tensors = remat_config.get("offload_tensors", [])
+  start_from_layer = config.model.get("first_k_dense_replace", None)
 
   # Checking preconditions and logging.
   if remat_classes:
@@ -80,7 +81,7 @@ def add_activation_checkpointing_and_scan(
     return wrap_module(model, maybe_checkpoint) if remat_classes else model
 
   if not remat_classes:
-    return scan_layers.compile(model, layers_to_scan)
+    return scan_layers.compile(model, layers_to_scan, start_from_layer=start_from_layer)
 
   seq = model.get_submodule(layers_to_scan)
   assert isinstance(seq, HomogeneousSequential)
@@ -95,7 +96,9 @@ def add_activation_checkpointing_and_scan(
       names_to_offload=offload_tensors,
     )
   )
-  return scan_layers.compile(model, layers_to_scan, partition_fn=partition_fn)
+  return scan_layers.compile(
+    model, layers_to_scan, partition_fn=partition_fn, start_from_layer=start_from_layer
+  )
 
 
 def add_optimization_barriers(model: nn.Module, config: DictConfig) -> nn.Module:

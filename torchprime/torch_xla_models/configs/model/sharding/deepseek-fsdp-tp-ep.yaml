@@ -1,0 +1,57 @@
+# Weights
+
+# vocab_size, hidden_size
+model.embed_tokens.weight: [fsdp, tensor]
+
+# q_lora_rank, hidden_size
+model.layers.*.self_attn.q_a_proj.weight: [fsdp, tensor]
+# q_lora_rank
+model.layers.*.self_attn.q_a_layernorm.weight: [fsdp]
+# num_attention_heads * qk_head_dim, q_lora_rank
+model.layers.*.self_attn.q_b_proj.weight: [fsdp, tensor]
+# kv_lora_rank + qk_rope_head_dim, hidden_size
+model.layers.*.self_attn.kv_a_proj_with_mqa.weight: [fsdp, tensor]
+# kv_lora_rank
+model.layers.*.self_attn.kv_a_layernorm.weight: [fsdp]
+# num_attention_heads * (qk_nope_head_dim + v_head_dim), kv_lora_rank
+model.layers.*.self_attn.kv_b_proj.weight: [tensor, fsdp]
+# hidden_size, kv_lora_rank
+model.layers.*.self_attn.o_proj.weight: [tensor, fsdp]
+
+
+# intermediate_size, hidden_size
+model.layers.*.mlp.gate_proj.weight: [fsdp, tensor]
+# intermediate_size, hidden_size
+model.layers.*.mlp.up_proj.weight: [fsdp, tensor]
+# hidden_size, intermediate_size
+model.layers.*.mlp.down_proj.weight: [tensor, fsdp]
+
+# n_routed_experts, hidden_size
+model.layers.*.mlp.gate.weight: [expert, fsdp]
+# n_routed_experts, hidden_size, moe_intermediate_size
+model.layers.*.mlp.grouped.W_gate: [expert, tensor, fsdp]   
+# n_routed_experts, hidden_size, moe_intermediate_size
+model.layers.*.mlp.grouped.W_up: [expert, tensor, fsdp]  
+# n_routed_experts, moe_intermediate_size, hidden_size
+model.layers.*.mlp.grouped.W_down: [expert, fsdp, tensor]  
+
+# moe_intermediate_size, hidden_size
+model.layers.*.mlp.shared_experts.gate_proj.weight: [fsdp, tensor]
+# moe_intermediate_size, hidden_size
+model.layers.*.mlp.shared_experts.up_proj.weight: [fsdp, tensor]
+# hidden_size, moe_intermediate_size
+model.layers.*.mlp.shared_experts.down_proj.weight: [tensor, fsdp]
+
+# hidden_size
+model.layers.*.input_layernorm.weight: [fsdp]
+# hidden_size
+model.layers.*.post_attention_layernorm.weight: [fsdp]
+
+# hidden_size
+model.norm.weight: [fsdp]
+# vocab_size, hidden_size
+lm_head.weight: [fsdp, tensor]
+
+# Activations
+model.layers.*: [[data, fsdp], null, tensor]
+lm_head: [[data, fsdp], null, tensor]

@@ -134,6 +134,109 @@ def calculate_tflops_training_per_device(config: Config, log=True):
   return total_tflops
 
 
+def calculate_tflops_training_per_device_deepseek(
+  *,
+  per_device_batch_size: int,
+  seq_len: int,
+  hidden_size: int,
+  intermediate_size: int,
+  moe_intermediate_size: int,
+  num_hidden_layers: int,
+  first_k_dense_replace: int,
+  num_attention_heads: int,
+  qk_head_dim: int,
+  qk_nope_head_dim: int,
+  qk_rope_head_dim: int,
+  v_head_dim: int,
+  kv_lora_rank: int,
+  num_key_value_heads: int,
+  num_routed_experts: int,
+  n_shared_experts: int,
+  num_experts_per_tok: int,
+  vocab_size: int,
+  capacity_factor: float = 1.5,
+  gradient_accumulation_steps: int = 1,
+  include_softmax: bool = False,
+) -> float:
+  """
+  Per-device TFLOPs *per optimizer step* for DeepSeek-v3 training.
+
+  Assumptions
+  -----------
+  • BF16 / FP16  →  2 FLOPs per MAC
+  • MLA FFN (3 linears + gating multiply)
+  • MoE begins after `first_k_dense_replace`
+  • One shared-expert FFN path in every MoE layer
+  • Optional soft-max term (set include_softmax=True for >~5 % extra)
+  """
+
+  # -------------------------------------------------------- constants ----
+  B, L, H = per_device_batch_size, seq_len, hidden_size
+  L_dense = first_k_dense_replace
+  L_moe = num_hidden_layers - L_dense
+  tokens = B * L
+  fwd_bwd = 3  # forward + backward factor
+  BF16 = 2  # FLOPs per MAC in bf16/fp16
+
+  # -------------------------------------------------------------- FFNs ---
+  # Dense MLA FFN (first L_dense layers)
+  ffn_dense_flops = 3 * H * intermediate_size * BF16 + intermediate_size
+  ffn_dense_flops *= tokens * L_dense
+
+  # Gating linear in every MoE layer
+  moe_gate_flops = 2 * H * num_routed_experts * tokens * L_moe
+
+  # Per-expert MLA FFN (K experts/token)
+  moe_ffn_tok = 3 * H * moe_intermediate_size * BF16 + moe_intermediate_size
+  moe_ffn_flops = moe_ffn_tok * tokens * num_experts_per_tok * L_moe * capacity_factor
+
+  # Shared-expert MLA FFN (runs on *all* tokens in every MoE layer)
+  M_shared = moe_intermediate_size * n_shared_experts
+  shared_ffn_tok = 3 * H * M_shared * BF16 + M_shared
+  shared_ffn_flops = shared_ffn_tok * tokens * L_moe
+
+  total_ffn_flops = ffn_dense_flops + moe_gate_flops + moe_ffn_flops + shared_ffn_flops
+
+  # ------------------------------------------------------- projections ---
+  q_proj_flops = 2 * H * num_attention_heads * qk_head_dim * tokens
+  kv_a_flops = 2 * H * (kv_lora_rank + qk_rope_head_dim) * tokens
+  kv_b_out_dim = num_attention_heads * (qk_nope_head_dim + v_head_dim)
+  kv_b_flops = 2 * kv_lora_rank * kv_b_out_dim * tokens
+  o_proj_flops = 2 * H * num_attention_heads * v_head_dim * tokens
+
+  proj_flops_layer = q_proj_flops + kv_a_flops + kv_b_flops + o_proj_flops
+  proj_flops_total = proj_flops_layer * num_hidden_layers
+
+  # ---------------------------------------------------- attention core ---
+  attn_qk = 2 * num_attention_heads * qk_head_dim * L * L * B
+  attn_av = 2 * num_attention_heads * v_head_dim * L * L * B
+  attn_core_layer = attn_qk + attn_av
+
+  softmax_flops_layer = 4 * B * L * L * num_attention_heads if include_softmax else 0
+
+  attn_core_total = (attn_core_layer + softmax_flops_layer) * num_hidden_layers
+
+  # --------------------------------------------- embedding / lm-head ----
+  embed_flops = 2 * H * vocab_size * tokens  # embedding + lm_head
+
+  # ------------------------------------------------ aggregate numbers ---
+  trainable = (total_ffn_flops + proj_flops_total + embed_flops) * fwd_bwd
+  attention = attn_core_total * fwd_bwd
+  total = (trainable + attention) * gradient_accumulation_steps
+  tflops = total / 1e12
+
+  # ----------------------------------------------------- quick report ---
+  print(f"[DeepSeek-v3] TFLOPs/device/step : {tflops:>.2f}")
+  print(f"  • FFNs (dense+MoE+shared)   : {total_ffn_flops * fwd_bwd / 1e12:>.2f}")
+  print(f"  • Attn projections          : {proj_flops_total * fwd_bwd / 1e12:>.2f}")
+  print(
+    f"  • Attn QK/AV{' + softmax' if include_softmax else ''} : {attention / 1e12:>.2f}"
+  )
+  print(f"  • Embed + LM head           : {embed_flops * fwd_bwd / 1e12:>.2f}")
+
+  return tflops
+
+
 def compute_mfu(
   config: dict,
   batch_size: int,
@@ -164,24 +267,49 @@ def compute_mfu(
 
     torch_dtype: data type used for training (e.g. `bfloat16`).
   """
-  total_tflops = calculate_tflops_training_per_device(
-    Config(
+  if "model_id" in config and "deepseek" in config["model_id"]:
+    total_tflops = calculate_tflops_training_per_device_deepseek(
       per_device_batch_size=batch_size,
-      max_target_length=sequence_length,
-      mlp_dim=int(config["intermediate_size"]),
-      emb_dim=int(config["hidden_size"]),
-      mlp_activations=["silu", "linear"],
-      num_experts=int(config.get("num_local_experts", 1)),
-      num_experts_per_tok=int(config.get("num_experts_per_tok", 1)),
-      num_query_heads=int(config["num_attention_heads"]),
-      num_kv_heads=int(config["num_key_value_heads"]),
-      head_dim=int(config["hidden_size"] / config["num_attention_heads"]),
-      num_decoder_layers=int(config["num_hidden_layers"]),
+      seq_len=sequence_length,
+      hidden_size=int(config["hidden_size"]),
+      intermediate_size=int(config["intermediate_size"]),
+      moe_intermediate_size=int(config["moe_intermediate_size"]),
+      num_hidden_layers=int(config["num_hidden_layers"]),
+      first_k_dense_replace=int(config["first_k_dense_replace"]),
+      num_attention_heads=int(config["num_attention_heads"]),
+      qk_head_dim=int(config["qk_head_dim"]),
+      qk_nope_head_dim=int(config["qk_nope_head_dim"]),
+      qk_rope_head_dim=int(config["qk_rope_head_dim"]),
+      v_head_dim=int(config["v_head_dim"]),
+      kv_lora_rank=int(config["kv_lora_rank"]),
+      num_key_value_heads=int(config["num_key_value_heads"]),
+      num_routed_experts=int(config["n_routed_experts"]),
+      n_shared_experts=int(config["n_shared_experts"]),
+      num_experts_per_tok=int(config["num_experts_per_tok"]),
       vocab_size=int(config["vocab_size"]),
-      gradient_accumulation_steps=gradient_accumulation_steps,
-    ),
-    log=False,
-  )
+      capacity_factor=float(config.get("capacity_factor", 1.5)),
+      gradient_accumulation_steps=1,
+      include_softmax=True,
+    )
+  else:
+    total_tflops = calculate_tflops_training_per_device(
+      Config(
+        per_device_batch_size=batch_size,
+        max_target_length=sequence_length,
+        mlp_dim=int(config["intermediate_size"]),
+        emb_dim=int(config["hidden_size"]),
+        mlp_activations=["silu", "linear"],
+        num_experts=int(config.get("num_local_experts", 1)),
+        num_experts_per_tok=int(config.get("num_experts_per_tok", 1)),
+        num_query_heads=int(config["num_attention_heads"]),
+        num_kv_heads=int(config["num_key_value_heads"]),
+        head_dim=int(config["hidden_size"] / config["num_attention_heads"]),
+        num_decoder_layers=int(config["num_hidden_layers"]),
+        vocab_size=int(config["vocab_size"]),
+        gradient_accumulation_steps=gradient_accumulation_steps,
+      ),
+      log=True,
+    )
 
   assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 

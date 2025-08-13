@@ -64,6 +64,13 @@ benchmarks:
     confidence_interval: 0.02426
     average: 1.6172
     sample_size: 51
+  ds-v3-shallow:
+    name: Deepseek v3 Shallow # dummy number
+    step_time_lower_bound: 0.1
+    step_time_upper_bound: 1.1
+    confidence_interval: 0.5
+    average: 0.6
+    sample_size: 10
 metadata:
   query_start: '2025-07-01T00:00:00-07:00'
   query_end: '2025-07-23T12:20:48-07:00'
