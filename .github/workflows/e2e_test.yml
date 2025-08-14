@@ -308,7 +308,7 @@ jobs:
             task.global_batch_size=4 \
             task.max_steps=15 \
             ici_mesh.fsdp=2 \
-            ici_mesh.tp=2 \
+            ici_mesh.tensor=2 \
             profile_start_step=3 
 
   # Load reference step times
