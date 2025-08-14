@@ -647,12 +647,6 @@ def main():
   # `doctor` command
   parser_doctor = subparsers.add_parser("doctor", help=doctor.__doc__)
   parser_doctor.set_defaults(func=doctor)
-
-  # Parse arguments
-  known_args, remaining_args = parser.parse_known_args()
-
-  func_to_run = known_args.func
-  is_interactive = known_args.interactive
   
   # `save-hf-model-files-to-gcs` command
   parser_save_hf = subparsers.add_parser(
@@ -686,6 +680,12 @@ def main():
     help="Path to a temporary directory with sufficient space. Defaults to system temp.",
   )
   parser_save_hf.set_defaults(func=save_hf_model_files_to_gcs)
+
+  # Parse arguments
+  known_args, remaining_args = parser.parse_known_args()
+
+  func_to_run = known_args.func
+  is_interactive = known_args.interactive
 
 
   # Prepare arguments for the function call
