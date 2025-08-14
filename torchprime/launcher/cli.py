@@ -57,9 +57,7 @@ def save_hf_model_files_to_gcs(
   repo_id: str, gcs_path: str, file_type: str, temp_dir: str | None
 ):
   """Downloads model and tokenizer files from Hugging Face Hub and saves them to Google Cloud Storage."""
-  print(
-    f"Preparing to save '{file_type}' files from '{repo_id}' to '{gcs_path}'..."
-  )
+  print(f"Preparing to save '{file_type}' files from '{repo_id}' to '{gcs_path}'...")
   try:
     save_hf_tokenizer_and_model.save_hf_model_files_to_gcs(
       repo_id, gcs_path, file_type=file_type, temp_dir=temp_dir
@@ -74,7 +72,7 @@ def save_hf_model_files_to_gcs(
     )
   except Exception as e:
     print(f"\n❌ An unexpected error occurred for repository '{repo_id}': {e}")
-    
+
 
 def use(
   cluster: str,
@@ -647,7 +645,7 @@ def main():
   # `doctor` command
   parser_doctor = subparsers.add_parser("doctor", help=doctor.__doc__)
   parser_doctor.set_defaults(func=doctor)
-  
+
   # `save-hf-model-files-to-gcs` command
   parser_save_hf = subparsers.add_parser(
     "save-hf-model-files-to-gcs",
@@ -686,7 +684,6 @@ def main():
 
   func_to_run = known_args.func
   is_interactive = known_args.interactive
-
 
   # Prepare arguments for the function call
   func_kwargs = vars(known_args)
