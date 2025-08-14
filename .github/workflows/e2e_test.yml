@@ -304,6 +304,7 @@ jobs:
             dataset.block_size=512 \
             task=train \
             task.lr_scheduler.type=constant \
+            task.optimizer.learning_rate=0.1 \
             task.global_batch_size=4 \
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
