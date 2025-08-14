@@ -6,12 +6,12 @@ computes statistical bounds for each benchmark's step times, and exports
 the results to a YAML file for use in GitHub Actions.
 """
 
+import argparse
 import json
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import click
 import numpy as np
 import scipy
 import yaml
@@ -257,66 +257,7 @@ def compute_bounds(step_times, confidence_level):
   return lower_bound, upper_bound
 
 
-@click.command()
-@click.option(
-  "--bq-project",
-  default="tpu-pytorch",
-  help="BigQuery project ID",
-)
-@click.option(
-  "--bq-dataset",
-  default="benchmark_dataset_test",
-  help="BigQuery dataset name",
-)
-@click.option(
-  "--bq-table",
-  default="torchprime-e2e-tests",
-  help="BigQuery table name",
-)
-@click.option(
-  "--start-time",
-  default=parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
-  help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted. "
-  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
-  "Defaults to 5 days ago.",
-)
-@click.option(
-  "--end-time",
-  default=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-  help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles'). "
-  "Can also accept common datetime formats which will be converted. "
-  "In particular, supports '[N] days ago' format, e.g., '2 days ago'. "
-  "Defaults to the current time.",
-)
-@click.option(
-  "--limit",
-  default=1200,
-  type=int,
-  help="Maximum number of rows to retrieve",
-)
-@click.option(
-  "--output",
-  default="e2e_testing/step_time_bounds.yaml",
-  type=click.Path(),
-  help="Output YAML file path",
-)
-@click.option(
-  "--confidence_level",
-  default=99.0,
-  type=float,
-  help="Confidence level, default is 99%",
-)
-def main(
-  bq_project,
-  bq_dataset,
-  bq_table,
-  start_time,
-  end_time,
-  limit,
-  output,
-  confidence_level,
-):
+def main():
   """
   Query BigQuery for E2E test results and compute step time bounds.
 
@@ -324,6 +265,68 @@ def main(
   computes statistical bounds for each benchmark's step times, and exports
   the results to a YAML file for use in GitHub Actions.
   """
+  parser = argparse.ArgumentParser(
+    description="Query BigQuery for E2E test results and compute step time bounds.",
+    formatter_class=argparse.RawTextHelpFormatter,
+  )
+  parser.add_argument(
+    "--bq-project",
+    default="tpu-pytorch",
+    help="BigQuery project ID",
+  )
+  parser.add_argument(
+    "--bq-dataset",
+    default="benchmark_dataset_test",
+    help="BigQuery dataset name",
+  )
+  parser.add_argument(
+    "--bq-table",
+    default="torchprime-e2e-tests",
+    help="BigQuery table name",
+  )
+  parser.add_argument(
+    "--start-time",
+    default=parse_days_ago("5 days ago").strftime("%Y-%m-%d %H:%M:%S"),
+    help="Start time for the query in GoogleSQL datetime format (e.g., '2025-05-29 17:52:00 America/Los_Angeles').\n"
+    "Can also accept common datetime formats which will be converted.\n"
+    "In particular, supports '[N] days ago' format, e.g., '2 days ago'.\n"
+    "Defaults to 5 days ago.",
+  )
+  parser.add_argument(
+    "--end-time",
+    default=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    help="End time for the query in GoogleSQL datetime format (e.g., '2025-06-01 20:00:00 America/Los_Angeles').\n"
+    "Can also accept common datetime formats which will be converted.\n"
+    "In particular, supports '[N] days ago' format, e.g., '2 days ago'.\n"
+    "Defaults to the current time.",
+  )
+  parser.add_argument(
+    "--limit",
+    default=1200,
+    type=int,
+    help="Maximum number of rows to retrieve",
+  )
+  parser.add_argument(
+    "--output",
+    default="e2e_testing/step_time_bounds.yaml",
+    type=str,
+    help="Output YAML file path",
+  )
+  parser.add_argument(
+    "--confidence_level",
+    default=99.0,
+    type=float,
+    help="Confidence level, default is 99%",
+  )
+  args = parser.parse_args()
+  bq_project = args.bq_project
+  bq_dataset = args.bq_dataset
+  bq_table = args.bq_table
+  start_time = args.start_time
+  end_time = args.end_time
+  limit = args.limit
+  output = args.output
+  confidence_level = args.confidence_level
   console = Console()
   confidence_level = confidence_level / 100.0
 
