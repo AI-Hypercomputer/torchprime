@@ -10,14 +10,14 @@ from huggingface_hub import snapshot_download
 
 logger = logging.getLogger(__name__)
 
-TOKENIZER_PATTERNS = [
+TOKENIZER_PATTERNS = (
   "tokenizer.json",
   "tokenizer_config.json",
   "special_tokens_map.json",
   "*.model",
   "vocab.txt",
   "merges.txt",
-]
+)
 
 MODEL_PATTERNS = [
   "*.safetensors*",
