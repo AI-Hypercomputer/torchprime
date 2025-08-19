@@ -2,10 +2,8 @@
 PyTorch Qwen3 model.
 Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py
 """
-from typing import Callable, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 from omegaconf import DictConfig
 from torch import nn
 from transformers.activations import ACT2FN
@@ -13,12 +11,11 @@ from transformers.utils import logging
 
 from torchprime.layers.sequential import HomogeneousSequential
 from torchprime.rope.rope import RopeScaling, default_rope_frequencies
-IS_TPU = not torch.cuda.is_available()
-if IS_TPU:
-  from torchprime.torch_xla_models import offloading
+from torchprime.torch_xla_models import offloading
 from torchprime.torch_xla_models.flex.attention import AttentionModule
 
 logger = logging.get_logger(__name__)
+
 
 class Qwen3RMSNorm(nn.Module):
   def __init__(self, hidden_size, eps=1e-6):
@@ -39,6 +36,7 @@ class Qwen3RMSNorm(nn.Module):
   def extra_repr(self):
     return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
+
 class Qwen3MLP(nn.Module):
   def __init__(self, config):
     super().__init__()
@@ -54,11 +52,13 @@ class Qwen3MLP(nn.Module):
     down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
     return down_proj
 
+
 def rotate_half(x):
   """Rotates half the hidden dims of the input."""
   x1 = x[..., : x.shape[-1] // 2]
   x2 = x[..., x.shape[-1] // 2 :]
   return torch.cat((-x2, x1), dim=-1)
+
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
   """Applies Rotary Position Embedding to the query and key tensors.
@@ -86,6 +86,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
   k_embed = (k * cos) + (rotate_half(k) * sin)
   return q_embed, k_embed
 
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
   """
   This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -94,15 +95,18 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
   batch, num_key_value_heads, slen, head_dim = hidden_states.shape
   if n_rep == 1:
     return hidden_states
-  hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+  hidden_states = hidden_states[:, :, None, :, :].expand(
+    batch, num_key_value_heads, n_rep, slen, head_dim
+  )
   return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 def eager_attention_forward(
   module: nn.Module,
   query: torch.Tensor,
   key: torch.Tensor,
   value: torch.Tensor,
-  attention_mask: Optional[torch.Tensor],
+  attention_mask: torch.Tensor | None,
   scaling: float,
   dropout: float = 0.0,
   **kwargs,
@@ -115,12 +119,17 @@ def eager_attention_forward(
     causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
     attn_weights = attn_weights + causal_mask
 
-  attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-  attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+  attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+    query.dtype
+  )
+  attn_weights = nn.functional.dropout(
+    attn_weights, p=dropout, training=module.training
+  )
   attn_output = torch.matmul(attn_weights, value_states)
   attn_output = attn_output.transpose(1, 2).contiguous()
 
   return attn_output, attn_weights
+
 
 class Qwen3Attention(nn.Module):
   """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -143,30 +152,31 @@ class Qwen3Attention(nn.Module):
     self.num_key_value_groups = self.num_heads // self.num_key_value_heads
     self.scaling = self.head_dim**-0.5
     self.attention_dropout = getattr(config, "attention_dropout", 0.0)
-    # weiran: diffullama
     self.is_causal = False
-    
+
     self.q_proj = nn.Linear(
-      self.hidden_size, 
-      self.num_heads * self.head_dim, 
-      bias=getattr(config, "attention_bias", False)
+      self.hidden_size,
+      self.num_heads * self.head_dim,
+      bias=getattr(config, "attention_bias", False),
     )
     self.k_proj = nn.Linear(
-      self.hidden_size, 
-      self.num_key_value_heads * self.head_dim, 
-      bias=getattr(config, "attention_bias", False)
+      self.hidden_size,
+      self.num_key_value_heads * self.head_dim,
+      bias=getattr(config, "attention_bias", False),
     )
     self.v_proj = nn.Linear(
-      self.hidden_size, 
-      self.num_key_value_heads * self.head_dim, 
-      bias=getattr(config, "attention_bias", False)
+      self.hidden_size,
+      self.num_key_value_heads * self.head_dim,
+      bias=getattr(config, "attention_bias", False),
     )
     self.o_proj = nn.Linear(
-      self.num_heads * self.head_dim, self.hidden_size, bias=getattr(config, "attention_bias", False)
+      self.num_heads * self.head_dim,
+      self.hidden_size,
+      bias=getattr(config, "attention_bias", False),
     )
     self.q_norm = Qwen3RMSNorm(self.head_dim, eps=getattr(config, "rms_norm_eps", 1e-6))
     self.k_norm = Qwen3RMSNorm(self.head_dim, eps=getattr(config, "rms_norm_eps", 1e-6))
-    
+
     # Handle sliding window - check if layer_types exists and if this layer should use sliding attention
     if not config.use_sliding_window:
       self.sliding_window = None
@@ -176,7 +186,7 @@ class Qwen3Attention(nn.Module):
   def forward(
     self,
     hidden_states: torch.Tensor,
-    position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.LongTensor | None = None,
   ) -> torch.FloatTensor:
@@ -189,7 +199,9 @@ class Qwen3Attention(nn.Module):
     # Apply q_norm and k_norm to the head dimension
     query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
     key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
-    value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+    value_states = value_states.view(
+      bsz, q_len, self.num_key_value_heads, self.head_dim
+    )
 
     # Apply normalization
     query_states = self.q_norm(query_states)
@@ -260,7 +272,9 @@ class Qwen3DecoderLayer(nn.Module):
     self.self_attn = Qwen3Attention(config=config, layer_idx=layer_idx)
 
     self.mlp = Qwen3MLP(config)
-    self.input_layernorm = Qwen3RMSNorm(config.hidden_size, eps=getattr(config, "rms_norm_eps", 1e-6))
+    self.input_layernorm = Qwen3RMSNorm(
+      config.hidden_size, eps=getattr(config, "rms_norm_eps", 1e-6)
+    )
     self.post_attention_layernorm = Qwen3RMSNorm(
       config.hidden_size, eps=getattr(config, "rms_norm_eps", 1e-6)
     )
@@ -270,7 +284,8 @@ class Qwen3DecoderLayer(nn.Module):
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
     position_ids: torch.Tensor | None = None,
-    position_embeddings: tuple[torch.Tensor, torch.Tensor]| None = None,  # necessary, but kept here for BC
+    position_embeddings: tuple[torch.Tensor, torch.Tensor]
+    | None = None,  # necessary, but kept here for BC
   ) -> torch.Tensor:
     """
     Args:
@@ -278,13 +293,13 @@ class Qwen3DecoderLayer(nn.Module):
       attention_mask (`torch.FloatTensor`, *optional*):
         attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
         query_sequence_length, key_sequence_length)` if default attention is used.
-    """    
+    """
     # This gives the `hidden_states` tensor a name so that we can layer specify
     # to offload this tensor to host RAM to save memory. This is not a standard
     # torch API because there is no such feature in PyTorch. Instead, the name
     # becomes node metadata during FX graph capture.
-    if IS_TPU:
-      hidden_states = offloading.offload_name(hidden_states, "decoder_input")
+
+    hidden_states = offloading.offload_name(hidden_states, "decoder_input")
 
     residual = hidden_states
     hidden_states = self.input_layernorm(hidden_states)
@@ -303,7 +318,7 @@ class Qwen3DecoderLayer(nn.Module):
     hidden_states = self.post_attention_layernorm(hidden_states)
     hidden_states = self.mlp(hidden_states)
     hidden_states = residual + hidden_states
-      
+
     return hidden_states
 
 
@@ -322,7 +337,9 @@ class Qwen3Model(nn.Module):
       self.padding_idx = None
     else:
       self.padding_idx = config.pad_token_id
-    self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
+    self.embed_tokens = nn.Embedding(
+      config.vocab_size, config.hidden_size, padding_idx=self.padding_idx
+    )
     # `HomogeneousSequential` is similar to `nn.Sequential` but can be compiled with
     # `scan` described in https://pytorch.org/xla/release/r2.6/features/scan.html.
     self.layers = HomogeneousSequential(
@@ -331,10 +348,14 @@ class Qwen3Model(nn.Module):
         for layer_idx in range(config.num_hidden_layers)
       ]
     )
-    self.norm = Qwen3RMSNorm(config.hidden_size, eps=getattr(config, "rms_norm_eps", 1e-6))
+    self.norm = Qwen3RMSNorm(
+      config.hidden_size, eps=getattr(config, "rms_norm_eps", 1e-6)
+    )
 
     rope_scaling = config.get("rope_scaling", None)
-    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    head_dim = getattr(
+      config, "head_dim", config.hidden_size // config.num_attention_heads
+    )
     self.rope_theta = getattr(config, "rope_theta", 10000.0)
     if rope_scaling is not None:
       rope_scaling = RopeScaling(**rope_scaling)
@@ -382,7 +403,7 @@ class Qwen3Model(nn.Module):
     )
 
     hidden_states = self.norm(hidden_states)
-    
+
     return hidden_states
 
 
@@ -419,9 +440,9 @@ class Qwen3ForCausalLM(nn.Module):
   ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
     if not self.training:
       # haolin: during inference the masking is done when preprocessing the input, we don't need src_mask and noising
-      model_output = self.model(input_ids=input_ids, attention_mask=attention_mask)   
+      model_output = self.model(input_ids=input_ids, attention_mask=attention_mask)
       hidden_states = model_output
-      logits = self.lm_head(hidden_states) # NOTE: we shift logits in generate()
+      logits = self.lm_head(hidden_states)  # NOTE: we shift logits in generate()
       # logits = logits.float()[..., :-1, :].contiguous() # NOTE: we shift logits in inference_utils at inference time
       return logits, None
 
@@ -432,38 +453,52 @@ class Qwen3ForCausalLM(nn.Module):
     sampling_eps = 1e-3
     mask_token_id = self.mask_token_id
     loss_func = nn.CrossEntropyLoss(reduction="none")
-    batch_size, seq_len = input_ids.shape     # input_ids: [batch_size, seq_len]
-    
+    batch_size, seq_len = input_ids.shape  # input_ids: [batch_size, seq_len]
+
     # Create maskable_mask based on training mode and src_mask
     # For SFT: src_mask is provided, maskable_mask = ~src_mask
     # For pretrain: src_mask is None, maskable_mask = all True
-    if src_mask is not None: # SFT
+    if src_mask is not None:  # SFT
       maskable_mask = ~src_mask
-    else: # pretrain or midtrain
-      maskable_mask = torch.ones_like(input_ids, dtype=torch.bool, device=input_ids.device)
+    else:  # pretrain or midtrain
+      maskable_mask = torch.ones_like(
+        input_ids, dtype=torch.bool, device=input_ids.device
+      )
       prefix_probability = getattr(self.config, "prefix_probability", 0)
       truncate_probability = getattr(self.config, "truncate_probability", 0)
       # Generate random decisions for all batch items
-      apply_prefix = torch.rand(batch_size, device=input_ids.device) < prefix_probability
+      apply_prefix = (
+        torch.rand(batch_size, device=input_ids.device) < prefix_probability
+      )
       # Only apply truncation to rows that are NOT prefixed
-      apply_truncate = torch.rand(batch_size, device=input_ids.device) < truncate_probability
+      apply_truncate = (
+        torch.rand(batch_size, device=input_ids.device) < truncate_probability
+      )
       apply_truncate = apply_truncate & ~apply_prefix
 
       if prefix_probability > 0:
         maskable_mask = prefix_input_ids(input_ids, maskable_mask, apply_prefix)
       if truncate_probability > 0:
-        input_ids = truncate_input_ids(input_ids, apply_truncate, self.config.pad_token_id)
-        maskable_mask = maskable_mask & (input_ids != self.config.pad_token_id) # NOTE: necessary?
+        input_ids = truncate_input_ids(
+          input_ids, apply_truncate, self.config.pad_token_id
+        )
+        maskable_mask = maskable_mask & (
+          input_ids != self.config.pad_token_id
+        )  # NOTE: necessary?
 
     # add noise to input_ids
-    sigma = (1 - sampling_eps) * torch.rand(input_ids.shape[0], device=input_ids.device) + sampling_eps
+    sigma = (1 - sampling_eps) * torch.rand(
+      input_ids.shape[0], device=input_ids.device
+    ) + sampling_eps
     dsigma = torch.reciprocal(sigma)
 
     # Sample mask block size
     mask_block_sizes = getattr(self.config, "mask_block_sizes", None)
     block_masking_probability = getattr(self.config, "block_masking_probability", 0)
     if block_masking_probability > 0 and mask_block_sizes is not None:
-      mask_block_size = mask_block_sizes[torch.randint(0, len(mask_block_sizes), (1,)).item()]
+      mask_block_size = mask_block_sizes[
+        torch.randint(0, len(mask_block_sizes), (1,)).item()
+      ]
     else:
       mask_block_size = 1
 
@@ -472,7 +507,7 @@ class Qwen3ForCausalLM(nn.Module):
       sigma[:, None],
       maskable_mask=maskable_mask,
       mask_token_id=mask_token_id,
-      mask_block_size=mask_block_size
+      mask_block_size=mask_block_size,
     )
     loss_mask = noisy_input_ids == mask_token_id
 
@@ -491,7 +526,7 @@ class Qwen3ForCausalLM(nn.Module):
     # loss: [bs, seq_len-1]
     loss = loss_func(
       logits.reshape(-1, logits.shape[-1]), target_ids.reshape(-1)
-    ).reshape(target_ids.shape[0],-1)
+    ).reshape(target_ids.shape[0], -1)
     loss = loss.masked_fill(~loss_mask, 0)
     # weiran: divide by the number of tokens in the sequence instead of the number of masked tokens
     # justification is dsigma already accounts for the number of masked tokens
@@ -501,9 +536,7 @@ class Qwen3ForCausalLM(nn.Module):
     return logits, loss
 
 
-def transition(
-  x_0, sigma, maskable_mask, mask_token_id, mask_block_size: int = 1
-):
+def transition(x_0, sigma, maskable_mask, mask_token_id, mask_block_size: int = 1):
   """Apply masking to input tokens. If mask_block_size > 1, use block masking for all rows."""
 
   if mask_block_size == 1:
@@ -518,61 +551,69 @@ def transition(
 
 
 def block_masking(x_0, sigma, maskable_mask, mask_token_id, mask_block_size):
-    """
-    XLA-compatible block masking applied uniformly to all rows in the batch.
-    Uses efficient tensor operations to avoid dynamic loops.
-    """
-    batch_size, seq_len = x_0.shape
+  """
+  XLA-compatible block masking applied uniformly to all rows in the batch.
+  Uses efficient tensor operations to avoid dynamic loops.
+  """
+  batch_size, seq_len = x_0.shape
 
-    if seq_len < mask_block_size:
-        return x_0
+  if seq_len < mask_block_size:
+    return x_0
 
-    # Calculate number of possible block positions
-    num_windows = seq_len - mask_block_size + 1
-    
-    # Create all possible block positions: [num_windows, mask_block_size]
-    window_starts = torch.arange(num_windows, device=x_0.device)
-    block_offsets = torch.arange(mask_block_size, device=x_0.device)
-    all_positions = window_starts.unsqueeze(1) + block_offsets.unsqueeze(0)
-    
-    # Check which blocks are fully maskable: [batch_size, num_windows]
-    maskable_blocks = maskable_mask.unsqueeze(1).expand(-1, num_windows, -1).gather(
-        2, all_positions.unsqueeze(0).expand(batch_size, -1, -1)
-    )
-    fully_maskable = maskable_blocks.all(dim=2)
+  # Calculate number of possible block positions
+  num_windows = seq_len - mask_block_size + 1
 
-    # Determine which blocks should be masked: (batch_size, num_windows)
-    effective_sigma = 1 - (1-sigma)**(1/mask_block_size) # NOTE: since we mask with blocks, we need to scale sigma by block size
-    should_mask = (torch.rand(batch_size, num_windows, device=x_0.device) < effective_sigma) & fully_maskable
+  # Create all possible block positions: [num_windows, mask_block_size]
+  window_starts = torch.arange(num_windows, device=x_0.device)
+  block_offsets = torch.arange(mask_block_size, device=x_0.device)
+  all_positions = window_starts.unsqueeze(1) + block_offsets.unsqueeze(0)
 
-    # Create final mask using simple broadcasting (fully XLA-compatible)
-    # For each position in the sequence, check if it's part of any masked block
-    position_indices = torch.arange(seq_len, device=x_0.device)  # [seq_len]
-    
-    # Check for each position if it falls within any masked block
-    # position_indices: [seq_len] -> [1, 1, seq_len]
-    # all_positions: [num_windows, mask_block_size] -> [1, num_windows, mask_block_size]  
-    # should_mask: [batch_size, num_windows] -> [batch_size, num_windows, 1]
-    
-    position_indices = position_indices.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len]
-    all_positions = all_positions.unsqueeze(0)  # [1, num_windows, mask_block_size]
-    should_mask = should_mask.unsqueeze(2)  # [batch_size, num_windows, 1]
-    
-    # Check if each position matches any of the positions in masked blocks
-    # [1, 1, seq_len] == [1, num_windows, mask_block_size] -> [1, num_windows, seq_len]
-    position_matches = (position_indices == all_positions.unsqueeze(3)).any(dim=2)  # [1, num_windows, seq_len]
-    
-    # Apply should_mask to get final positions to mask
-    # [batch_size, num_windows, 1] & [1, num_windows, seq_len] -> [batch_size, num_windows, seq_len]
-    should_mask_positions = should_mask & position_matches
-    
-    # Reduce over windows: if any window masks this position, mask it
-    final_mask = should_mask_positions.any(dim=1)  # [batch_size, seq_len]
+  # Check which blocks are fully maskable: [batch_size, num_windows]
+  maskable_blocks = (
+    maskable_mask.unsqueeze(1)
+    .expand(-1, num_windows, -1)
+    .gather(2, all_positions.unsqueeze(0).expand(batch_size, -1, -1))
+  )
+  fully_maskable = maskable_blocks.all(dim=2)
 
-    # Apply the mask
-    result = torch.where(final_mask, mask_token_id, x_0)
+  # Determine which blocks should be masked: (batch_size, num_windows)
+  effective_sigma = 1 - (1 - sigma) ** (
+    1 / mask_block_size
+  )  # NOTE: since we mask with blocks, we need to scale sigma by block size
+  should_mask = (
+    torch.rand(batch_size, num_windows, device=x_0.device) < effective_sigma
+  ) & fully_maskable
 
-    return result
+  # Create final mask using simple broadcasting (fully XLA-compatible)
+  # For each position in the sequence, check if it's part of any masked block
+  position_indices = torch.arange(seq_len, device=x_0.device)  # [seq_len]
+
+  # Check for each position if it falls within any masked block
+  # position_indices: [seq_len] -> [1, 1, seq_len]
+  # all_positions: [num_windows, mask_block_size] -> [1, num_windows, mask_block_size]
+  # should_mask: [batch_size, num_windows] -> [batch_size, num_windows, 1]
+
+  position_indices = position_indices.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len]
+  all_positions = all_positions.unsqueeze(0)  # [1, num_windows, mask_block_size]
+  should_mask = should_mask.unsqueeze(2)  # [batch_size, num_windows, 1]
+
+  # Check if each position matches any of the positions in masked blocks
+  # [1, 1, seq_len] == [1, num_windows, mask_block_size] -> [1, num_windows, seq_len]
+  position_matches = (position_indices == all_positions.unsqueeze(3)).any(
+    dim=2
+  )  # [1, num_windows, seq_len]
+
+  # Apply should_mask to get final positions to mask
+  # [batch_size, num_windows, 1] & [1, num_windows, seq_len] -> [batch_size, num_windows, seq_len]
+  should_mask_positions = should_mask & position_matches
+
+  # Reduce over windows: if any window masks this position, mask it
+  final_mask = should_mask_positions.any(dim=1)  # [batch_size, seq_len]
+
+  # Apply the mask
+  result = torch.where(final_mask, mask_token_id, x_0)
+
+  return result
 
 
 def prefix_input_ids(input_ids, maskable_mask, apply_prefix):
@@ -581,7 +622,9 @@ def prefix_input_ids(input_ids, maskable_mask, apply_prefix):
   # Generate random prefix lengths for all batch items
   prefix_lengths = torch.randint(1, seq_len, (batch_size,), device=input_ids.device)
   # Create position indices: [1, seq_len]
-  position_indices = torch.arange(seq_len, device=input_ids.device).unsqueeze(0) # [1, seq_len]
+  position_indices = torch.arange(seq_len, device=input_ids.device).unsqueeze(
+    0
+  )  # [1, seq_len]
   # Create prefix mask: True where position < prefix_length
   prefix_mask = position_indices < prefix_lengths.unsqueeze(1)  # [batch_size, seq_len]
   # Apply prefix masking: set to False where we should apply prefix masking
@@ -595,9 +638,15 @@ def truncate_input_ids(input_ids, apply_truncate, pad_token_id):
   # Generate random truncation positions for all batch items
   truncate_positions = torch.randint(1, seq_len, (batch_size,), device=input_ids.device)
   # Create position indices: [1, seq_len]
-  position_indices = torch.arange(seq_len, device=input_ids.device).unsqueeze(0) # [1, seq_len]
+  position_indices = torch.arange(seq_len, device=input_ids.device).unsqueeze(
+    0
+  )  # [1, seq_len]
   # Create truncate mask: True where position >= truncate_position
-  truncate_mask = position_indices >= truncate_positions.unsqueeze(1)  # [batch_size, seq_len]
+  truncate_mask = position_indices >= truncate_positions.unsqueeze(
+    1
+  )  # [batch_size, seq_len]
   # Apply truncation: fill with pad token where we should truncate
-  input_ids = torch.where(apply_truncate.unsqueeze(1) & truncate_mask, pad_token_id, input_ids)
+  input_ids = torch.where(
+    apply_truncate.unsqueeze(1) & truncate_mask, pad_token_id, input_ids
+  )
   return input_ids

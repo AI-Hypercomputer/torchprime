@@ -2,24 +2,13 @@ import math
 from typing import Any
 
 import torch
+import torch_xla.distributed.spmd as xs
 from torch import nn
-
-# Detect if we're on TPU (no CUDA available) vs GPU
-IS_TPU = not torch.cuda.is_available()
-
-if IS_TPU:
-  # TPU environment - use original torch_xla imports
-  import torch_xla.debug.profiler as xp
-  import torch_xla.distributed.spmd as xs
-  from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
-  from torch_xla.experimental.splash_attention import (
-    SplashAttentionConfig,
-    splash_attention,
-  )
-else:
-  # GPU environment - use PyTorch's native SDPA flash attention
-  from torch.nn.functional import scaled_dot_product_attention
-  from torch.nn.attention import SDPBackend, sdpa_kernel
+from torch_xla.experimental.custom_kernel import FlashAttention, flash_attention
+from torch_xla.experimental.splash_attention import (
+  SplashAttentionConfig,
+  splash_attention,
+)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -118,7 +107,7 @@ class AttentionModule(nn.Module):
           query_states,
           key_states,
           value_states,
-          causal=False, # weiran: causal=False for bi-directional attention
+          causal=False,  # weiran: causal=False for bi-directional attention
           partition_spec=self.partition_spec,
         )
       case "default" | None:
@@ -143,77 +132,9 @@ class AttentionModule(nn.Module):
         )
         attn_output = torch.matmul(attn_weights, value_states)
       case _:
-        raise NotImplementedError(f"Attention kernel {self.config.attention_kernel} is not supported yet")
-
-    if attn_output.size() != (bsz, num_heads, q_len, head_dim):
-      raise ValueError(
-        f"`attn_output` should be of size {(bsz, num_heads, q_len, head_dim)}, but is"
-        f" {attn_output.size()}"
-      )
-    return attn_output
-
-  def _forward_gpu(
-    self,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    attention_mask: torch.Tensor | None = None,
-  ):
-    """GPU-optimized PyTorch implementation"""
-    if self.config.attention_kernel != "splash_attention":
-      num_key_value_groups = (
-        self.config.num_attention_heads // self.config.num_key_value_heads
-      )
-      key_states = repeat_kv(key_states, num_key_value_groups)
-      value_states = repeat_kv(value_states, num_key_value_groups)
-
-    bsz, num_heads, q_len, head_dim = query_states.size()
-    # TODO: q, k dim unintentionally changed after the apply_rotary_pos_emb. Use
-    # v's dim temporarily to bypass shape assertion failure. Remove the
-    # following line after resolving
-    # https://github.com/AI-Hypercomputer/torchprime/issues/195.
-    head_dim = value_states.shape[-1]
-
-    kv_seq_len = key_states.shape[-2]
-
-    # Use SDPA with appropriate backend
-    
-    match self.config.attention_kernel:
-      case "splash_attention":
-        raise NotImplementedError("Splash Attention is not supported in GPU environment")
-        
-      case "flash_attention":
-        # Try to use flash attention backend, fallback to default if not available
-        try:
-          with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            attn_output = scaled_dot_product_attention(
-              query_states,
-              key_states,
-              value_states,
-              dropout_p=self.config.attention_dropout if self.training else 0.0,
-              is_causal=False,  # weiran: causal=False for bi-directional attention
-            )
-        except (RuntimeError, NotImplementedError):
-          # Flash attention not available, use default backend
-          with sdpa_kernel(SDPBackend.MATH):
-            attn_output = scaled_dot_product_attention(
-              query_states,
-              key_states,
-              value_states,
-              dropout_p=self.config.attention_dropout if self.training else 0.0,
-              is_causal=False,  # weiran: causal=False for bi-directional attention
-            )
-
-      case _:
-        # Default implementation - use math backend for compatibility
-        with sdpa_kernel(SDPBackend.MATH):
-          attn_output = scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            dropout_p=self.config.attention_dropout if self.training else 0.0,
-            is_causal=False,  # weiran: causal=False for bi-directional attention
-          )
+        raise NotImplementedError(
+          f"Attention kernel {self.config.attention_kernel} is not supported yet"
+        )
 
     if attn_output.size() != (bsz, num_heads, q_len, head_dim):
       raise ValueError(
@@ -229,7 +150,4 @@ class AttentionModule(nn.Module):
     value_states: torch.Tensor,
     attention_mask: torch.Tensor | None = None,
   ):
-    if IS_TPU:
-      return self._forward_tpu(query_states, key_states, value_states, attention_mask)
-    else:
-      return self._forward_gpu(query_states, key_states, value_states, attention_mask)
+    return self._forward_tpu(query_states, key_states, value_states, attention_mask)
