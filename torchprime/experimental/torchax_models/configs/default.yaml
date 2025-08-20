@@ -1,10 +1,11 @@
 # The default config file. You may override configs with `key=value` arguments on the CLI
 # according to https://hydra.cc/docs/advanced/override_grammar/basic/.
 
-global_batch_size: 64
+
+global_batch_size: 8 # runable on a v6e-4 vm
 model_type: 8B
 lr: 5.e-5
-tp: 4
+tp: 2
 seqlen: 2048
 model_impl: scan
 use_custom_mesh: False

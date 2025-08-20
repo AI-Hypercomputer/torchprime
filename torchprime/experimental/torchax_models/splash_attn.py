@@ -24,7 +24,7 @@ def tpu_splash_attention(
       decoder_segment_ids, decoder_segment_ids
     )
 
-  print("HERE", locals())
+  # print("[DEBUG][tpu_splash_attention] --->", locals())
 
   global_block_q = 1024
   global_block_kv = 512
@@ -63,14 +63,17 @@ def tpu_splash_attention(
       v_layout=splash_attention_kernel.QKVLayout[global_v_layout],
     )
 
-    if mask is not None:
-      mask = splash_attention_mask.CausalMask(shape=(query.shape[2], query.shape[2]))
-
+    # FIX: If the input mask is None, create a default CausalMask.
+    # This is the expected behavior for decoder-only models.
+    final_mask = mask
+    if final_mask is None:
+      final_mask = splash_attention_mask.CausalMask(
+        shape=(query.shape[2], query.shape[2])
+      )
     # Create multi-head mask
     multi_head_mask = splash_attention_mask.MultiHeadMask(
-      masks=(mask,) * query.shape[1]
+      masks=(final_mask,) * query.shape[1]
     )
-    # splash_kernel = splash_attention_kernel.make_splash_mha(
     splash_kernel = splash_attention_kernel.make_splash_mha(
       mask=multi_head_mask,
       head_shards=1,
@@ -86,14 +89,15 @@ def tpu_splash_attention(
       wrap_flash_attention,
       mesh=mesh,
       in_specs=(
-        q_sharding,
-        q_sharding,
-        q_sharding,
-        None,
+        None,  # Sharding for 'mask'
+        q_sharding,  # Sharding for 'query'
+        q_sharding,  # Sharding for 'key'
+        q_sharding,  # Sharding for 'value'
+        None,  # Sharding for 'decoder_segment_ids'
       ),
       out_specs=q_sharding,
       check_rep=False,
     )
 
-  x = wrap_flash_attention(query, key, value, mask, decoder_segment_ids)
+  x = wrap_flash_attention(mask, query, key, value, decoder_segment_ids)
   return x

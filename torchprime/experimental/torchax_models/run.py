@@ -134,7 +134,12 @@ def register_attention(fn):
   env = torchax.default_env()
   k = torch.nn.functional.scaled_dot_product_attention
   env._ops[k] = ops_registry.Operator(
-    k, fn, is_jax_function=False, is_user_defined=True, needs_env=False
+    k,
+    fn,
+    is_jax_function=False,
+    is_user_defined=True,
+    needs_env=False,
+    is_view_op=False,
   )
 
 
@@ -142,7 +147,7 @@ def make_weight_shard(weight_meta, slice_index):
   weight_shard_meta = weight_meta[slice_index]
   with torchax.default_env():
     return interop.jax_view(
-      torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype)
+      torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype) * 0.1
     )
 
 
@@ -198,6 +203,7 @@ def main(config: DictConfig):
   torch.manual_seed(0)
   torch.set_default_dtype(torch.bfloat16)
   torchax.enable_performance_mode()
+  torchax.enable_globally()
 
   print("Local devices:", jax.local_device_count())
   fsdp_size = len(jax.devices()) // config.tp

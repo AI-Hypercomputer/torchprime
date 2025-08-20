@@ -139,7 +139,10 @@ def _prelower_step(step, weights, opt_state, args, label, mesh):
   print("End compiling", end - start)
   compile_time = end - start
   print("Compile time:", compile_time)
-  for co in step_compiled.cost_analysis():
+  cost_analysis = step_compiled.cost_analysis()
+  if isinstance(cost_analysis, dict):
+    cost_analysis = [cost_analysis]
+  for co in cost_analysis:
     print("Flops", co["flops"])
     print("GB accessed", co["bytes accessed"] / 1e9)
   return step_compiled
@@ -164,8 +167,10 @@ def train_loop(
   env = torchax.default_env()
 
   jax_params = env.t2j_iso(weights)
-  # jax_optimizer = optax.adamw(lr)
-  jax_optimizer = optax.sgd(lr)
+  jax_optimizer = optax.chain(
+    optax.clip_by_global_norm(1.0),  # Clip gradients to a max norm of 1.0
+    optax.sgd(lr),
+  )
   opt_state = jax_optimizer.init(jax_params)
   # opt_state = (ScaleByAdamState(
   #   # replicate count
@@ -252,7 +257,7 @@ def train_loop(
       mask = _replicate(mask)
       labels = _shard_first_dim(labels)
 
-      print("INPUT shape", inputs.shape)
+      # print("INPUT shape", inputs.shape)
       if i == 0:
         # NOTE: this is not necessary; but I want to print out
         # Stablehlo, and compile times
@@ -277,6 +282,7 @@ def train_loop(
         jax.profiler.stop_trace()
 
       print(
+        "* Training step",
         i,
         "loss",
         loss,
@@ -285,7 +291,7 @@ def train_loop(
         step_end - step_start,
       )
       min_loop_time = min(min_loop_time, step_end - step_start)
-      print("======")
+      print("====================")
       if i >= 6:
         break
 
