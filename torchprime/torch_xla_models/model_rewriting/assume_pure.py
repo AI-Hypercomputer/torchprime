@@ -1,6 +1,7 @@
 import logging
 
 import torch.nn as nn
+import torch_xla
 from omegaconf import DictConfig
 from torch_xla.experimental.assume_pure import PureModule
 
@@ -39,6 +40,7 @@ def mark_pure_modules(model: nn.Module, config: DictConfig) -> nn.Module:
   #     logger.warning("pure_modules is not supported for PyTorch/XLA 2.8.0")
   #     return model
   print(f"Marking pure modules: {pure_module_config}")
+  print(f"torch_xla_version: {torch_xla.version.__version__}")
   pure_module_classes = get_classes_by_names(model, pure_module_config)
 
   def transform(mod: nn.Module, _: str):
