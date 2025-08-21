@@ -160,12 +160,10 @@ def test_forward_and_backward_our_model_against_hf_model(
 
   # Act
   (hf_logits, hf_loss), hf_params = get_forward_and_backward_outputs(
-    hf_model_xla,
-    input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
+    hf_model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
   (model_logits, model_loss), model_params = get_forward_and_backward_outputs(
-    model_xla,
-    input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
+    model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
 
   # Assert
@@ -214,8 +212,7 @@ def test_forward_and_backward_torch_xla_against_native(fixture, input_size):
   # --- Native CPU pass ---
   model_native = fixture.model
   (logits_native, loss_native), params_native = get_forward_and_backward_outputs(
-    model_native,
-    input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
+    model_native, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
 
   # --- XLA pass ---
@@ -252,7 +249,9 @@ def test_forward_and_backward_torch_xla_against_native(fixture, input_size):
     params_native, params_xla, strict=True
   ):
     assert name_native == name_xla
-    assert p_native.grad is not None, f"Gradient for {name_native} is None in native model"
+    assert p_native.grad is not None, (
+      f"Gradient for {name_native} is None in native model"
+    )
     assert p_xla.grad is not None, f"Gradient for {name_xla} is None in XLA model"
     torch.testing.assert_close(
       p_native.grad,

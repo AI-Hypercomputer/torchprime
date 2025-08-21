@@ -85,7 +85,9 @@ def scan_decoders(mod):
 )
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
 @pytest.mark.parametrize("input_size", [8, 128, 256])
-def test_forward_and_backward_our_model_against_hf_model(fixture, transform, input_size):
+def test_forward_and_backward_our_model_against_hf_model(
+  fixture, transform, input_size
+):
   """Compares the numerical consistency of our Mixtral model against the
   Hugging Face reference on an XLA device.
 
@@ -127,17 +129,21 @@ def test_forward_and_backward_our_model_against_hf_model(fixture, transform, inp
     hf_params, model_params, strict=True
   ):
     assert name_hf == name_model, f"Parameter name mismatch: {name_hf} vs {name_model}"
-    assert (
-      p_model.grad is not None
-    ), f"Model grad is None for {name_model} when HF grad is not None"
+    assert p_model.grad is not None, (
+      f"Model grad is None for {name_model} when HF grad is not None"
+    )
     if p_hf.grad is None:
-      # Gradient value for unused parameter is None in hf model while our model have 0 
-      assert torch.all(
-        p_model.grad == 0
-      ), f"Model grad for {name_model} is not zero when HF grad is None"
+      # Gradient value for unused parameter is None in hf model while our model have 0
+      assert torch.all(p_model.grad == 0), (
+        f"Model grad for {name_model} is not zero when HF grad is None"
+      )
     else:
       torch.testing.assert_close(
-        p_hf.grad, p_model.grad, atol=1e-6, rtol=1e-9, msg=f"Gradients for '{name_hf}' differ"
+        p_hf.grad,
+        p_model.grad,
+        atol=1e-6,
+        rtol=1e-9,
+        msg=f"Gradients for '{name_hf}' differ",
       )
 
 

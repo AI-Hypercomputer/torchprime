@@ -137,6 +137,7 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
       msg=f"Gradients for '{name_hf}' differ. hf_grad: {p_hf.grad}, model_grad: {p_model.grad}",
     )
 
+
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
 def test_layers_by_layer_against_hf_model(transform):
   fixture = get_deepseek_v3_dummy()

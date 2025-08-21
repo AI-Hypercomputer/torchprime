@@ -78,7 +78,9 @@ def scan_decoders(mod):
 )
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
 @pytest.mark.parametrize("input_size", [8, 128, 256])
-def test_forward_and_backward_our_model_against_hf_model(fixture, transform, input_size):
+def test_forward_and_backward_our_model_against_hf_model(
+  fixture, transform, input_size
+):
   """Compares the numerical consistency of our Llama4 model against the
   Hugging Face reference on an XLA device.
 

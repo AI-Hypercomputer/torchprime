@@ -43,4 +43,3 @@ def get_forward_and_backward_outputs(
   torch_xla.sync()
 
   return (logits, loss), model.named_parameters()
-
