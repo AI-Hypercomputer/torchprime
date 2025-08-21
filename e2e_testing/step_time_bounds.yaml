@@ -71,6 +71,13 @@ benchmarks:
     confidence_interval: 0.5
     average: 0.6
     sample_size: 10
+  llama-3-8b-pure-mlp:
+    name: Llama 3.0 8B (@assume_pure) # dummy number
+    step_time_lower_bound: 1.5
+    step_time_upper_bound: 3.4
+    confidence_interval: 0.9
+    average: 2.45
+    sample_size: 150
 metadata:
   query_start: '2025-07-01T00:00:00-07:00'
   query_end: '2025-07-23T12:20:48-07:00'
