@@ -63,6 +63,7 @@ def tpu_splash_attention(
 
     if mask is None:
       mask = splash_attention_mask.CausalMask(shape=(query.shape[2], query.shape[2]))
+
     # Create multi-head mask
     multi_head_mask = splash_attention_mask.MultiHeadMask(
       masks=(mask,) * query.shape[1]

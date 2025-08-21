@@ -146,6 +146,7 @@ def register_attention(fn):
 def make_weight_shard(weight_meta, slice_index):
   weight_shard_meta = weight_meta[slice_index]
   with torchax.default_env():
+    # TODO(jialei): update to better weight init methods
     return interop.jax_view(
       torch.randn(weight_shard_meta.shape, dtype=weight_shard_meta.dtype) * 0.1
     )
