@@ -11,6 +11,9 @@ from transformers import AutoConfig
 from transformers import LlamaForCausalLM as HfLlamaForCausalLM
 
 from torchprime.torch_xla_models.model.llama import LlamaForCausalLM
+from torchprime.torch_xla_models.tests.test_utils import (
+  get_forward_and_backward_outputs,
+)
 
 
 @dataclass
@@ -140,6 +143,11 @@ def scan_decoders(mod):
 def test_forward_and_backward_our_model_against_hf_model(
   fixture, transform, input_size
 ):
+  """Compares the numerical consistency of our model and huggingface model.
+
+  Asserts that logits, loss, and gradients are nearly identical after a
+  full forward and backward pass.
+  """
   # Arrange
   fixture = fixture()
   device = torch_xla.device()
@@ -151,26 +159,14 @@ def test_forward_and_backward_our_model_against_hf_model(
   attention_mask = torch.ones_like(input_ids)
 
   # Act
-  # Hugging Face model pass
-  hf_model_xla.zero_grad()
-  hf_output = hf_model_xla(
+  (hf_logits, hf_loss), hf_params = get_forward_and_backward_outputs(
+    hf_model_xla,
     input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
-  hf_logits, hf_loss = hf_output.logits, hf_output.loss
-  assert hf_loss is not None, "Loss from HF model is None"
-  hf_loss.backward()
-  torch_xla.sync()
-  hf_params = hf_model_xla.named_parameters()
-
-  # TorchPrime model pass
-  model_xla.zero_grad()
-  model_logits, model_loss = model_xla(
+  (model_logits, model_loss), model_params = get_forward_and_backward_outputs(
+    model_xla,
     input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
-  assert model_loss is not None, "Loss from our model is None"
-  model_loss.backward()
-  torch_xla.sync()
-  model_params = model_xla.named_parameters()
 
   # Assert
   torch.testing.assert_close(
@@ -201,6 +197,11 @@ def test_forward_and_backward_our_model_against_hf_model(
 )
 @pytest.mark.parametrize("input_size", [8])
 def test_forward_and_backward_torch_xla_against_native(fixture, input_size):
+  """Compares the numerical consistency of our native and XLA models.
+
+  Asserts that logits, loss, and gradients are nearly identical after a
+  full forward and backward pass on both backends.
+  """
   # Arrange
   fixture = fixture()
   cpu_device = torch.device("cpu")
@@ -212,31 +213,23 @@ def test_forward_and_backward_torch_xla_against_native(fixture, input_size):
   # Act
   # --- Native CPU pass ---
   model_native = fixture.model
-  model_native.zero_grad()
-  logits_native, loss_native = model_native(
+  (logits_native, loss_native), params_native = get_forward_and_backward_outputs(
+    model_native,
     input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
-  assert loss_native is not None, "Cannot run backward on native without loss."
-  loss_native.backward()
-  params_native = model_native.named_parameters()
 
   # --- XLA pass ---
   xla_device = torch_xla.device()
   model_xla = copy.deepcopy(model_native).to(xla_device)
   input_ids_xla = input_ids.to(xla_device)
   attention_mask_xla = attention_mask.to(xla_device)
-  torch_xla.sync()
 
-  model_xla.zero_grad()
-  logits_xla, loss_xla = model_xla(
+  (logits_xla, loss_xla), params_xla = get_forward_and_backward_outputs(
+    model_xla,
     input_ids=input_ids_xla,
     labels=input_ids_xla,
     attention_mask=attention_mask_xla,
   )
-  assert loss_xla is not None, "Cannot run backward on XLA without loss."
-  loss_xla.backward()
-  torch_xla.sync()
-  params_xla = model_xla.named_parameters()
 
   # Assert
   torch.testing.assert_close(
