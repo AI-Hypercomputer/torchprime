@@ -24,8 +24,6 @@ def tpu_splash_attention(
       decoder_segment_ids, decoder_segment_ids
     )
 
-  # print("[DEBUG][tpu_splash_attention] --->", locals())
-
   global_block_q = 1024
   global_block_kv = 512
   global_block_kv_compute = 512
@@ -63,16 +61,11 @@ def tpu_splash_attention(
       v_layout=splash_attention_kernel.QKVLayout[global_v_layout],
     )
 
-    # FIX: If the input mask is None, create a default CausalMask.
-    # This is the expected behavior for decoder-only models.
-    final_mask = mask
-    if final_mask is None:
-      final_mask = splash_attention_mask.CausalMask(
-        shape=(query.shape[2], query.shape[2])
-      )
+    if mask is None:
+      mask = splash_attention_mask.CausalMask(shape=(query.shape[2], query.shape[2]))
     # Create multi-head mask
     multi_head_mask = splash_attention_mask.MultiHeadMask(
-      masks=(final_mask,) * query.shape[1]
+      masks=(mask,) * query.shape[1]
     )
     splash_kernel = splash_attention_kernel.make_splash_mha(
       mask=multi_head_mask,

@@ -14,6 +14,7 @@ from jax.tree_util import tree_map
 from torchax import interop
 
 SEQLEN = 2048
+GRADIENT_CLIP = 1.0
 
 ## Interface for optimizer_fn:
 # def optimizer_fn(optimizer_state, weights, gradients) -> new_optimizer_state, new_weights
@@ -168,7 +169,7 @@ def train_loop(
 
   jax_params = env.t2j_iso(weights)
   jax_optimizer = optax.chain(
-    optax.clip_by_global_norm(1.0),  # Clip gradients to a max norm of 1.0
+    optax.clip_by_global_norm(GRADIENT_CLIP),  # Clip gradients to a max norm of 1.0
     optax.sgd(lr),
   )
   opt_state = jax_optimizer.init(jax_params)
