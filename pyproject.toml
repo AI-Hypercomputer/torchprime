@@ -48,7 +48,7 @@ dev = [
 tp = "torchprime.launcher.cli:main"
 
 [tool.torchprime]
-torch_xla_version = "20250819" #"20250708" "20250709" worked # "20250806"  "20250710" "20250810" "20250819" does not work
+torch_xla_version = "20250709"
 
 [tool.setuptools.packages.find]
 where = [""]
