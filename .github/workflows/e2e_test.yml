@@ -106,7 +106,7 @@ jobs:
             task.max_steps=15 \
             ici_mesh.fsdp=4 \
             profile_start_step=3 \
-            model.pure_modules=[LlamaMLP,EinsumLinear]
+            model.pure_modules=[LlamaMLP]
 
       - name: Run Llama 3.1 8B (Splash Attention)
         id: run-llama-3_1-8b-SplashAttention
