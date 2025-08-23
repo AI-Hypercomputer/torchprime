@@ -1,7 +1,6 @@
 import logging
 
 import torch.nn as nn
-import torch_xla
 from omegaconf import DictConfig
 from torch_xla.experimental.assume_pure import PureModule
 
