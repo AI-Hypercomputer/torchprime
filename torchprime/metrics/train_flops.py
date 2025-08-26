@@ -1,4 +1,4 @@
-""" Standalone FLOPs calculators 
+"""Standalone FLOPs calculators
 Mirroring ``maxtext_utils`` training formulas from MaxText repo:
 https://github.com/AI-Hypercomputer/maxtext/blob/a8f6938c1a9048efa2dcd05c65b861a1ed96181b/MaxText/maxtext_utils.py#L478
 
@@ -25,7 +25,7 @@ def _ffn_flops(cfg, mlp_dim: int) -> int:
     * len(cfg.mlp_activations)
   )
   ffn2 = 2 * cfg.per_device_batch_size * cfg.max_target_length * mlp_dim * cfg.emb_dim
-  return ffn1 + ffn2  
+  return ffn1 + ffn2
 
 
 def _get_dense_moe_layers(cfg) -> tuple[int, int]:
@@ -91,7 +91,7 @@ def _mla_flops(cfg):
     * (qk_sum + cfg.v_head_dim)
   )
   proj_flops = 2 * batch_len * cfg.emb_dim * cfg.num_query_heads * cfg.v_head_dim
-  return qkv_flops, attn_flops, proj_flops  
+  return qkv_flops, attn_flops, proj_flops
 
 
 def _chunked_attention_flops_per_layer(cfg, seq_len: int, chunk: int) -> int:
@@ -119,7 +119,7 @@ def _llama4_attention_tflops(cfg) -> float:
   chunked_flops = _chunked_attention_flops_per_layer(cfg, seq_len, chunk)
   noncausal = num_global * global_flops + num_chunked * chunked_flops
   causal = noncausal / 2
-  return causal * 3 / 10**12  
+  return causal * 3 / 10**12
 
 
 # ---------------------------------------------------------------------------
@@ -129,21 +129,6 @@ def _llama4_attention_tflops(cfg) -> float:
 
 @dataclass
 class LlamaConfig:
-  per_device_batch_size: int
-  max_target_length: int
-  num_decoder_layers: int
-  emb_dim: int
-  num_query_heads: int
-  num_kv_heads: int
-  head_dim: int
-  mlp_dim: int
-  vocab_size: int
-  mlp_activations: tuple[str, ...]
-  gradient_accumulation_steps: int
-
-
-@dataclass
-class QwenConfig:
   per_device_batch_size: int
   max_target_length: int
   num_decoder_layers: int
@@ -207,8 +192,8 @@ class DeepSeekConfig:
 # ---------------------------------------------------------------------------
 
 
-def _standard_model_tflops(cfg: LlamaConfig):
-  """Compute the standard model TFLOPs for a Llama-style model.
+def llama3_style_models_tflops(cfg: LlamaConfig):
+  """Training TFLOPs per device for Llama3-style models.
   https://github.com/AI-Hypercomputer/maxtext/blob/a8f6938c1a9048efa2dcd05c65b861a1ed96181b/MaxText/maxtext_utils.py#L478
   """
   total_ffn = _ffn_flops(cfg, cfg.mlp_dim)
@@ -235,7 +220,7 @@ def _standard_model_tflops(cfg: LlamaConfig):
     * cfg.num_query_heads
     * cfg.head_dim
   )
-  causal_attn = noncausal_attn / 2 # Divide attention flops by 2 due to causal mask
+  causal_attn = noncausal_attn / 2  # Divide attention flops by 2 due to causal mask
   embed = (
     2 * cfg.per_device_batch_size * cfg.max_target_length * cfg.emb_dim * cfg.vocab_size
   )
@@ -250,18 +235,10 @@ def _standard_model_tflops(cfg: LlamaConfig):
   )
 
 
-def llama3_tflops(cfg: LlamaConfig):
-  """Training TFLOPs per device for Llama3-style models."""
-  return _standard_model_tflops(cfg)
-
-
-def qwen3_tflops(cfg: QwenConfig):
-  """Training TFLOPs per device for Qwen3 models."""
-  return _standard_model_tflops(cfg)
-
-
 def llama4_tflops(cfg: Llama4Config):
-  """Training TFLOPs per device for Llama4 models."""
+  """Training TFLOPs per device for Llama4 models.
+  https://github.com/AI-Hypercomputer/maxtext/blob/a8f6938c1a9048efa2dcd05c65b861a1ed96181b/MaxText/maxtext_utils.py#L478
+  """
   if cfg.num_experts > 1:
     total_ffn = _routed_and_shared_ffn_flops(cfg)
   else:
@@ -293,7 +270,9 @@ def llama4_tflops(cfg: Llama4Config):
 
 
 def deepseek_tflops(cfg: DeepSeekConfig):
-  """Training TFLOPs per device for Deepseek models."""
+  """Training TFLOPs per device for Deepseek models.
+  https://github.com/AI-Hypercomputer/maxtext/blob/a8f6938c1a9048efa2dcd05c65b861a1ed96181b/MaxText/maxtext_utils.py#L478
+  """
   if cfg.num_experts > 1:
     total_ffn = _routed_and_shared_ffn_flops(cfg)
   else:
