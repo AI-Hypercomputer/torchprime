@@ -7,6 +7,18 @@ def config_vaidator(config: dict):
   in advance, thus avoiding unnecessary unclear failure or misuses,
   improving usability.
   """
+  fsdp_size, dp_size = 1, 1
+  if hasattr(config, "ici_mesh"):
+    fsdp_size *= getattr(config.ici_mesh, "fsdp", 1)
+    dp_size *= getattr(config.ici_mesh, "data", 1)
+  if hasattr(config, "dcn_mesh"):
+    fsdp_size *= getattr(config.dcn_mesh, "fsdp", 1)
+    dp_size *= getattr(config.dcn_mesh, "data", 1)
+
+  assert config.task.global_batch_size >= fsdp_size * dp_size, (
+    f"ici/dcn_mesh.fsdp ({fsdp_size}) * ici/dcn_mesh.data ({dp_size}) should be no less than global_batch_size ({config.task.global_batch_size})"
+  )
+
   if (
     "load_balance_cp" in config.model
     and config.model.load_balance_cp
