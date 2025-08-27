@@ -3,8 +3,31 @@
 import json
 
 import fsspec
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset, load_from_disk
 from transformers.tokenization_utils import PreTrainedTokenizerBase
+
+from torchprime.torch_xla_models.model import model_utils
+
+
+def _load_preprocessed_dataset(path: str, cache_dir: str | None) -> Dataset | DatasetDict:
+  """Loads a `datasets` object from a directory saved with `save_to_disk`.
+
+  Handles both local paths and GCS URIs. If a GCS path is provided, the data is
+  first downloaded to a local temporary directory.
+
+  Args:
+    path: The path to the dataset directory (local or GCS).
+    cache_dir: Optional temporary directory for GCS downloads.
+
+  Returns:
+    The loaded `datasets.Dataset` or `datasets.DatasetDict` object.
+  """
+  if path.startswith("gs://"):
+    with model_utils.local_path_from_gcs(
+      path, temp_dir=cache_dir
+    ) as local_path:
+      return load_from_disk(local_path)
+  return load_from_disk(path)
 
 
 def _load_json_dataset(path: str, split: str) -> Dataset:
@@ -92,32 +115,53 @@ def make_train_dataset(
   hf_dataset_name: str | None = None,
   hf_dataset_config_name: str | None = None,
   file_dataset_path: str | None = None,
+  is_preprocessed: bool = False,
   split: str = "train",
   cache_dir: str | None = None,
   *,
   tokenizer: PreTrainedTokenizerBase,
   block_size: int,
 ) -> Dataset:
-  """Loads and tokenizes a dataset, then chunks it into fixed-size blocks for training.
+  """Loads a dataset, tokenizes it, and chunks it into fixed-size blocks.
 
   This function downloads a dataset from the Hugging Face Hub, tokenizes the `text`
   column using the provided tokenizer, and groups the resulting tokens into
   contiguous blocks of fixed length (`block_size`). This block-wise packing is useful
   for efficient language modeling, especially on accelerators like TPUs.
 
+  If `is_preprocessed` is True, the function loads a dataset directly from the
+  path specified in `hf_dataset_name` or `file_dataset_path`, skipping tokenization.
+
   Args:
     hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
     hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
     file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
+    is_preprocessed: If True, load a pre-tokenized dataset from disk.
     split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     tokenizer: A Hugging Face tokenizer used to tokenize the input text.
     block_size: The fixed length of each chunked training example.
 
   Returns:
-    A `Dataset` object containing tokenized and block-wise grouped training examples,
-    each with keys `"input_ids"` and `"labels"`.
+    A `Dataset` object with tokenized and block-wise grouped training examples.
   """
+  if is_preprocessed:
+    path = hf_dataset_name or file_dataset_path
+    if not path:
+      raise ValueError(
+        "A path must be provided via `hf_dataset_name` or `file_dataset_path` when `is_preprocessed` is True."
+      )
+    data = _load_preprocessed_dataset(path, cache_dir)
+    if isinstance(data, DatasetDict):
+      data = data[split]
+
+    # Ensure required columns exist for training.
+    if "input_ids" not in data.features or "labels" not in data.features:
+      raise ValueError(
+        "Pre-processed dataset is missing 'input_ids' or 'labels' column, which are required for training."
+      )
+    return data
+
   data = load_hf_or_json_dataset(
     hf_dataset_name=hf_dataset_name,
     hf_dataset_config_name=hf_dataset_config_name,

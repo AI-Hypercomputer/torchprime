@@ -25,7 +25,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import torchprime.launcher.doctor
-from torchprime.launcher import save_hf_tokenizer_and_model
+from torchprime.launcher import save_hf_assets_to_gcs
 from torchprime.launcher.buildpush import buildpush
 from torchprime.launcher.util import run_docker
 
@@ -59,7 +59,7 @@ def save_hf_model_files_to_gcs(
   """Downloads model and tokenizer files from Hugging Face Hub and saves them to Google Cloud Storage."""
   print(f"Preparing to save '{file_type}' files from '{repo_id}' to '{gcs_path}'...")
   try:
-    save_hf_tokenizer_and_model.save_hf_model_files_to_gcs(
+    save_hf_assets_to_gcs.save_hf_model_files_to_gcs(
       repo_id, gcs_path, file_type=file_type, temp_dir=temp_dir
     )
     print(f"  -> Successfully saved files to {gcs_path}")
@@ -72,6 +72,49 @@ def save_hf_model_files_to_gcs(
     )
   except Exception as e:
     print(f"\n❌ An unexpected error occurred for repository '{repo_id}': {e}")
+
+
+def save_hf_dataset(
+  repo_id: str,
+  gcs_path: str,
+  config_name: str | None,
+  split: str | None,
+  preprocess: bool,
+  tokenizer_repo_id: str | None,
+  block_size: int | None,
+  temp_dir: str | None,
+):
+  """Save Huggingface dataset to Google cloud storage."""
+  print(f"Preparing to save dataset '{repo_id}' to '{gcs_path}'...")
+  try:
+    save_hf_assets_to_gcs.save_hf_dataset_to_gcs(
+      repo_id=repo_id,
+      gcs_path=gcs_path,
+      config_name=config_name,
+      split=split,
+      preprocess=preprocess,
+      tokenizer_repo_id=tokenizer_repo_id,
+      block_size=block_size,
+      temp_dir=temp_dir,
+    )
+    print(f"  -> Successfully processed and saved dataset to {gcs_path}")
+  except ValueError as e:
+    print(f"\n❌ Configuration error: {e}")
+    print("Please check your command-line arguments and try again.")
+  except OSError as e:
+    if e.errno == 28:  # No space left on device
+      print(f"\n❌ Ran out of disk space: {e}")
+      print(
+        "The dataset is large and requires significant temporary storage for downloading and preprocessing."
+      )
+      print(
+        "Please specify a directory on a larger disk using the --temp-dir argument."
+      )
+      print("For example: --temp-dir /path/to/large/disk/temp")
+    else:
+      print(f"\n❌ An OS error occurred while saving dataset '{repo_id}': {e}")
+  except Exception as e:
+    print(f"\n❌ An unexpected error occurred while saving dataset '{repo_id}': {e}")
 
 
 def use(
@@ -678,6 +721,61 @@ def main():
     help="Path to a temporary directory with sufficient space. Defaults to system temp.",
   )
   parser_save_hf.set_defaults(func=save_hf_model_files_to_gcs)
+
+  # `save-hf-dataset` command
+  parser_save_dataset = subparsers.add_parser(
+    "save-hf-dataset",
+    help=save_hf_dataset.__doc__,
+    formatter_class=argparse.RawTextHelpFormatter,
+  )
+  parser_save_dataset.add_argument(
+    "--repo-id",
+    type=str,
+    required=True,
+    help="Hugging Face dataset repo ID (e.g., 'wikitext').",
+  )
+  parser_save_dataset.add_argument(
+    "--gcs-path",
+    type=str,
+    required=True,
+    help="Target GCS path for the dataset (e.g., 'gs://bucket/datasets/wikitext').",
+  )
+  parser_save_dataset.add_argument(
+    "--config-name",
+    type=str,
+    default=None,
+    help="Optional dataset configuration name (e.g., 'wikitext-103-raw-v1').",
+  )
+  parser_save_dataset.add_argument(
+    "--preprocess",
+    action="store_true",
+    help="If set, preprocess the dataset (tokenize and chunk). Otherwise, save the raw dataset.",
+  )
+  parser_save_dataset.add_argument(
+    "--split",
+    type=str,
+    default=None,
+    help="Dataset split to process (e.g., 'train'). Required if --preprocess is set. If not preprocessing, all splits are saved.",
+  )
+  parser_save_dataset.add_argument(
+    "--tokenizer-repo-id",
+    type=str,
+    default=None,
+    help="HF repo ID for the tokenizer. Required if --preprocess is set.",
+  )
+  parser_save_dataset.add_argument(
+    "--block-size",
+    type=int,
+    default=None,
+    help="Block size for chunking. Required if --preprocess is set.",
+  )
+  parser_save_dataset.add_argument(
+    "--temp-dir",
+    type=str,
+    default=None,
+    help="Path to a temporary directory with sufficient space. Defaults to system temp.",
+  )
+  parser_save_dataset.set_defaults(func=save_hf_dataset)
 
   # Parse arguments
   known_args, remaining_args = parser.parse_known_args()

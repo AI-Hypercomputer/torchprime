@@ -31,6 +31,11 @@ output_dir: outputs
 # If unspecified, defaults to the current date and time.
 run_name: null
 
+dataset:
+  # If true, the dataset specified by `hf_dataset_name` or `file_dataset_path`
+  # is assumed to be pre-tokenized and saved to disk.
+  is_preprocessed: false
+
 # The virtual device mesh shape to use within a TPU slice. This is also called
 # the "ICI mesh", since devices within a slice enjoy a faster network called
 # "Inter-Chip Interconnect".
