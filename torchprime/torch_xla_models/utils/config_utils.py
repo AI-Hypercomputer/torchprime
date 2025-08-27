@@ -16,7 +16,7 @@ def config_vaidator(config: dict):
     dp_size *= getattr(config.dcn_mesh, "data", 1)
 
   assert config.task.global_batch_size >= fsdp_size * dp_size, (
-    f"ici/dcn_mesh.fsdp ({fsdp_size}) * ici/dcn_mesh.data ({dp_size}) should be no less than global_batch_size ({config.task.global_batch_size})"
+    f"Global_batch_size ({config.task.global_batch_size}) should be no less than ici/dcn_mesh.fsdp ({fsdp_size}) * ici/dcn_mesh.data ({dp_size})"
   )
 
   if (
