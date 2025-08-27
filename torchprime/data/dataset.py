@@ -9,7 +9,9 @@ from transformers.tokenization_utils import PreTrainedTokenizerBase
 from torchprime.torch_xla_models.model import model_utils
 
 
-def _load_preprocessed_dataset(path: str, cache_dir: str | None) -> Dataset | DatasetDict:
+def _load_preprocessed_dataset(
+  path: str, cache_dir: str | None
+) -> Dataset | DatasetDict:
   """Loads a `datasets` object from a directory saved with `save_to_disk`.
 
   Handles both local paths and GCS URIs. If a GCS path is provided, the data is
@@ -23,9 +25,7 @@ def _load_preprocessed_dataset(path: str, cache_dir: str | None) -> Dataset | Da
     The loaded `datasets.Dataset` or `datasets.DatasetDict` object.
   """
   if path.startswith("gs://"):
-    with model_utils.local_path_from_gcs(
-      path, temp_dir=cache_dir
-    ) as local_path:
+    with model_utils.local_path_from_gcs(path, temp_dir=cache_dir) as local_path:
       return load_from_disk(local_path)
   return load_from_disk(path)
 
