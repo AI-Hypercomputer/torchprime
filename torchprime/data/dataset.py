@@ -57,11 +57,15 @@ def _load_hf_dataset(
   split: str,
   cache_dir: str | None,
 ) -> Dataset:
-  """Download and return a dataset from Hugging Face Hub.
+  """Load a dataset from Hugging Face Hub or a GCS path.
+
+  If `name` is a GCS path (starts with 'gs://'), it loads a `datasets` object
+  from a directory saved with `save_to_disk`. Otherwise, it downloads and
+  returns a dataset from Hugging Face Hub.
 
   Args:
-    name: Name of the dataset on the hub.
-    config: Optional configuration name.
+    name: Name of the dataset on the hub, or a GCS path to a saved dataset.
+    config: Optional configuration name for datasets from the Hub.
     split: Split to load.
     cache_dir: Directory where the dataset cache should live.
 
@@ -126,7 +130,7 @@ def make_train_dataset(
   tokenizer: PreTrainedTokenizerBase,
   block_size: int,
 ) -> Dataset:
-  """Loads a dataset, tokenizes it, and chunks it into fixed-size blocks.
+  """Loads and tokenizes a dataset, then chunks it into fixed-size blocks for training.
 
   This function downloads a dataset from the Hugging Face Hub, tokenizes the `text`
   column using the provided tokenizer, and groups the resulting tokens into
