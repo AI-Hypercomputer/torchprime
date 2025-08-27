@@ -69,7 +69,11 @@ def _load_hf_dataset(
     The loaded ``Dataset`` instance for ``split``.
   """
 
-  data = load_dataset(name, config, split=split, cache_dir=cache_dir)
+  if name.startswith("gs://"):
+    with model_utils.local_path_from_gcs(name, temp_dir=cache_dir) as local_path:
+      data = load_from_disk(local_path)
+  else:
+    data = load_dataset(name, config, split=split, cache_dir=cache_dir)
   assert isinstance(data, Dataset | DatasetDict)
   if isinstance(data, DatasetDict):
     data = data[split]
