@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from datasets import DatasetDict, load_dataset
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
@@ -105,6 +104,8 @@ def _save_raw_dataset(
   temp_dir: str | None,
 ):
   """Saves all raw dataset splits to GCS."""
+  from datasets import DatasetDict, load_dataset
+
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
     logger.info(f"Downloading raw dataset '{repo_id}' to '{tmpdir}'...")
     # load_dataset without a split downloads a DatasetDict with all splits
