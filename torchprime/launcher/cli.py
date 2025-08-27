@@ -25,7 +25,6 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import torchprime.launcher.doctor
-from torchprime.launcher import save_hf_assets_to_gcs
 from torchprime.launcher.buildpush import buildpush
 from torchprime.launcher.util import run_docker
 
@@ -57,6 +56,8 @@ def save_hf_model_files_to_gcs(
   repo_id: str, gcs_path: str, file_type: str, temp_dir: str | None
 ):
   """Downloads model and tokenizer files from Hugging Face Hub and saves them to Google Cloud Storage."""
+  from torchprime.launcher import save_hf_assets_to_gcs
+
   print(f"Preparing to save '{file_type}' files from '{repo_id}' to '{gcs_path}'...")
   try:
     save_hf_assets_to_gcs.save_hf_model_files_to_gcs(
@@ -85,6 +86,8 @@ def save_hf_dataset(
   temp_dir: str | None,
 ):
   """Save Huggingface dataset to Google cloud storage."""
+  from torchprime.launcher import save_hf_assets_to_gcs
+
   print(f"Preparing to save dataset '{repo_id}' to '{gcs_path}'...")
   try:
     save_hf_assets_to_gcs.save_hf_dataset_to_gcs(
