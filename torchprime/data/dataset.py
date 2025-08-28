@@ -84,8 +84,6 @@ def load_hf_or_json_dataset(
   if hf_dataset_name:
     data = _load_hf_dataset(hf_dataset_name, hf_dataset_config_name, split, cache_dir)
   elif file_dataset_path:
-    if split is None:
-      raise ValueError("Loading all splits is not supported for a single JSONL file.")
     data = _load_json_dataset(file_dataset_path, split)
   else:
     raise ValueError("Either hf_dataset_name or file_dataset_path must be provided")
