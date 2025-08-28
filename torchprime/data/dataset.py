@@ -90,9 +90,9 @@ def load_hf_or_json_dataset(
   else:
     raise ValueError("Either hf_dataset_name or file_dataset_path must be provided")
 
-  assert isinstance(
-    data, Dataset | DatasetDict
-  ), "Loaded dataset must be a Dataset or DatasetDict instance."
+  assert isinstance(data, Dataset | DatasetDict), (
+    "Loaded dataset must be a Dataset or DatasetDict instance."
+  )
 
   return data
 
