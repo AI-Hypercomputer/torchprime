@@ -113,8 +113,8 @@ def make_train_dataset(
   contiguous blocks of fixed length (`block_size`). This block-wise packing is useful
   for efficient language modeling, especially on accelerators like TPUs.
 
-  If `is_preprocessed` is True, the function loads a dataset directly from the
-  path specified in `hf_dataset_name` or `file_dataset_path`, skipping tokenization.
+  If `is_preprocessed` is True, the function loads a dataset directly from the path
+  specified in `hf_dataset_name`, skipping tokenization.
 
   Args:
     hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").

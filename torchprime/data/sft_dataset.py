@@ -284,8 +284,8 @@ def make_sft_dataset(
 ) -> Dataset:
   """Create a dataset for supervised fine-tuning.
 
-  If `is_preprocessed` is True, the function loads a dataset directly from the
-  path specified in `hf_dataset_name` or `file_dataset_path`, skipping tokenization.
+  If `is_preprocessed` is True, the function loads a dataset directly from the path
+  specified in `hf_dataset_name`, skipping tokenization.
   The data can be in plain prompt/completion form or chat format.
 
   Args:
