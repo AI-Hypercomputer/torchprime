@@ -6,11 +6,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from datasets import DatasetDict, get_dataset_split_names, load_dataset
+from datasets import DatasetDict, load_dataset
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
 from torchprime.data import dataset as torchprime_dataset
+from torchprime.torch_xla_models.model import model_utils
 
 logger = logging.getLogger(__name__)
 
@@ -147,36 +148,25 @@ def _save_preprocessed_dataset(
   """
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
     logger.info(f"Loading tokenizer '{tokenizer_repo_id}'...")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_repo_id)
+    with model_utils.local_path_from_gcs(
+      tokenizer_repo_id, temp_dir=tmpdir
+    ) as tokenizer_path:
+      tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 
-    if split:
-      logger.info(
-        f"Loading and preprocessing split '{split}' from dataset '{repo_id}'..."
-      )
-      processed_dataset = torchprime_dataset.make_train_dataset(
-        dataset_path_or_name=repo_id,
-        dataset_config_name=config_name,
-        split=split,
-        tokenizer=tokenizer,
-        block_size=block_size,
-        cache_dir=tmpdir,
-      )
-    else:
-      logger.info(f"Loading and preprocessing all splits from dataset '{repo_id}'...")
-      split_names = get_dataset_split_names(repo_id, name=config_name)
-      processed_splits = {}
-      for split_name in split_names:
-        logger.info(f"  - Processing split: {split_name}")
-        processed_split = torchprime_dataset.make_train_dataset(
-          dataset_path_or_name=repo_id,
-          dataset_config_name=config_name,
-          split=split_name,
-          tokenizer=tokenizer,
-          block_size=block_size,
-          cache_dir=tmpdir,
-        )
-        processed_splits[split_name] = processed_split
-      processed_dataset = DatasetDict(processed_splits)
+    log_message = (
+      f"Loading and preprocessing split '{split}' from dataset '{repo_id}'..."
+      if split
+      else f"Loading and preprocessing all splits from dataset '{repo_id}'..."
+    )
+    logger.info(log_message)
+    processed_dataset = torchprime_dataset.make_train_dataset(
+      hf_dataset_name=repo_id,
+      hf_dataset_config_name=config_name,
+      split=split,
+      tokenizer=tokenizer,
+      block_size=block_size,
+      cache_dir=tmpdir,
+    )
 
     save_path = Path(tmpdir) / "preprocessed_dataset"
     logger.info(f"Saving preprocessed dataset to disk at '{save_path}'...")

@@ -7,7 +7,7 @@ from typing import Literal
 from datasets import Dataset
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
-from .dataset import _load_preprocessed_dataset, load_hf_or_json_dataset
+from .dataset import _load_hf_dataset, load_hf_or_json_dataset
 
 COMPUTE_OPTION = Literal["all", "completion", "assistant", "last_assistant"]
 FORMAT_OPTION = Literal["prompt_completion", "chat"]
@@ -307,12 +307,13 @@ def make_sft_dataset(
     Dataset of tokenized examples ready for model training.
   """
   if is_preprocessed:
-    path = hf_dataset_name or file_dataset_path
-    if not path:
+    if not hf_dataset_name:
       raise ValueError(
-        "A path must be provided via `hf_dataset_name` or `file_dataset_path` when `is_preprocessed` is True."
+        "A path must be provided via `hf_dataset_name` when `is_preprocessed` is True."
       )
-    data = _load_preprocessed_dataset(path, split, cache_dir)
+    data = _load_hf_dataset(
+      name=hf_dataset_name, config=None, split=split, cache_dir=cache_dir
+    )
     required_cols = ["input_ids", "labels", "attention_mask"]
     if not all(col in data.features for col in required_cols):
       raise ValueError(
