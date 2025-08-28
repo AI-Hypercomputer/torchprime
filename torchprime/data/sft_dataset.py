@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from datasets import Dataset, DatasetDict
+from datasets import Dataset
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
-from .dataset import _load_preprocessed_dataset, load_hf_or_json_dataset
+from .dataset import _load_preprocessed_dataset, _load_raw_dataset
 
 COMPUTE_OPTION = Literal["all", "completion", "assistant", "last_assistant"]
 FORMAT_OPTION = Literal["prompt_completion", "chat"]
@@ -268,9 +268,8 @@ def _pad_and_maybe_pack_samples(
 
 
 def make_sft_dataset(
-  hf_dataset_name: str | None = None,
-  hf_dataset_config_name: str | None = None,
-  file_dataset_path: str | None = None,
+  dataset_path_or_name: str,
+  dataset_config_name: str | None = None,
   is_preprocessed: bool = False,
   split: str = "train",
   cache_dir: str | None = None,
@@ -289,10 +288,9 @@ def make_sft_dataset(
   The data can be in plain prompt/completion form or chat format.
 
   Args:
-    hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
-    hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
-    file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
-    is_preprocessed: If True, load a pre-tokenized dataset from disk.
+    dataset_path_or_name: HF dataset name, or a path to a local/GCS dataset.
+    dataset_config_name: Optional HF dataset config name.
+    is_preprocessed: If True, load a pre-tokenized dataset directly from the path.
     split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     format: ``"prompt_completion"`` or ``"chat"``.
@@ -307,15 +305,7 @@ def make_sft_dataset(
     Dataset of tokenized examples ready for model training.
   """
   if is_preprocessed:
-    path = hf_dataset_name or file_dataset_path
-    if not path:
-      raise ValueError(
-        "A path must be provided via `hf_dataset_name` or `file_dataset_path` when `is_preprocessed` is True."
-      )
-    data = _load_preprocessed_dataset(path, cache_dir)
-    if isinstance(data, DatasetDict):
-      data = data[split]
-
+    data = _load_preprocessed_dataset(dataset_path_or_name, split, cache_dir)
     required_cols = ["input_ids", "labels", "attention_mask"]
     if not all(col in data.features for col in required_cols):
       raise ValueError(
@@ -324,10 +314,9 @@ def make_sft_dataset(
       )
     return data
 
-  data = load_hf_or_json_dataset(
-    hf_dataset_name=hf_dataset_name,
-    hf_dataset_config_name=hf_dataset_config_name,
-    file_dataset_path=file_dataset_path,
+  data = _load_raw_dataset(
+    path_or_name=dataset_path_or_name,
+    config_name=dataset_config_name,
     split=split,
     cache_dir=cache_dir,
   )

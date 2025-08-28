@@ -10,24 +10,30 @@ from torchprime.torch_xla_models.model import model_utils
 
 
 def _load_preprocessed_dataset(
-  path: str, cache_dir: str | None
-) -> Dataset | DatasetDict:
+  path: str, split: str, cache_dir: str | None
+) -> Dataset:
   """Loads a `datasets` object from a directory saved with `save_to_disk`.
 
   Handles both local paths and GCS URIs. If a GCS path is provided, the data is
-  first downloaded to a local temporary directory.
+  first downloaded to a local temporary directory. If the loaded object is a
+  `DatasetDict`, the specified `split` is returned.
 
   Args:
     path: The path to the dataset directory (local or GCS).
+    split: The dataset split to load.
     cache_dir: Optional temporary directory for GCS downloads.
 
   Returns:
-    The loaded `datasets.Dataset` or `datasets.DatasetDict` object.
+    The loaded `datasets.Dataset` object.
   """
   if path.startswith("gs://"):
     with model_utils.local_path_from_gcs(path, temp_dir=cache_dir) as local_path:
-      return load_from_disk(local_path)
-  return load_from_disk(path)
+      data = load_from_disk(local_path)
+  else:
+    data = load_from_disk(path)
+  if isinstance(data, DatasetDict):
+    return data[split]
+  return data
 
 
 def _load_json_dataset(path: str, split: str) -> Dataset:
@@ -84,35 +90,31 @@ def _load_hf_dataset(
   return data
 
 
-def load_hf_or_json_dataset(
-  hf_dataset_name: str | None = None,
-  hf_dataset_config_name: str | None = None,
-  file_dataset_path: str | None = None,
+def _load_raw_dataset(
+  path_or_name: str,
+  config_name: str | None = None,
   split: str = "train",
   cache_dir: str | None = None,
 ):
-  """Loads a dataset either from Hugging Face Hub or a local/remote JSONL file.
+  """Loads a raw dataset from Hugging Face Hub, a GCS path, or a JSONL file.
 
   This function abstracts the logic for loading datasets from two sources:
-  1. Hugging Face Hub via `datasets.load_dataset`.
-  2. JSONL files (either local or `gs://`-hosted) using `fsspec`.
+  1. Hugging Face Hub or a pre-saved GCS dataset directory.
+  2. A JSONL file (local or `gs://`-hosted).
 
   Args:
-    hf_dataset_name: Optional name of the HF dataset.
-    hf_dataset_config_name: Optional configuration name for the HF dataset.
-    file_dataset_path: Optional path to a JSONL file (local or remote).
+    path_or_name: Name of the HF dataset, or a path to a JSONL file or GCS directory.
+    config_name: Optional configuration name for the HF dataset.
     split: Dataset split to load (default is "train").
     cache_dir: Optional directory to use for dataset caching (HF only).
 
   Returns:
     A HuggingFace ``Dataset`` instance.
   """
-  if hf_dataset_name:
-    data = _load_hf_dataset(hf_dataset_name, hf_dataset_config_name, split, cache_dir)
-  elif file_dataset_path:
-    data = _load_json_dataset(file_dataset_path, split)
+  if path_or_name.endswith((".json", ".jsonl")):
+    data = _load_json_dataset(path_or_name, split)
   else:
-    raise ValueError("Either hf_dataset_name or file_dataset_path must be provided")
+    data = _load_hf_dataset(path_or_name, config_name, split, cache_dir)
 
   assert isinstance(data, Dataset), "Loaded dataset must be a Dataset instance."
 
@@ -120,9 +122,8 @@ def load_hf_or_json_dataset(
 
 
 def make_train_dataset(
-  hf_dataset_name: str | None = None,
-  hf_dataset_config_name: str | None = None,
-  file_dataset_path: str | None = None,
+  dataset_path_or_name: str,
+  dataset_config_name: str | None = None,
   is_preprocessed: bool = False,
   split: str = "train",
   cache_dir: str | None = None,
@@ -130,7 +131,7 @@ def make_train_dataset(
   tokenizer: PreTrainedTokenizerBase,
   block_size: int,
 ) -> Dataset:
-  """Loads and tokenizes a dataset, then chunks it into fixed-size blocks for training.
+  """Load and prepare a dataset for causal language model training.
 
   This function downloads a dataset from the Hugging Face Hub, tokenizes the `text`
   column using the provided tokenizer, and groups the resulting tokens into
@@ -138,13 +139,12 @@ def make_train_dataset(
   for efficient language modeling, especially on accelerators like TPUs.
 
   If `is_preprocessed` is True, the function loads a dataset directly from the
-  path specified in `hf_dataset_name` or `file_dataset_path`, skipping tokenization.
+  path specified in `dataset_path_or_name`, skipping tokenization.
 
   Args:
-    hf_dataset_name: Optional Hugging Face dataset name. (e.g., "wikitext").
-    hf_dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
-    file_dataset_path: Optional path or ``gs://`` URI to a JSONL dataset.
-    is_preprocessed: If True, load a pre-tokenized dataset from disk.
+    dataset_path_or_name: HF dataset name, or a path to a local/GCS dataset.
+    dataset_config_name: Optional HF dataset config name. (e.g., "wikitext-103-raw-v1").
+    is_preprocessed: If True, load a pre-tokenized dataset directly from the path.
     split: Dataset split to load from HF. (e.g., "train", "validation").
     cache_dir: Optional directory for HF dataset cache.
     tokenizer: A Hugging Face tokenizer used to tokenize the input text.
@@ -154,26 +154,16 @@ def make_train_dataset(
     A `Dataset` object with tokenized and block-wise grouped training examples.
   """
   if is_preprocessed:
-    path = hf_dataset_name or file_dataset_path
-    if not path:
-      raise ValueError(
-        "A path must be provided via `hf_dataset_name` or `file_dataset_path` when `is_preprocessed` is True."
-      )
-    data = _load_preprocessed_dataset(path, cache_dir)
-    if isinstance(data, DatasetDict):
-      data = data[split]
-
-    # Ensure required columns exist for training.
+    data = _load_preprocessed_dataset(dataset_path_or_name, split, cache_dir)
     if "input_ids" not in data.features or "labels" not in data.features:
       raise ValueError(
         "Pre-processed dataset is missing 'input_ids' or 'labels' column, which are required for training."
       )
     return data
 
-  data = load_hf_or_json_dataset(
-    hf_dataset_name=hf_dataset_name,
-    hf_dataset_config_name=hf_dataset_config_name,
-    file_dataset_path=file_dataset_path,
+  data = _load_raw_dataset(
+    path_or_name=dataset_path_or_name,
+    config_name=dataset_config_name,
     split=split,
     cache_dir=cache_dir,
   )

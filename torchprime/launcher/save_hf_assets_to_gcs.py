@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, get_dataset_split_names, load_dataset
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
@@ -102,14 +102,22 @@ def _save_raw_dataset(
   repo_id: str,
   gcs_path: str,
   config_name: str | None,
+  split: str | None,
   temp_dir: str | None,
 ):
-  """Saves all raw dataset splits to GCS."""
+  """Saves raw dataset splits to GCS.
+
+  If a split is specified, only that split is saved. Otherwise, all splits
+  are saved as a `DatasetDict`.
+  """
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
-    logger.info(f"Downloading raw dataset '{repo_id}' to '{tmpdir}'...")
-    # load_dataset without a split downloads a DatasetDict with all splits
-    dataset = load_dataset(repo_id, name=config_name, cache_dir=tmpdir)
-    assert isinstance(dataset, DatasetDict)
+    if split:
+      logger.info(f"Downloading raw dataset split '{split}' from '{repo_id}' to '{tmpdir}'...")
+      dataset = load_dataset(repo_id, name=config_name, split=split, cache_dir=tmpdir)
+    else:
+      logger.info(f"Downloading all raw dataset splits from '{repo_id}' to '{tmpdir}'...")
+      dataset = load_dataset(repo_id, name=config_name, cache_dir=tmpdir)
+      assert isinstance(dataset, DatasetDict)
 
     save_path = Path(tmpdir) / "raw_dataset"
     logger.info(f"Saving raw dataset to disk at '{save_path}'...")
@@ -123,27 +131,48 @@ def _save_preprocessed_dataset(
   repo_id: str,
   gcs_path: str,
   config_name: str | None,
-  split: str,
+  split: str | None,
   tokenizer_repo_id: str,
   block_size: int,
   temp_dir: str | None,
 ):
-  """Preprocesses a single split and saves it to GCS."""
+  """Preprocesses dataset splits and saves them to GCS.
+
+  If a split is specified, only that split is preprocessed and saved.
+  Otherwise, all available splits are preprocessed and saved as a `DatasetDict`.
+  """
   with tempfile.TemporaryDirectory(dir=temp_dir) as tmpdir:
     logger.info(f"Loading tokenizer '{tokenizer_repo_id}'...")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_repo_id)
 
-    logger.info(
-      f"Loading and preprocessing split '{split}' from dataset '{repo_id}'..."
-    )
-    processed_dataset = torchprime_dataset.make_train_dataset(
-      hf_dataset_name=repo_id,
-      hf_dataset_config_name=config_name,
-      split=split,
-      tokenizer=tokenizer,
-      block_size=block_size,
-      cache_dir=tmpdir,
-    )
+    if split:
+      logger.info(
+        f"Loading and preprocessing split '{split}' from dataset '{repo_id}'..."
+      )
+      processed_dataset = torchprime_dataset.make_train_dataset(
+        dataset_path_or_name=repo_id,
+        dataset_config_name=config_name,
+        split=split,
+        tokenizer=tokenizer,
+        block_size=block_size,
+        cache_dir=tmpdir,
+      )
+    else:
+      logger.info(f"Loading and preprocessing all splits from dataset '{repo_id}'...")
+      split_names = get_dataset_split_names(repo_id, name=config_name)
+      processed_splits = {}
+      for split_name in split_names:
+        logger.info(f"  - Processing split: {split_name}")
+        processed_split = torchprime_dataset.make_train_dataset(
+          dataset_path_or_name=repo_id,
+          dataset_config_name=config_name,
+          split=split_name,
+          tokenizer=tokenizer,
+          block_size=block_size,
+          cache_dir=tmpdir,
+        )
+        processed_splits[split_name] = processed_split
+      processed_dataset = DatasetDict(processed_splits)
 
     save_path = Path(tmpdir) / "preprocessed_dataset"
     logger.info(f"Saving preprocessed dataset to disk at '{save_path}'...")
@@ -165,18 +194,20 @@ def save_hf_dataset_to_gcs(
 ):
   """Downloads a Hugging Face dataset, optionally preprocesses it, and uploads to GCS."""
   if preprocess:
-    if not tokenizer_repo_id or not block_size or not split:
+    if not tokenizer_repo_id or not block_size:
       raise ValueError(
-        "For preprocessing, 'tokenizer_repo_id', 'block_size', and 'split' must be provided."
+        "For preprocessing, 'tokenizer_repo_id' and 'block_size' must be provided."
       )
-    logger.info(f"Processing split '{split}' of dataset '{repo_id}'.")
+    if split:
+      logger.info(f"Processing split '{split}' of dataset '{repo_id}'.")
+    else:
+      logger.info(f"Processing all splits of dataset '{repo_id}'.")
     _save_preprocessed_dataset(
       repo_id, gcs_path, config_name, split, tokenizer_repo_id, block_size, temp_dir
     )
   else:
     if split:
-      logger.warning(
-        "The --split argument is ignored when not preprocessing. All splits will be saved."
-      )
-    logger.info(f"Saving raw version of dataset '{repo_id}'.")
-    _save_raw_dataset(repo_id, gcs_path, config_name, temp_dir)
+      logger.info(f"Saving raw split '{split}' of dataset '{repo_id}'.")
+    else:
+      logger.info(f"Saving all raw splits of dataset '{repo_id}'.")
+    _save_raw_dataset(repo_id, gcs_path, config_name, split, temp_dir)

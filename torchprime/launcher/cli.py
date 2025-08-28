@@ -758,7 +758,7 @@ def main():
     "--split",
     type=str,
     default=None,
-    help="Dataset split to process (e.g., 'train'). Required if --preprocess is set. If not preprocessing, all splits are saved.",
+    help="Dataset split to process (e.g., 'train'). If not provided, all available splits will be processed/saved.",
   )
   parser_save_dataset.add_argument(
     "--tokenizer-repo-id",
