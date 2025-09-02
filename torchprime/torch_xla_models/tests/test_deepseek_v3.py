@@ -232,9 +232,7 @@ def test_forward_and_backward_torch_xla_against_native(input_size):
   # Arrange
   fixture = get_deepseek_v3_dummy()
   cpu_device = torch.device("cpu")
-  input_ids = torch.randint(
-    fixture.vocab_size, (2, input_size // 2), device=cpu_device
-  )
+  input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2), device=cpu_device)
   attention_mask = torch.ones_like(input_ids)
 
   # Act
@@ -290,7 +288,9 @@ def test_forward_and_backward_torch_xla_against_native(input_size):
       )
     except AssertionError as e:
       grad_xla_cpu = p_xla.grad.cpu()
-      print(f"\n----- Gradient mismatch for parameter: {name_native} (Native vs XLA) -----")
+      print(
+        f"\n----- Gradient mismatch for parameter: {name_native} (Native vs XLA) -----"
+      )
       diff = (p_native.grad - grad_xla_cpu).abs()
       print(f"Max absolute difference: {diff.max().item():.6f}")
 
