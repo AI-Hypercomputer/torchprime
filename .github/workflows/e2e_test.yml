@@ -78,7 +78,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -99,7 +99,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -122,7 +122,7 @@ jobs:
             model=llama-3.1-8b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3.1-405b \
             model.attention_kernel=splash_attention \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -144,7 +144,7 @@ jobs:
             model=llama-3.1-8b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3.1-405b \
             model/remat=llama-scan-offload \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -166,7 +166,7 @@ jobs:
             model=llama-3-8b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             model/sharding=llama-fsdp-tp \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -189,7 +189,7 @@ jobs:
             model=llama-3-8b-cp \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             model/sharding=llama-fsdp-tp-cp \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=4 \
             task.max_steps=15 \
@@ -211,7 +211,7 @@ jobs:
             model=mixtral-8x7b \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/mixtral-8x7b-v0.1/ \
             model.num_hidden_layers=16 \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=8 \
             task.lr_scheduler.type=constant \
@@ -234,7 +234,7 @@ jobs:
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             model=llama-3-8b \
             model/sharding=llama-fsdp \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=16 \
             task.lr_scheduler.type=constant \
@@ -256,6 +256,7 @@ jobs:
             torchprime/torch_xla_models/train.py \
             --config-name llama-3-8b-sft-w-gsm8k \
             model.pretrained_model=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
+            dataset.name=gs://torchprime/e2e-test/datasets/gsm8k \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             ici_mesh.fsdp=4 \
             task.max_steps=50 \
@@ -277,7 +278,7 @@ jobs:
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             model=llama-3-8b \
             model/sharding=llama-fsdp \
-            dataset=wikitext \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             task=train \
             task.global_batch_size=16 \
             task.lr_scheduler.type=constant \
@@ -298,7 +299,8 @@ jobs:
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=deepseek-v3-shallow \
-            dataset=wikitext \
+            model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/deepseek-v3-tokenizer \
+            dataset.name=gs://torchprime/e2e-test/datasets/wikitext \
             dataset.block_size=512 \
             task=train \
             task.lr_scheduler.type=constant \
