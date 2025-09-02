@@ -137,7 +137,7 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
           rtol=1e-6,
           msg=f"Gradients for '{name_hf}' differ",
         )
-      except AssertionError as e:
+      except AssertionError:
         print(f"\n----- Gradient mismatch for parameter: {name_hf} (HF vs TP) -----")
         diff = (p_hf.grad - p_model.grad).abs()
         print(f"Max absolute difference: {diff.max().item():.6f}")
@@ -286,7 +286,7 @@ def test_forward_and_backward_torch_xla_against_native(input_size):
         rtol=1e-6,
         msg=f"Gradients for '{name_native}' differ between Native and XLA",
       )
-    except AssertionError as e:
+    except AssertionError:
       grad_xla_cpu = p_xla.grad.cpu()
       print(
         f"\n----- Gradient mismatch for parameter: {name_native} (Native vs XLA) -----"
