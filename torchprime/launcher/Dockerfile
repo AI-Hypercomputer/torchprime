@@ -28,7 +28,7 @@ WORKDIR /workspaces
 # Reinstall torch_xla nightly
 RUN pip uninstall -y torch torchvision torch_xla
 RUN pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
-RUN pip install 'torch_xla[tpu] @ https://storage.googleapis.com/pytorch-xla-releases/wheels/tpuvm/torch_xla-2.9.0.dev-cp312-cp312-linux_x86_64.whl' \
+RUN pip install 'torch_xla[tpu,pallas] @ https://storage.googleapis.com/pytorch-xla-releases/wheels/tpuvm/torch_xla-2.9.0.dev-cp312-cp312-linux_x86_64.whl' \
   --index-url https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/ \
   --find-links https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
