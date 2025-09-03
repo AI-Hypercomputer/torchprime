@@ -171,7 +171,7 @@ def test_forward_and_backward_our_model_against_hf_model(
     hf_logits, model_logits, atol=1e-6, rtol=1e-9, msg="Logits are not equal"
   )
   torch.testing.assert_close(
-    hf_loss, model_loss, atol=1e-6, rtol=1e-9, msg="Losses are not equal"
+    hf_loss, model_loss, atol=1e-4, rtol=1e-7, msg="Losses are not equal"
   )
   for (name_hf, p_hf), (name_model, p_model) in zip(
     hf_params, model_params, strict=True

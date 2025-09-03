@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.debug.profiler as xp
+import torch_xla.runtime as xr
 import transformers
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
@@ -37,9 +38,10 @@ class DummyModel(nn.Module):
 
 class DummyDataset(Dataset):
   def __getitem__(self, idx):
+    num_devices = xr.global_runtime_device_count()
     return {
-      "input_ids": torch.ones(4),
-      "attention_mask": torch.ones(4),
+      "input_ids": torch.ones(num_devices, 4),
+      "attention_mask": torch.ones(num_devices, 4),
     }
 
   def __len__(self):
@@ -49,12 +51,13 @@ class DummyDataset(Dataset):
 # TODO: Replace FakeMesh with a real mesh implementation when available.
 class FakeMesh:
   def __init__(self):
-    self.device_ids = [0]
+    self.num_devices = xr.global_runtime_device_count()
+    self.device_ids = np.array(range(self.num_devices))
     self.axis_names = ("data", "fsdp")
-    self.mesh_shape = (1, 1)
+    self.mesh_shape = (1, self.num_devices)
 
   def shape(self):
-    return {"data": 1, "fsdp": 1}
+    return {"data": 1, "fsdp": self.num_devices}
 
   def get_axis_name_idx(self, axis_name):
     return self.axis_names.index(axis_name)
@@ -65,6 +68,7 @@ class FakeMesh:
 
 @pytest.fixture
 def dummy_config():
+  num_devices = xr.global_runtime_device_count()
   return OmegaConf.create(
     {
       "model": {
@@ -80,7 +84,7 @@ def dummy_config():
       "data": {"name": "dummy_dataset", "block_size": 4},
       "task": {
         "name": "dummy_task",
-        "global_batch_size": 4,
+        "global_batch_size": num_devices,
         "max_steps": 2,
         "optimizer": {"type": "adafactor", "learning_rate": 1e-3},
         "max_grad_norm": None,
@@ -93,7 +97,7 @@ def dummy_config():
       "profile_start_step": -1,
       "profile_end_step": -1,
       "profile_dir": "/tmp/profile",
-      "ici_mesh": {"data": 1, "fsdp": 1, "tensor": 1, "context": 1},
+      "ici_mesh": {"data": 1, "fsdp": num_devices, "tensor": 1, "context": 1},
       "dcn_mesh": {},
     }
   )
@@ -122,7 +126,7 @@ def test_trainer_initialization(monkeypatch, dummy_config):
 
   # Assert
   assert isinstance(trainer.model, DummyModel)
-  assert trainer.global_batch_size == 4
+  assert trainer.global_batch_size == xr.global_runtime_device_count()
 
 
 def test_trainer_optimizer(dummy_config):

@@ -304,10 +304,9 @@ def run(
   # Submit xpk workload
   workload_name = name
   if workload_name is None:
+    user = os.environ.get("USER").replace("_google_com", "")
     datetime_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-    workload_name = (
-      f"{os.environ['USER']}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}"
-    )
+    workload_name = f"{user}-xpk-{config.tpu_type}-{config.num_slices}-{datetime_str}"
 
   if not (
     re.match(r"[a-z]([-a-z0-9]*[a-z0-9])?", workload_name) and len(workload_name) < 40
