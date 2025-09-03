@@ -25,6 +25,14 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python
 
 WORKDIR /workspaces
 
+# Hack: Reinstall torch_xla nightly, to avoid compatibility issues
+# see: https://github.com/pytorch/xla/issues/9614
+RUN pip uninstall -y torch torchvision torch_xla
+RUN pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+RUN pip install 'torch_xla[tpu,pallas] @ https://storage.googleapis.com/pytorch-xla-releases/wheels/tpuvm/torch_xla-2.9.0.dev-cp312-cp312-linux_x86_64.whl' \
+  --index-url https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/ \
+  --find-links https://storage.googleapis.com/jax-releases/libtpu_releases.html
+
 # Install torchprime
 # Optimization: we rerun `pip install -e .` only if `pyproject.toml` changes.
 # Copy only the installation-related files first to make Docker cache them separately.
