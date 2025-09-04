@@ -46,7 +46,7 @@ def match_llama3_8b_pure_mlp(row):
     and config["ici_mesh"]["tensor"] == 1
     and (
       "pure_modules" in config["model"]
-      and config["model"]["pure_modules"] == ["LlamaMLP", "EinsumLinear"]
+      and config["model"]["pure_modules"] == ["LlamaMLP"]
     )
   )
 
@@ -117,7 +117,7 @@ def match_llama_3_8b_fsdp_cp(row):
   return (
     row.run_id.startswith("llama-3-8b-fsdp-cp")
     and ("context" in config["ici_mesh"] and config["ici_mesh"]["context"] == 2)
-    and config["ici_mesh"]["fsdp"] == 2
+    and config["ici_mesh"]["fsdp"] == 4
     and config["ici_mesh"]["tensor"] == 1
   )
 
@@ -126,8 +126,8 @@ def match_ds_v3_debug(row):
   config = json.loads(row.configs_framework)
   return (
     row.run_id.startswith("ds-v3-shallow")
-    and config["ici_mesh"]["fsdp"] == 4
-    and config["ici_mesh"]["tensor"] == 1
+    and config["ici_mesh"]["fsdp"] == 2
+    and config["ici_mesh"]["tensor"] == 2
   )
 
 
