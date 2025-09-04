@@ -142,7 +142,7 @@ BENCHMARKS = {
   "Llama 3.0 8B SFT": match_llama_3_8b_sft,
   "Llama 3.0 8B (ddp + fsdp)": match_llama_3_8b_ddp_fsdp,
   "Llama 3.0 8B (fsdp + cp)": match_llama_3_8b_fsdp_cp,
-  "Deepseek v3 Debug Model": match_ds_v3_debug,
+  "Deepseek v3 Shallow": match_ds_v3_debug,
 }
 
 STEP_ID_MAPPING = {
@@ -156,7 +156,7 @@ STEP_ID_MAPPING = {
   "Llama 3.0 8B SFT": "llama-3-8b-sft",
   "Llama 3.0 8B (ddp + fsdp)": "llama-3-8b-ddp-fsdp",
   "Llama 3.0 8B (fsdp + cp)": "llama-3-8b-fsdp-cp",
-  "Deepseek v3 Debug Model": "ds-v3-shallow",
+  "Deepseek v3 Shallow": "ds-v3-shallow",
 }
 """Mapping from the benchmark name to the ID of the E2E test step used in GitHub Actions."""
 

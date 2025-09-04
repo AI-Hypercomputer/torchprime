@@ -16,17 +16,17 @@ benchmarks:
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
     step_time_lower_bound: 2.404606
-    step_time_upper_bound: 2.77060138
-    confidence_interval: 0.183
-    average: 2.5876
-    sample_size: 13
+    step_time_upper_bound: 2.7809768
+    confidence_interval: 0.18819
+    average: 2.5928
+    sample_size: 15
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.76926631
-    step_time_upper_bound: 3.090974
-    confidence_interval: 0.16085
-    average: 2.9301
-    sample_size: 13
+    step_time_lower_bound: 2.787745
+    step_time_upper_bound: 3.1012594
+    confidence_interval: 0.15676
+    average: 2.9445
+    sample_size: 15
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
     step_time_lower_bound: 3.350034
@@ -37,10 +37,10 @@ benchmarks:
   mixtral-8x7b:
     name: Mixtral 8x7B
     step_time_lower_bound: 3.16206
-    step_time_upper_bound: 3.27380956
-    confidence_interval: 0.05587
-    average: 3.2179
-    sample_size: 18
+    step_time_upper_bound: 3.2775765
+    confidence_interval: 0.05776
+    average: 3.2198
+    sample_size: 20
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
     step_time_lower_bound: 4.14883322
@@ -65,13 +65,13 @@ benchmarks:
     average: 3.4535
     sample_size: 18
   ds-v3-shallow:
-    name: Deepseek v3 Debug Model
-    step_time_lower_bound: 0.207817
+    name: Deepseek v3 Shallow
+    step_time_lower_bound: 0.20689353
     step_time_upper_bound: 0.305103
-    confidence_interval: 0.04864
-    average: 0.2565
-    sample_size: 13
+    confidence_interval: 0.0491
+    average: 0.256
+    sample_size: 15
 metadata:
-  query_start: '2025-09-02T17:30:43.768374+00:00'
-  query_end: '2025-09-04T17:30:43+00:00'
+  query_start: '2025-09-02T20:51:32.414002+00:00'
+  query_end: '2025-09-04T20:51:32+00:00'
   confidence_level: 0.99
