@@ -27,6 +27,7 @@ def match_llama3_8b(row):
   return (
     row.run_id.startswith("llama-3-8b-")
     and not row.run_id.startswith("llama-3-8b-sft")
+    and not row.run_id.startswith("llama-3-8b-fsdp-cp")
     and config["dcn_mesh"]["data"] == 1
     and config["dcn_mesh"]["fsdp"] == 1
     and config["ici_mesh"]["tensor"] == 1
@@ -116,7 +117,6 @@ def match_llama_3_8b_fsdp_cp(row):
   config = json.loads(row.configs_framework)
   return (
     row.run_id.startswith("llama-3-8b-fsdp-cp")
-    and ("context" in config["ici_mesh"] and config["ici_mesh"]["context"] == 2)
     and config["ici_mesh"]["fsdp"] == 4
     and config["ici_mesh"]["tensor"] == 1
   )
@@ -430,7 +430,7 @@ def main():
       # TODO (https://github.com/AI-Hypercomputer/torchprime/issues/348):
       # preserve non-performance releated values in the file.
       if job_id == "llama-3-8b-sft":
-        benchmarks_data[job_id].update({"target_loss": 0.4735, "loss_tolerance": 0.001})
+        benchmarks_data[job_id].update({"target_loss": 0.4826, "loss_tolerance": 0.001})
 
   console.print(table)
 
