@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
@@ -48,59 +49,80 @@ def test_get_mesh():
   if topology.is_multi_slice():
     pytest.skip("This test only works on single slice")
 
-  # Test a custom mesh
-  config = OmegaConf.create(
-    {
-      "ici_mesh": {
-        "data": 1,
-        "fsdp": 64,
-        "tensor": 4,
-        "expert": 1,
-        "context": 1,
-      },
-      "dcn_mesh": {
-        "data": 1,
-        "fsdp": 1,
-        "tensor": 1,
-        "expert": 1,
-        "context": 1,
-      },
-    }
-  )
-  mesh = topology.get_mesh(config, num_devices=256)
-  from torchprime.tests.test_custom_mesh import get_64x4_reference_device_ids_1pod
+  num_devices = xr.global_runtime_device_count()
 
-  assert (
-    mesh.get_logical_mesh()
-    == get_64x4_reference_device_ids_1pod().reshape(1, 64, 4, 1, 1)
-  ).all()
+  # Test a custom mesh
+  if num_devices == 1:
+    config = OmegaConf.create(
+      {
+        "ici_mesh": {
+          "data": 1,
+          "fsdp": 1,
+          "tensor": 1,
+          "expert": 1,
+          "context": 1,
+        },
+        "dcn_mesh": {
+          "data": 1,
+          "fsdp": 1,
+          "tensor": 1,
+          "expert": 1,
+          "context": 1,
+        },
+      }
+    )
+    reference_device_ids = get_reference_device_ids(num_devices).reshape(1, 1, 1, 1, 1)
+  else:
+    config = OmegaConf.create(
+      {
+        "ici_mesh": {
+          "data": 1,
+          "fsdp": num_devices // 4,
+          "tensor": 4,
+          "expert": 1,
+          "context": 1,
+        },
+        "dcn_mesh": {
+          "data": 1,
+          "fsdp": 1,
+          "tensor": 1,
+          "expert": 1,
+          "context": 1,
+        },
+      }
+    )
+    reference_device_ids = get_reference_device_ids(num_devices).reshape(
+      1, num_devices // 4, 4, 1, 1
+    )
+
+  mesh = topology.get_mesh(config, num_devices)
+  assert (mesh.get_logical_mesh() == reference_device_ids).all()
 
   # Test a custom mesh2
-  config = OmegaConf.create(
-    {
-      "ici_mesh": {
-        "data": 1,
-        "fsdp": 32,
-        "tensor": 4,
-        "expert": 1,
-        "context": 2,
-      },
-      "dcn_mesh": {
-        "data": 1,
-        "fsdp": 1,
-        "tensor": 1,
-        "expert": 1,
-        "context": 1,
-      },
-    }
-  )
-  mesh = topology.get_mesh(config, num_devices=256)
-  from torchprime.tests.test_custom_mesh import get_64x4_reference_device_ids_1pod
-
-  assert (
-    mesh.get_logical_mesh()
-    == get_64x4_reference_device_ids_1pod().reshape(1, 32, 4, 1, 2)
-  ).all()
+  if num_devices > 1:
+    config = OmegaConf.create(
+      {
+        "ici_mesh": {
+          "data": 1,
+          "fsdp": num_devices // 4,
+          "tensor": 2,
+          "expert": 1,
+          "context": 2,
+        },
+        "dcn_mesh": {
+          "data": 1,
+          "fsdp": 1,
+          "tensor": 1,
+          "expert": 1,
+          "context": 1,
+        },
+      }
+    )
+    reference_device_ids = get_reference_device_ids(num_devices).reshape(
+      1, num_devices // 4, 2, 1, 2
+    )
+    mesh = topology.get_mesh(config, num_devices)
+    assert (mesh.get_logical_mesh() == reference_device_ids).all()
 
   # Test a simple FSDP mesh
   config = OmegaConf.create(
@@ -123,3 +145,7 @@ def test_get_mesh():
   )
   mesh = topology.get_mesh(config)
   assert mesh.get_logical_mesh().shape == (1, xr.global_runtime_device_count(), 1, 1, 1)
+
+
+def get_reference_device_ids(num_devices):
+  return np.array(list(range(num_devices)))
