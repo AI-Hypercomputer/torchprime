@@ -11,6 +11,10 @@ from transformers import DeepseekV3ForCausalLM as HFDeepseekV3ForCausalLM
 from torchprime.torch_xla_models.model.deepseek_v3 import (
   DeepseekV3ForCausalLM,
   convert_hf_state_dict_for_grouped_moe,
+  revert_grouped_moe_to_hf_state_dict,
+)
+from torchprime.torch_xla_models.tests.test_utils import (
+  get_forward_and_backward_outputs,
 )
 
 MOE_START_FROM_LAYER = 2  # layer 0,1 dense layers and layer 2+ moe layers
@@ -21,6 +25,7 @@ class DeepseekFixture:
   vocab_size: int
   hf_model: HFDeepseekV3ForCausalLM
   model: DeepseekV3ForCausalLM
+  n_routed_experts: int
 
 
 def get_deepseek_v3_dummy() -> DeepseekFixture:
@@ -65,7 +70,7 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
     converted_dict = convert_hf_state_dict_for_grouped_moe(hf_dict, model.config)
     model.load_state_dict(converted_dict, strict=True)
 
-  return DeepseekFixture(vocab_size, hf_model, model)
+  return DeepseekFixture(vocab_size, hf_model, model, config.n_routed_experts)
 
 
 def noop(mod):
@@ -81,36 +86,65 @@ def scan_decoders(mod):
 
 
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
-def test_forward_our_model_against_hf_model(transform):
+@pytest.mark.parametrize("input_size", [8, 16])
+def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
+  """Compares the numerical consistency of our model and huggingface model.
+
+  Asserts that logits, loss, and gradients are nearly identical after a
+  full forward and backward pass.
+  """
   fixture = get_deepseek_v3_dummy()
   device = torch_xla.device()
   model_xla = copy.deepcopy(fixture.model).to(device)
   model_xla = transform(model_xla)
   hf_model_xla = copy.deepcopy(fixture.hf_model).to(device)
   torch_xla.sync()
-  for input_size in [8, 16]:
-    input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2)).to(device)
-    hf_output = hf_model_xla(
-      input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
-    )
-    deepseek_xla_logits, deepseek_xla_loss = model_xla(
-      input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
-    )
-    torch_xla.sync()
-    torch.testing.assert_close(
-      hf_output.logits,
-      deepseek_xla_logits,
-      atol=1e-2,
-      rtol=1e-6,
-      msg="logits are not equal",
-    )
-    torch.testing.assert_close(
-      hf_output.loss,
-      deepseek_xla_loss,
-      atol=1e-2,
-      rtol=1e-6,
-      msg="loss is not equal",
-    )
+  input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2)).to(device)
+  attention_mask = torch.ones_like(input_ids)
+
+  (hf_logits, hf_loss), hf_params = get_forward_and_backward_outputs(
+    hf_model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
+  )
+  (model_logits, model_loss), _ = get_forward_and_backward_outputs(
+    model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
+  )
+
+  torch.testing.assert_close(
+    hf_logits,
+    model_logits,
+    atol=1e-2,
+    rtol=1e-6,
+    msg="logits are not equal",
+  )
+  torch.testing.assert_close(
+    hf_loss,
+    model_loss,
+    atol=1e-2,
+    rtol=1e-6,
+    msg="loss is not equal",
+  )
+
+  model_params = revert_grouped_moe_to_hf_state_dict(
+    dict(model_xla.named_parameters()),
+    fixture.n_routed_experts,
+    keep_existing_grad=True,
+  )
+
+  for name_hf, p_hf in hf_params:
+    if name_hf not in model_params:
+      print(f"❌ Parameter {name_hf} cannot find in the torchprime model")
+    name_model, p_model = name_hf, model_params[name_hf]
+    assert p_model.grad is not None, f"Model grad for {name_model} is None"
+    if p_hf.grad is None:
+      assert torch.all(p_model.grad == 0)
+    else:
+      torch.testing.assert_close(
+        p_hf.grad,
+        p_model.grad,
+        atol=1e-2,
+        rtol=1e-6,
+        msg=f"Gradients for '{name_hf}' differ",
+      )
 
 
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
@@ -187,35 +221,66 @@ def test_layers_by_layer_against_hf_model(transform):
     )
 
 
-def test_forward_torch_xla_against_native_cpu():
+@pytest.mark.parametrize("input_size", [8])
+def test_forward_and_backward_torch_xla_against_native(input_size):
+  """Compares the numerical consistency of our native and XLA models.
+
+  Asserts that logits, loss, and gradients are nearly identical after a
+  full forward and backward pass on both backends.
+  """
+  # Arrange
   fixture = get_deepseek_v3_dummy()
-  input_size = 8
-  device = torch.device("cpu")
-  input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2))
-  native_logits, native_loss = fixture.model(
-    input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
+  cpu_device = torch.device("cpu")
+  input_ids = torch.randint(fixture.vocab_size, (2, input_size // 2), device=cpu_device)
+  attention_mask = torch.ones_like(input_ids)
+
+  # Act
+  # --- Native CPU pass ---
+  model_native = fixture.model
+  (logits_native, loss_native), params_native = get_forward_and_backward_outputs(
+    model_native, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
 
-  device = torch_xla.device()
-  input_ids = input_ids.to(device)
-  model_xla = copy.deepcopy(fixture.model).to(device)
-  torch_xla.sync()
+  # --- XLA pass ---
+  xla_device = torch_xla.device()
+  model_xla = copy.deepcopy(model_native).to(xla_device)
+  input_ids_xla = input_ids.to(xla_device)
+  attention_mask_xla = attention_mask.to(xla_device)
 
-  xla_logits, xla_loss = model_xla(
-    input_ids, labels=input_ids, attention_mask=torch.ones_like(input_ids)
+  (logits_xla, loss_xla), params_xla = get_forward_and_backward_outputs(
+    model_xla,
+    input_ids=input_ids_xla,
+    labels=input_ids_xla,
+    attention_mask=attention_mask_xla,
   )
-  torch_xla.sync()
+
+  # Assert
   torch.testing.assert_close(
-    native_logits,
-    xla_logits.to("cpu"),
+    logits_native,
+    logits_xla.to(cpu_device),
     atol=1e-2,
     rtol=1e-6,
     msg="CPU run and XLA run logits are not equal",
   )
-  torch.testing.assert_close(
-    native_loss,
-    xla_loss.to("cpu"),
-    atol=1e-2,
-    rtol=1e-6,
-    msg="CPU run and XLA run loss is not equal",
-  )
+  if loss_native is not None and loss_xla is not None:
+    torch.testing.assert_close(
+      loss_native,
+      loss_xla.to(cpu_device),
+      atol=1e-2,
+      rtol=1e-6,
+      msg="Native run and XLA run loss is not equal",
+    )
+
+  for (name_native, p_native), (name_xla, p_xla) in zip(
+    params_native, params_xla, strict=True
+  ):
+    assert name_native == name_xla
+    assert p_native.grad is not None, f"Grad for {name_native} is None in native model"
+    assert p_xla.grad is not None, f"Grad for {name_xla} is None in XLA model"
+    torch.testing.assert_close(
+      p_native.grad,
+      p_xla.grad.cpu(),
+      atol=1e-2,
+      rtol=1e-6,
+      msg=f"Gradients for '{name_native}' differ between Native and XLA",
+    )

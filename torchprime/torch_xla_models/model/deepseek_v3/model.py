@@ -25,19 +25,19 @@ from torchprime.torch_xla_models.model.base_causal_lm import BaseCausalLM
 from torchprime.torch_xla_models.model.llama.model import apply_rotary_pos_emb
 
 logger = logging.get_logger(__name__)
-BF16 = torch.bfloat16
+FP32 = torch.float32
 
 
 class DeepseekV3RMSNorm(nn.Module):
   def __init__(self, hidden_size: int, eps: float = 1e-6):
     super().__init__()
-    self.weight = nn.Parameter(torch.ones(hidden_size, dtype=BF16))
+    self.weight = nn.Parameter(torch.ones(hidden_size))
     self.variance_epsilon = eps
 
   @xp.trace_me("DeepseekV3RMSNorm")
   def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     input_dtype = hidden_states.dtype
-    # hidden_states = hidden_states.to(torch.float32)
+    hidden_states = hidden_states.to(FP32)
     variance = hidden_states.pow(2).mean(-1, keepdim=True)
     hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
     return self.weight * hidden_states.to(input_dtype)
@@ -50,22 +50,22 @@ class DeepseekV3RotaryEmbedding(nn.Module):
     super().__init__()
     self.config = config
     inv_freq, self.attention_scaling = deepseek_v3_rope_init_fn(self.config)
-    self.register_buffer("inv_freq", inv_freq.to(BF16), persistent=False)
+    self.register_buffer("inv_freq", inv_freq.to(FP32), persistent=False)
     self.original_inv_freq = self.inv_freq
 
   @torch.no_grad()
   def forward(self, x: torch.Tensor, position_ids: torch.Tensor):
     inv_freq_expanded = (
-      self.inv_freq[None, :, None].to(BF16).expand(position_ids.shape[0], -1, 1)
+      self.inv_freq[None, :, None].to(FP32).expand(position_ids.shape[0], -1, 1)
     )
-    position_ids_expanded = position_ids[:, None, :].to(BF16)
+    position_ids_expanded = position_ids[:, None, :].to(FP32)
 
     device_type = x.device.type
     device_type = (
       device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
     )
     with torch.autocast(device_type=device_type, enabled=False):
-      freqs = (inv_freq_expanded.to(BF16) @ position_ids_expanded.to(BF16)).transpose(
+      freqs = (inv_freq_expanded.to(FP32) @ position_ids_expanded.to(FP32)).transpose(
         1, 2
       )
       emb = torch.cat((freqs, freqs), dim=-1)
@@ -145,10 +145,10 @@ class DeepseekV3TopkRouter(nn.Module):
     self.norm_topk_prob = config.norm_topk_prob
 
     self.weight = nn.Parameter(
-      torch.empty((self.n_routed_experts, config.hidden_size), dtype=BF16)
+      torch.empty((self.n_routed_experts, config.hidden_size), dtype=FP32)
     )
     self.register_buffer(
-      "e_score_correction_bias", torch.zeros(self.n_routed_experts, dtype=BF16)
+      "e_score_correction_bias", torch.zeros(self.n_routed_experts, dtype=FP32)
     )
 
   @torch.no_grad()
@@ -176,7 +176,7 @@ class DeepseekV3TopkRouter(nn.Module):
   @xp.trace_me("DeepseekV3TopkRouter")
   def forward(self, hidden_states: torch.Tensor):
     hidden_states = hidden_states.view(-1, self.config.hidden_size)
-    router_logits = F.linear(hidden_states.to(BF16), self.weight.to(BF16))
+    router_logits = F.linear(hidden_states.to(FP32), self.weight.to(FP32))
     scores = router_logits.sigmoid()
     topk_indices = self.get_topk_indices(scores)
     topk_weights = scores.gather(1, topk_indices)
@@ -230,7 +230,7 @@ class DeepseekV3MoE(nn.Module):
     # )
 
     # Grouped weights used in the hot path (shardable along E)
-    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=BF16)
+    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=FP32)
 
     self.shared_experts = DeepseekV3MLP(
       config=config, intermediate_size=self.I * config.n_shared_experts
@@ -274,13 +274,13 @@ class DeepseekV3MoE(nn.Module):
     E = self.E
     for e in range(E):
       state_dict[f"{prefix}experts.{e}.gate_proj.weight"] = (
-        self.grouped.W_gate[e].t().contiguous().to(BF16)
+        self.grouped.W_gate[e].t().contiguous().to(FP32)
       )
       state_dict[f"{prefix}experts.{e}.up_proj.weight"] = (
-        self.grouped.W_up[e].t().contiguous().to(BF16)
+        self.grouped.W_up[e].t().contiguous().to(FP32)
       )
       state_dict[f"{prefix}experts.{e}.down_proj.weight"] = (
-        self.grouped.W_down[e].t().contiguous().to(BF16)
+        self.grouped.W_down[e].t().contiguous().to(FP32)
       )
 
   # ------------------------------ core MoE path ------------------------------
@@ -292,7 +292,6 @@ class DeepseekV3MoE(nn.Module):
     return int(math.ceil(self.capacity_factor * T / self.E))
 
   def _grouped_weights(self, dtype: torch.dtype):
-    # Ensure einsum inputs match activation dtype (bf16 recommended on TPU)
     return (
       self.grouped.W_gate.to(dtype),
       self.grouped.W_up.to(dtype),
@@ -310,7 +309,7 @@ class DeepseekV3MoE(nn.Module):
     # Flatten tokens
     x = hidden_states.reshape(T, D)
 
-    # Router (cast back to bf16 if topk forced f32)
+    # Router (cast back to FP32 if topk forced f32)
     topk_idx, topk_w = self.gate(x)  # [T,K], [T,K]
     topk_w = topk_w.to(dtype)
 
@@ -574,7 +573,7 @@ class DeepseekV3Model(nn.Module):
     inputs_embeds = self.embed_tokens(input_ids)
     seq_length = inputs_embeds.size(1)
     position_ids = (
-      torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).to(BF16)
+      torch.arange(seq_length, device=inputs_embeds.device).unsqueeze(0).to(FP32)
     )
 
     causal_mask = torch.triu(
@@ -614,7 +613,7 @@ class DeepseekV3ForCausalLM(BaseCausalLM):
   ) -> tuple[torch.Tensor, torch.Tensor | None]:
     hidden_states = self.model(input_ids=input_ids, attention_mask=attention_mask)
     logits = self.lm_head(hidden_states)
-    # logits = logits.float()
+    logits = logits.to(FP32)
     if labels is None:
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
@@ -674,3 +673,66 @@ def convert_hf_state_dict_for_grouped_moe(hf_state_dict, config):
     print(f"  - Converted weights for prefix: {prefix}")
 
   return hf_state_dict
+
+
+def revert_grouped_moe_to_hf_state_dict(
+  grouped_state_dict, n_routed_experts, keep_existing_grad: bool = True
+):
+  """
+  Converts a state_dict with grouped MoE weights back into the standard HF format.
+
+  The returned tensors are always detached from the computation graph.
+
+  Args:
+    grouped_state_dict (dict): The state_dict with keys like '...grouped.W_gate'.
+    n_routed_experts: The number of experts used in the model.
+    keep_existing_grad (bool, optional): If True, any existing .grad attribute
+      on a tensor will be copied to the new, detached tensor. If False,
+      the .grad attribute will be discarded. Defaults to True.
+
+  Returns:
+    dict: The modified state_dict with per-expert, detached keys.
+  """
+  moe_prefixes = set()
+  for key in list(grouped_state_dict.keys()):
+    if key.endswith("grouped.W_gate"):
+      prefix = key.split("grouped.W_gate")[0]
+      moe_prefixes.add(prefix)
+
+  if not moe_prefixes:
+    print("No grouped MoE layers found to revert.")
+    return grouped_state_dict
+
+  E = n_routed_experts
+  print(f"Found and reverting {len(moe_prefixes)} MoE layers to {E} experts each...")
+
+  for prefix in moe_prefixes:
+    Wg = grouped_state_dict.pop(f"{prefix}grouped.W_gate")
+    Wu = grouped_state_dict.pop(f"{prefix}grouped.W_up")
+    Wd = grouped_state_dict.pop(f"{prefix}grouped.W_down")
+
+    for e in range(E):
+      # --- Process Gate Weight ---
+      # 1. Slice and transpose the parameter tensor, then detach it.
+      new_gate_tensor = Wg[e].t().detach()
+      # 2. Check for grad on the PARENT tensor (Wg).
+      if keep_existing_grad and Wg.grad is not None:
+        # 3. Slice the PARENT's grad, transpose it, and assign it.
+        new_gate_tensor.grad = Wg.grad[e].t().detach().clone()
+      grouped_state_dict[f"{prefix}experts.{e}.gate_proj.weight"] = new_gate_tensor
+
+      # --- Process Up Weight ---
+      new_up_tensor = Wu[e].t().detach()
+      if keep_existing_grad and Wu.grad is not None:
+        new_up_tensor.grad = Wu.grad[e].t().detach().clone()
+      grouped_state_dict[f"{prefix}experts.{e}.up_proj.weight"] = new_up_tensor
+
+      # --- Process Down Weight ---
+      new_down_tensor = Wd[e].t().detach()
+      if keep_existing_grad and Wd.grad is not None:
+        new_down_tensor.grad = Wd.grad[e].t().detach().clone()
+      grouped_state_dict[f"{prefix}experts.{e}.down_proj.weight"] = new_down_tensor
+
+    print(f"  - Reverted weights for prefix: {prefix}")
+
+  return grouped_state_dict
