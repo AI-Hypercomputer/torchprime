@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import pytest
@@ -6,22 +5,20 @@ import yaml
 
 from torchprime.metrics.mfu import compute_mfu
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.append(str(ROOT))
+ABS_CONFIG_PATH = (Path(__file__).parent / "../../torch_xla_models/configs").resolve()
 
 
-CONFIG_DIR = (
-  Path(__file__).resolve().parents[2] / "torch_xla_models" / "configs" / "model"
-)
+def _load_model_config(config_filename: str) -> dict:
+  """Loads a specific model config as a standard Python dictionary."""
 
+  model_config_path = ABS_CONFIG_PATH / "model" / config_filename
 
-def _load(name: str) -> dict:
-  with open(CONFIG_DIR / name) as f:
+  with open(model_config_path) as f:
     return yaml.safe_load(f)
 
 
 def test_llama3_8b_mfu():
-  cfg = _load("llama-3-8b.yaml")
+  cfg = _load_model_config("llama-3-8b.yaml")
   result = compute_mfu(
     cfg,
     batch_size=1024,
@@ -33,7 +30,7 @@ def test_llama3_8b_mfu():
 
 
 def test_llama3_1_70b_mfu():
-  cfg = _load("llama-3.1-70b.yaml")
+  cfg = _load_model_config("llama-3.1-70b.yaml")
   result = compute_mfu(
     cfg,
     batch_size=128,
@@ -45,7 +42,7 @@ def test_llama3_1_70b_mfu():
 
 
 def test_mixtral_8x7b_mfu():
-  cfg = _load("mixtral-8x7b.yaml")
+  cfg = _load_model_config("mixtral-8x7b.yaml")
   result = compute_mfu(
     cfg,
     batch_size=1024,
@@ -57,7 +54,7 @@ def test_mixtral_8x7b_mfu():
 
 
 def test_deepseek_v3_mfu():
-  cfg = _load("deepseek-v3.yaml")
+  cfg = _load_model_config("deepseek-v3.yaml")
   result = compute_mfu(
     cfg,
     batch_size=512,
