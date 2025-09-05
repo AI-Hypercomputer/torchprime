@@ -11,6 +11,7 @@ from transformers import DeepseekV3ForCausalLM as HFDeepseekV3ForCausalLM
 from torchprime.torch_xla_models.model.deepseek_v3 import (
   DeepseekV3ForCausalLM,
   convert_hf_state_dict_for_grouped_moe,
+  revert_grouped_moe_to_hf_state_dict,
 )
 from torchprime.torch_xla_models.tests.test_utils import (
   get_forward_and_backward_outputs,
@@ -24,6 +25,7 @@ class DeepseekFixture:
   vocab_size: int
   hf_model: HFDeepseekV3ForCausalLM
   model: DeepseekV3ForCausalLM
+  n_routed_experts: int
 
 
 def get_deepseek_v3_dummy() -> DeepseekFixture:
@@ -68,7 +70,7 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
     converted_dict = convert_hf_state_dict_for_grouped_moe(hf_dict, model.config)
     model.load_state_dict(converted_dict, strict=True)
 
-  return DeepseekFixture(vocab_size, hf_model, model)
+  return DeepseekFixture(vocab_size, hf_model, model, config.n_routed_experts)
 
 
 def noop(mod):
@@ -103,7 +105,7 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
   (hf_logits, hf_loss), hf_params = get_forward_and_backward_outputs(
     hf_model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
-  (model_logits, model_loss), model_params = get_forward_and_backward_outputs(
+  (model_logits, model_loss), _ = get_forward_and_backward_outputs(
     model_xla, input_ids=input_ids, labels=input_ids, attention_mask=attention_mask
   )
 
@@ -121,10 +123,17 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
     rtol=1e-6,
     msg="loss is not equal",
   )
-  for (name_hf, p_hf), (name_model, p_model) in zip(
-    hf_params, model_params, strict=True
-  ):
-    assert name_hf == name_model, f"Parameter name mismatch: {name_hf} vs {name_model}"
+
+  model_params = revert_grouped_moe_to_hf_state_dict(
+    dict(model_xla.named_parameters()),
+    fixture.n_routed_experts,
+    keep_existing_grad=True,
+  )
+
+  for name_hf, p_hf in hf_params:
+    if name_hf not in model_params:
+      print(f"❌ Parameter {name_hf} cannot find in the torchprime model")
+    name_model, p_model = name_hf, model_params[name_hf]
     assert p_model.grad is not None, f"Model grad for {name_model} is None"
     if p_hf.grad is None:
       assert torch.all(p_model.grad == 0)
