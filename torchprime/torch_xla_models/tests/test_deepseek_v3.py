@@ -138,23 +138,13 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
     if p_hf.grad is None:
       assert torch.all(p_model.grad == 0)
     else:
-      try:
-        torch.testing.assert_close(
-          p_hf.grad,
-          p_model.grad,
-          atol=1e-2,
-          rtol=1e-6,
-          msg=f"Gradients for '{name_hf}' differ",
-        )
-      except AssertionError:
-        print(f"\n----- Gradient mismatch for parameter: {name_hf} (HF vs TP) -----")
-        diff = (p_hf.grad - p_model.grad).abs()
-        print(f"Max absolute difference: {diff.max().item():.6f}")
-
-        print("HF grad:   ", p_hf.grad)
-        print("TP grad:   ", p_model.grad)
-        print("Difference:", diff)
-        print("------------------------------------------------------------------\n")
+      torch.testing.assert_close(
+        p_hf.grad,
+        p_model.grad,
+        atol=1e-2,
+        rtol=1e-6,
+        msg=f"Gradients for '{name_hf}' differ",
+      )
 
 
 @pytest.mark.parametrize("transform", [noop, scan_decoders])
@@ -287,22 +277,10 @@ def test_forward_and_backward_torch_xla_against_native(input_size):
     assert name_native == name_xla
     assert p_native.grad is not None, f"Grad for {name_native} is None in native model"
     assert p_xla.grad is not None, f"Grad for {name_xla} is None in XLA model"
-    try:
-      torch.testing.assert_close(
-        p_native.grad,
-        p_xla.grad.cpu(),
-        atol=1e-2,
-        rtol=1e-6,
-        msg=f"Gradients for '{name_native}' differ between Native and XLA",
-      )
-    except AssertionError:
-      grad_xla_cpu = p_xla.grad.cpu()
-      print(
-        f"\n----- Gradient mismatch for parameter: {name_native} (Native vs XLA) -----"
-      )
-      diff = (p_native.grad - grad_xla_cpu).abs()
-      print(f"Max absolute difference: {diff.max().item():.6f}")
-
-      print("Native grad:", p_native.grad)
-      print("XLA grad:   ", grad_xla_cpu)
-      print("Difference: ", diff)
+    torch.testing.assert_close(
+      p_native.grad,
+      p_xla.grad.cpu(),
+      atol=1e-2,
+      rtol=1e-6,
+      msg=f"Gradients for '{name_native}' differ between Native and XLA",
+    )
