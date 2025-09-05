@@ -685,7 +685,7 @@ def revert_grouped_moe_to_hf_state_dict(
 
   Args:
     grouped_state_dict (dict): The state_dict with keys like '...grouped.W_gate'.
-    config: The model configuration, used to get the number of experts.
+    n_routed_experts: The number of experts used in the model.
     keep_existing_grad (bool, optional): If True, any existing .grad attribute
       on a tensor will be copied to the new, detached tensor. If False,
       the .grad attribute will be discarded. Defaults to True.
