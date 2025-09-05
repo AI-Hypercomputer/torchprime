@@ -190,17 +190,10 @@ jobs:
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/meta-llama-3-8b \
             model/sharding=llama-fsdp-tp-cp \
             dataset=wikitext \
-            # TODO(https://github.com/AI-Hypercomputer/torchprime/issues/353): Use wikitext
-            # once the dataloader issue with context parallelism is resolved.
-            dataset=synthetic \
             task=train \
             task.global_batch_size=4 \
-            task.global_batch_size=8 \
             task.max_steps=15 \
             task.lr_scheduler.type=constant \
-            ici_mesh.fsdp=4 \
-            # Enable context parallelism (CP) by sharding across 2 devices
-            # on the 'context' axis and 2 devices on the 'fsdp' axis.
             ici_mesh.fsdp=2 \
             ici_mesh.context=2 \
             profile_start_step=3
