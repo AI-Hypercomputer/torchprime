@@ -175,7 +175,7 @@ jobs:
             ici_mesh.tensor=2 \
             profile_start_step=3
       
-      - name: Run Llama 3.0 8B (fsdp + cp)
+      - name: Run Llama 3.0 8B (fsdp + cp) # TODO: Update ici_mesh.context = 2 and ici_mesh.fsdp = 2 once e2e test after debug
         id: run-llama-3-8b-fsdp-cp
         env:
           XLA_IR_DEBUG: 1
