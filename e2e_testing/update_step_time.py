@@ -117,6 +117,7 @@ def match_llama_3_8b_fsdp_cp(row):
   config = json.loads(row.configs_framework)
   return (
     row.run_id.startswith("llama-3-8b-fsdp-cp")
+    # TODO Update ici_mesh.context = 2 and ici_mesh.fsdp = 2 once e2e test is fixed.
     and config["ici_mesh"]["fsdp"] == 4
     and config["ici_mesh"]["tensor"] == 1
   )
