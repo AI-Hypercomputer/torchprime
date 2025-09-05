@@ -310,6 +310,7 @@ def compute_mfu(
       ),
       log=True,
     )
+  print(f"step duration: {step_duration}s")
 
   assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 

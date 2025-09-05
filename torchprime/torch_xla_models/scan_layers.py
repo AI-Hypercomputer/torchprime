@@ -57,8 +57,10 @@ def compile(
   if not isinstance(seq, HomogeneousSequential):
     raise ValueError(f"compile only supports HomogeneousSequential, got {type(seq)}")
   # Replace the submodule
-  if start_from_layer is None or start_from_layer == 0:
-    # Whole block is scanned
+  if start_from_layer is None or start_from_layer == 0 or start_from_layer >= len(seq):
+    # Whole block is scanned for
+    # - start_from_layer is not specified (i.e., None or 0)
+    # - start_from_layer is larger than the number of layers
     mod.set_submodule(
       sequential_to_scan, compile_one_stack(seq, partition_fn=partition_fn)
     )

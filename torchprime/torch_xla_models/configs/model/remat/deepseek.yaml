@@ -7,4 +7,4 @@ optimization_barrier_layers:
 # offload_tensors:
 #  - decoder_input
 
-scan_layers: 'model.layers'
+# scan_layers: 'model.layers'
