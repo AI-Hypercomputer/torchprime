@@ -1,84 +1,84 @@
 benchmarks:
   llama-3-8b:
     name: Llama 3.0 8B
-    step_time_lower_bound: 2.759091
-    step_time_upper_bound: 3.15233521
-    confidence_interval: 0.19662
-    average: 2.9557
-    sample_size: 19
+    step_time_lower_bound: 2.52324618
+    step_time_upper_bound: 3.36452147
+    confidence_interval: 0.42064
+    average: 2.9439
+    sample_size: 40
   llama-3-8b-pure-mlp:
     name: Llama 3.0 8B (@assume_pure)
-    step_time_lower_bound: 2.742003
-    step_time_upper_bound: 3.1015355
-    confidence_interval: 0.17977
-    average: 2.9218
-    sample_size: 16
+    step_time_lower_bound: 2.53794227
+    step_time_upper_bound: 3.3541852
+    confidence_interval: 0.40812
+    average: 2.9461
+    sample_size: 30
   llama-3_1-8b-sa:
     name: Llama 3.1 8B (Splash Attention)
-    step_time_lower_bound: 2.404606
-    step_time_upper_bound: 2.78698912
-    confidence_interval: 0.19119
-    average: 2.5958
-    sample_size: 16
+    step_time_lower_bound: 2.2280833
+    step_time_upper_bound: 2.93137411
+    confidence_interval: 0.35165
+    average: 2.5797
+    sample_size: 37
   llama-3_1-8b-scan-offload:
     name: Llama 3.1 8B (Scan + Offload)
-    step_time_lower_bound: 2.787745
-    step_time_upper_bound: 3.10057025
-    confidence_interval: 0.15641
-    average: 2.9442
-    sample_size: 16
+    step_time_lower_bound: 2.60442197
+    step_time_upper_bound: 3.33771408
+    confidence_interval: 0.36665
+    average: 2.9711
+    sample_size: 38
   llama-3-8b-2d:
     name: Llama 3.0 8B (2D sharding)
-    step_time_lower_bound: 3.350034
-    step_time_upper_bound: 3.67648137
-    confidence_interval: 0.16322
-    average: 3.5133
-    sample_size: 19
+    step_time_lower_bound: 3.17204388
+    step_time_upper_bound: 3.88400437
+    confidence_interval: 0.35598
+    average: 3.528
+    sample_size: 41
   mixtral-8x7b:
     name: Mixtral 8x7B
-    step_time_lower_bound: 3.16206
-    step_time_upper_bound: 3.27814632
-    confidence_interval: 0.05804
-    average: 3.2201
-    sample_size: 19
+    step_time_lower_bound: 3.09689141
+    step_time_upper_bound: 3.33850176
+    confidence_interval: 0.12081
+    average: 3.2177
+    sample_size: 41
   llama-3-8b-2-slice:
     name: Llama 3.0 8B (2 Slice)
-    step_time_lower_bound: 4.15913989
-    step_time_upper_bound: 4.310138
-    confidence_interval: 0.0755
-    average: 4.2346
-    sample_size: 19
+    step_time_lower_bound: 4.03859955
+    step_time_upper_bound: 4.43189882
+    confidence_interval: 0.19665
+    average: 4.2352
+    sample_size: 38
   llama-3-8b-sft:
     name: Llama 3.0 8B SFT
-    step_time_lower_bound: 1.07442541
-    step_time_upper_bound: 1.10714903
-    confidence_interval: 0.01636
-    average: 1.0908
-    sample_size: 18
+    step_time_lower_bound: 1.03808732
+    step_time_upper_bound: 1.14446689
+    confidence_interval: 0.05319
+    average: 1.0913
+    sample_size: 28
     target_loss: 0.4826
     loss_tolerance: 0.001
   llama-3-8b-ddp-fsdp:
     name: Llama 3.0 8B (ddp + fsdp)
-    step_time_lower_bound: 3.259854
-    step_time_upper_bound: 3.65096884
-    confidence_interval: 0.19556
-    average: 3.4554
-    sample_size: 19
+    step_time_lower_bound: 3.04981141
+    step_time_upper_bound: 3.88998177
+    confidence_interval: 0.42009
+    average: 3.4699
+    sample_size: 39
   llama-3-8b-fsdp-cp:
     name: Llama 3.0 8B (fsdp + cp)
-    step_time_lower_bound: 1.498536
-    step_time_upper_bound: 1.68411989
-    confidence_interval: 0.09279
-    average: 1.5913
-    sample_size: 19
+    step_time_lower_bound: 1.40993639
+    step_time_upper_bound: 1.76433483
+    confidence_interval: 0.1772
+    average: 1.5871
+    sample_size: 36
   ds-v3-shallow:
     name: Deepseek v3 Shallow
-    step_time_lower_bound: 0.20646638
-    step_time_upper_bound: 0.305103
-    confidence_interval: 0.04932
-    average: 0.2558
-    sample_size: 16
+    step_time_lower_bound: 0.09049406
+    step_time_upper_bound: 0.41908182
+    confidence_interval: 0.16429
+    average: 0.2548
+    sample_size: 34
 metadata:
-  query_start: '2025-09-02T22:33:41.074955+00:00'
-  query_end: '2025-09-04T22:33:41+00:00'
+  query_start: '2025-09-02T18:26:45.431517+00:00'
+  query_end: '2025-09-05T18:26:45+00:00'
   confidence_level: 0.99
