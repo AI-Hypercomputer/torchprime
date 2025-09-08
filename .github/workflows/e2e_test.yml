@@ -308,8 +308,7 @@ jobs:
             task.lr_scheduler.type=constant \
             task.global_batch_size=4 \
             task.max_steps=10 \
-            ici_mesh.fsdp=2 \
-            ici_mesh.tensor=2 \
+            ici_mesh.fsdp=4 \
             profile_start_step=3 
 
   # Load reference step times
