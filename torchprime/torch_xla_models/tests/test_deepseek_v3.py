@@ -1,4 +1,5 @@
 import copy
+import os
 from dataclasses import dataclass
 
 import pytest
@@ -18,7 +19,7 @@ from torchprime.torch_xla_models.tests.test_utils import (
 )
 
 # layer 0,1 dense layers and layer 2+ moe layers
-MOE_START_FROM_LAYER = 2  
+MOE_START_FROM_LAYER = 2
 
 
 @dataclass
@@ -44,10 +45,18 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.n_group = 4  # from 8
 
   scale_factor = 32
-  # "pytorch" for CPU tests, and "splash_attention" for TPU tests
-  config.attention_kernel = "pytorch" 
-  # true for TPU tests, false for CPU tests
-  config.use_gmm_kernel_for_moe=False 
+
+  # Using TPU kernels only when running on TPU
+  if os.environ.get("PJRT_DEVICE", "CPU") == "TPU":
+    print(
+      "\n\n\n!!! Running deepseek convergence test on TPU, this is not fully tested yet..."
+    )
+    # TODO(jialei): also need to add global mesh for splash_attention
+    config.attention_kernel = "splash_attention"
+    config.use_gmm_kernel_for_moe = True
+  else:
+    config.attention_kernel = "pytorch"
+    config.use_gmm_kernel_for_moe = False
 
   config.hidden_size //= scale_factor
   config.intermediate_size //= scale_factor
