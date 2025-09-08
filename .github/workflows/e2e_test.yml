@@ -298,8 +298,10 @@ jobs:
           tp run ${{ steps.docker-url-option.outputs.value }} \
             --name $name \
             torchprime/torch_xla_models/train.py \
-            model=deepseek-v3-shallow \
+            model=deepseek-v3 \
             model.tokenizer_name=gs://torchprime/e2e-test/hf-model-files/deepseek-v3-tokenizer \
+            model.num_hidden_layers=2 \
+            model.first_k_dense_replace=1 \
             dataset.hf_dataset_name=gs://torchprime/e2e-test/datasets/wikitext \
             dataset.block_size=512 \
             task=train \
