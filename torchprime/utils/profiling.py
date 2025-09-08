@@ -29,7 +29,7 @@ def ensure_profile_end_step(
   if end is None:
     end = start + num_profile_steps
 
-  end = min(end, max_steps - 1)  # to prevent issue #260.
+  end = min(end, max_steps - 5)  # to prevent issue #260.
   end = max(end, start + 1)  # and ensure end is greater than start
 
   config.profile_end_step = end
