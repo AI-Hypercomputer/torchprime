@@ -134,7 +134,7 @@ def compute_mfu(
 
   # print step_duration after flops calculation
   print(f"step duration: {step_duration}s")
-  
+
   assert torch_dtype == "bfloat16", f"Unsupported dtype {torch_dtype}"
 
   chip_count_per_slice, tflops_per_chip = get_num_chips_and_tflops_per_chip(tpu_name)

@@ -58,7 +58,6 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.qk_head_dim //= scale_factor
   config.head_dim //= scale_factor
   config.num_key_value_heads //= scale_factor
-  config.capacity_factor = 10.0
 
   tp_cfg = OmegaConf.create(config.to_dict())
   with torch.device("cpu"):
@@ -139,8 +138,8 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
       assert torch.all(p_model.grad == 0)
     else:
       torch.testing.assert_close(
-        p_hf.grad,
-        p_model.grad,
+        p_hf.grad.to(torch.float32),
+        p_model.grad.to(torch.float32),
         atol=1e-2,
         rtol=1e-6,
         msg=f"Gradients for '{name_hf}' differ",
