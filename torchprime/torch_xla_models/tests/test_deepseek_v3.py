@@ -17,7 +17,8 @@ from torchprime.torch_xla_models.tests.test_utils import (
   get_forward_and_backward_outputs,
 )
 
-MOE_START_FROM_LAYER = 2  # layer 0,1 dense layers and layer 2+ moe layers
+# layer 0,1 dense layers and layer 2+ moe layers
+MOE_START_FROM_LAYER = 2  
 
 
 @dataclass
@@ -43,7 +44,10 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.n_group = 4  # from 8
 
   scale_factor = 32
-  config.attention_kernel = "pytorch"
+  # "pytorch" for CPU tests, and "splash_attention" for TPU tests
+  config.attention_kernel = "pytorch" 
+  # true for TPU tests, false for CPU tests
+  config.use_gmm_kernel_for_moe=False 
 
   config.hidden_size //= scale_factor
   config.intermediate_size //= scale_factor

@@ -203,7 +203,7 @@ class GroupedMoEWeights(nn.Module):
 
 class DeepseekV3MoE(nn.Module):
   """
-  Mixture-of-Experts, OPTIMIZED with a dedicated Grouped Matrix Multiply (GMM) kernel.
+  Mixture-of-Experts, with a conditional switch for the GMM kernel.
   This version does NOT perform token dropping.
   """
 
@@ -214,6 +214,9 @@ class DeepseekV3MoE(nn.Module):
     self.K = config.num_experts_per_tok
     self.D = config.hidden_size
     self.I = config.moe_intermediate_size
+
+    # Add a flag to control kernel usage, defaulting to True for TPU performance
+    self.use_gmm_kernel_for_moe = config.get("use_gmm_kernel_for_moe", True)
 
     self.gate = DeepseekV3TopkRouter(config)
     self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=torch.bfloat16)
@@ -268,40 +271,61 @@ class DeepseekV3MoE(nn.Module):
       self.grouped.W_down.to(dtype),
     )
 
-  @xp.trace_me("DeepseekV3MoE_Optimized")
-  def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-    if GMM is None:
-      raise RuntimeError(
-        "The custom GMM kernel could not be imported. Please check your PyTorch/XLA installation."
-      )
+  def _cpu_gmm(
+    self, x: torch.Tensor, W: torch.Tensor, group_sizes: torch.Tensor
+  ) -> torch.Tensor:
+    """CPU-friendly implementation of Grouped Matrix Multiply."""
+    # Split the input tensor into a list of tensors, one for each expert group.
+    # We filter out groups of size 0 to avoid errors with torch.split.
+    non_zero_sizes = [size for size in group_sizes.tolist() if size > 0]
+    expert_inputs = torch.split(x, non_zero_sizes, dim=0)
 
+    output_chunks = []
+    input_idx = 0
+    for e in range(self.E):
+      if group_sizes[e] > 0:
+        # Perform standard matrix multiplication for the current expert
+        output_chunks.append(torch.matmul(expert_inputs[input_idx], W[e]))
+        input_idx += 1
+
+    return torch.cat(output_chunks, dim=0)
+
+  @xp.trace_me("DeepseekV3MoE")
+  def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     B, S, D = hidden_states.shape
     T = B * S
-
     x = hidden_states.view(T, self.D)
 
     topk_idx, topk_w = self.gate(x)  # [T, K], [T, K]
     topk_w = topk_w.to(x.dtype)
-
     expert_ids = topk_idx.view(-1)
 
-    # Use one-hot encoding to create a static representation of the expert counts (replaces bincount).
     expert_one_hot = F.one_hot(expert_ids, num_classes=self.E)
     group_sizes = expert_one_hot.sum(dim=0).to(torch.int32)
 
     _, sort_ix = torch.sort(expert_ids)
-
     replicated_x = x.unsqueeze(1).expand(-1, self.K, -1).reshape(-1, self.D)
     sorted_x = replicated_x[sort_ix]
 
     W_gate, W_up, W_down = self._grouped_weights(x.dtype)
 
-    gate_out = GMM.apply(sorted_x, W_gate, group_sizes)
-    up_out = GMM.apply(sorted_x, W_up, group_sizes)
+    # Conditional logic to switch between GMM kernel and CPU fallback
+    if self.use_gmm_kernel_for_moe and GMM is not None:
+      gate_out = GMM.apply(sorted_x, W_gate, group_sizes)
+      up_out = GMM.apply(sorted_x, W_up, group_sizes)
+      act_out = self.act_fn(gate_out) * up_out
+      mlp_output_sorted = GMM.apply(act_out, W_down, group_sizes)
+    else:
+      if GMM is None and self.use_gmm_kernel_for_moe:
+        logger.warning_once(
+          "GMM custom kernel not available. Falling back to CPU-friendly MoE implementation. "
+          "This will be slower. To disable this warning, set `use_gmm_kernel_for_moe: false` in your config."
+        )
 
-    act_out = self.act_fn(gate_out) * up_out
-
-    mlp_output_sorted = GMM.apply(act_out, W_down, group_sizes)
+      gate_out = self._cpu_gmm(sorted_x, W_gate, group_sizes)
+      up_out = self._cpu_gmm(sorted_x, W_up, group_sizes)
+      act_out = self.act_fn(gate_out) * up_out
+      mlp_output_sorted = self._cpu_gmm(act_out, W_down, group_sizes)
 
     mlp_output_unsorted = torch.empty_like(mlp_output_sorted)
     mlp_output_unsorted[sort_ix] = mlp_output_sorted
