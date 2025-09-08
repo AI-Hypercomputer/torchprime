@@ -131,7 +131,7 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
 
   for name_hf, p_hf in hf_params:
     if name_hf not in model_params:
-      print(f"❌ Parameter {name_hf} cannot find in the torchprime model")
+      print(f"Parameter {name_hf} cannot find in the torchprime model")
     name_model, p_model = name_hf, model_params[name_hf]
     assert p_model.grad is not None, f"Model grad for {name_model} is None"
     if p_hf.grad is None:

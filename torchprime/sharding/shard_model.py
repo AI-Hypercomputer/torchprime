@@ -160,16 +160,16 @@ def shard_model_from_config(
 
   model = shard_model(model, shard_weight, shard_activation)
 
-  #   want_names = set(config.keys())
-  #   seen_names = seen_params.union(seen_modules)
-  #   diff = "\n".join(want_names - seen_names)
-  #   assert (
-  #     seen_names == want_names
-  #   ), f"""Requested to shard these names: {want_names}, but only sharded these: {seen_names}.
+  want_names = set(config.keys())
+  seen_names = seen_params.union(seen_modules)
+  diff = "\n".join(want_names - seen_names)
+  assert (
+    seen_names == want_names
+  ), f"""Requested to shard these names: {want_names}, but only sharded these: {seen_names}.
 
-  # These names were not found in the model:
-  # {diff}
-  # """
+These names were not found in the model:
+{diff}
+"""
 
   return model
 

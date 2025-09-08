@@ -1,5 +1,5 @@
-from .model import (
-  DeepseekV3ForCausalLM,
+from .model import DeepseekV3ForCausalLM
+from .model_utils import (
   convert_hf_state_dict_for_grouped_moe,
   revert_grouped_moe_to_hf_state_dict,
 )
