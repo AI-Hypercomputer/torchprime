@@ -1,14 +1,15 @@
 import time
 
-import jax
 import torch
-import torchax as tx
-import torchax.interop
 from torch.utils import _pytree as pytree
 from torch_xla.core import xla_model as xm
 
 
 def run_model_torchax(model, batch_size, number_of_runs, eager):
+  import jax
+  import torchax as tx
+  import torchax.interop
+
   torchax.enable_globally()
   model = model.to("jax")
 
