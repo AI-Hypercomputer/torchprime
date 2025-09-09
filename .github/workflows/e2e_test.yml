@@ -303,7 +303,7 @@ jobs:
             model.num_hidden_layers=2 \
             model.first_k_dense_replace=1 \
             dataset.hf_dataset_name=gs://torchprime/e2e-test/datasets/wikitext \
-            dataset.block_size=128 \
+            dataset.block_size=1024 \
             task=train \
             task.lr_scheduler.type=constant \
             task.global_batch_size=4 \

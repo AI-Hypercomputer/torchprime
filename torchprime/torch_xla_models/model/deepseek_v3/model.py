@@ -219,7 +219,7 @@ class DeepseekV3MoE(nn.Module):
     self.use_gmm_kernel_for_moe = config.get("use_gmm_kernel_for_moe", True)
 
     self.gate = DeepseekV3TopkRouter(config)
-    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=FP32)
+    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=torch.bfloat16)
     self.shared_experts = DeepseekV3MLP(
       config=config, intermediate_size=self.I * config.n_shared_experts
     )
