@@ -308,7 +308,6 @@ jobs:
             task.lr_scheduler.type=constant \
             task.global_batch_size=4 \
             task.max_steps=15 \
-            logging_steps=1 \
             ici_mesh.fsdp=4 \
             profile_start_step=6 
 
