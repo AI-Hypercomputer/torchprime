@@ -303,11 +303,12 @@ jobs:
             model.num_hidden_layers=2 \
             model.first_k_dense_replace=1 \
             dataset.hf_dataset_name=gs://torchprime/e2e-test/datasets/wikitext \
-            dataset.block_size=1024 \
+            dataset.block_size=512 \
             task=train \
             task.lr_scheduler.type=constant \
             task.global_batch_size=4 \
-            task.max_steps=10 \
+            task.max_steps=20 \
+            logging_steps=1 \
             ici_mesh.fsdp=4 \
             profile_start_step=3 
 
