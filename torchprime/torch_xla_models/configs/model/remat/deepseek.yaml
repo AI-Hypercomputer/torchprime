@@ -4,7 +4,7 @@ activation_checkpoint_layers:
 optimization_barrier_layers:
  - DeepseekV3DecoderLayer
 
-# offload_tensors:
-#  - decoder_input
+offload_tensors:
+ - decoder_input
 
-# scan_layers: 'model.layers'
+scan_layers: 'model.layers'

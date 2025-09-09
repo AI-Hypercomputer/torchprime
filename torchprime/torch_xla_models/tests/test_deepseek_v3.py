@@ -1,4 +1,5 @@
 import copy
+import os
 from dataclasses import dataclass
 
 import pytest
@@ -17,7 +18,8 @@ from torchprime.torch_xla_models.tests.test_utils import (
   get_forward_and_backward_outputs,
 )
 
-MOE_START_FROM_LAYER = 2  # layer 0,1 dense layers and layer 2+ moe layers
+# layer 0,1 dense layers and layer 2+ moe layers
+MOE_START_FROM_LAYER = 2
 
 
 @dataclass
@@ -43,7 +45,18 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.n_group = 4  # from 8
 
   scale_factor = 32
-  config.attention_kernel = "pytorch"
+
+  # Using TPU kernels only when running on TPU
+  if os.environ.get("PJRT_DEVICE", "CPU") == "TPU":
+    print(
+      "\n\n\n!!! Running deepseek convergence test on TPU, this is not fully tested yet..."
+    )
+    # TODO(jialei): also need to add global mesh for splash_attention
+    config.attention_kernel = "splash_attention"
+    config.use_gmm_kernel_for_moe = True
+  else:
+    config.attention_kernel = "pytorch"
+    config.use_gmm_kernel_for_moe = False
 
   config.hidden_size //= scale_factor
   config.intermediate_size //= scale_factor
@@ -58,7 +71,6 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
   config.qk_head_dim //= scale_factor
   config.head_dim //= scale_factor
   config.num_key_value_heads //= scale_factor
-  config.capacity_factor = 10.0
 
   tp_cfg = OmegaConf.create(config.to_dict())
   with torch.device("cpu"):
@@ -132,15 +144,15 @@ def test_forward_and_backward_our_model_against_hf_model(transform, input_size):
 
   for name_hf, p_hf in hf_params:
     if name_hf not in model_params:
-      print(f"❌ Parameter {name_hf} cannot find in the torchprime model")
+      print(f"Parameter {name_hf} cannot find in the torchprime model")
     name_model, p_model = name_hf, model_params[name_hf]
     assert p_model.grad is not None, f"Model grad for {name_model} is None"
     if p_hf.grad is None:
       assert torch.all(p_model.grad == 0)
     else:
       torch.testing.assert_close(
-        p_hf.grad,
-        p_model.grad,
+        p_hf.grad.to(torch.float32),
+        p_model.grad.to(torch.float32),
         atol=1e-2,
         rtol=1e-6,
         msg=f"Gradients for '{name_hf}' differ",

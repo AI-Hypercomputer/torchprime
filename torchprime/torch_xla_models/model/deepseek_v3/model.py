@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import torch_xla.debug.profiler as xp
 from omegaconf import DictConfig
 from torch import nn
+from torch_xla.experimental.custom_kernel import GMM
 from transformers.activations import ACT2FN
 from transformers.utils import logging
 
@@ -202,14 +203,8 @@ class GroupedMoEWeights(nn.Module):
 
 class DeepseekV3MoE(nn.Module):
   """
-  Mixture-of-Experts with grouped einsum over existing per-expert weights.
-
-  XLA-friendly:
-    - No dynamic-shape ops (no masked_select/index_select/bincount/repeat_interleave)
-    - Uses sort + scatter_add_ (int32) + gather + einsum + index_add_
-    - Capacity dropping without compaction (dropped -> dummy slot with weight=0)
-  Checkpoint-compatible:
-    - Keeps self.experts ModuleList with gate/up/down Linear weights and maps to grouped params
+  Mixture-of-Experts, with a conditional switch for the GMM kernel.
+  This version does NOT perform token dropping.
   """
 
   def __init__(self, config: DictConfig):
@@ -219,34 +214,22 @@ class DeepseekV3MoE(nn.Module):
     self.K = config.num_experts_per_tok
     self.D = config.hidden_size
     self.I = config.moe_intermediate_size
-    self.capacity_factor = getattr(config, "capacity_factor", 1.25)
 
-    # Router (unchanged keys)
+    # Add a flag to control kernel usage, defaulting to True for TPU performance
+    self.use_gmm_kernel_for_moe = config.get("use_gmm_kernel_for_moe", True)
+
     self.gate = DeepseekV3TopkRouter(config)
-
-    # # Experts (preserve parameter names/keys for checkpoint compatibility)
-    # self.experts = nn.ModuleList(
-    #   [DeepseekV3MLP(config, intermediate_size=self.I) for _ in range(self.E)]
-    # )
-
-    # Grouped weights used in the hot path (shardable along E)
-    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=FP32)
-
+    self.grouped = GroupedMoEWeights(self.E, self.D, self.I, dtype=torch.bfloat16)
     self.shared_experts = DeepseekV3MLP(
       config=config, intermediate_size=self.I * config.n_shared_experts
     )
-
     self.act_fn = ACT2FN[config.hidden_act]
 
-    # Optional static capacity: set config.static_capacity to a positive int to avoid recompiles
-    self.static_capacity = int(getattr(config, "static_capacity", 0))
-
+  # The weight loading functions remain the same for checkpoint compatibility
   @torch.no_grad()
   def _pre_load_old_keys(self, state_dict, prefix: str):
-    """When loading, if old per-expert keys exist, copy them into grouped params."""
     has_old = any(
-      k.startswith(prefix + "experts.0.gate_proj.weight")
-      for k in state_dict.keys()  # noqa: SIM118
+      k.startswith(prefix + "experts.0.gate_proj.weight") for k in state_dict
     )
     if not has_old:
       return
@@ -260,7 +243,6 @@ class DeepseekV3MoE(nn.Module):
     Wd = torch.stack(
       [state_dict[f"{prefix}experts.{e}.down_proj.weight"].t() for e in range(E)], dim=0
     )
-    # Cast to grouped dtype
     Wg = Wg.to(self.grouped.W_gate.dtype)
     Wu = Wu.to(self.grouped.W_up.dtype)
     Wd = Wd.to(self.grouped.W_down.dtype)
@@ -270,7 +252,6 @@ class DeepseekV3MoE(nn.Module):
 
   @torch.no_grad()
   def _post_state_dict_old_keys(self, state_dict, prefix: str):
-    """When saving, also write old per-expert keys so external tools remain compatible."""
     E = self.E
     for e in range(E):
       state_dict[f"{prefix}experts.{e}.gate_proj.weight"] = (
@@ -283,14 +264,6 @@ class DeepseekV3MoE(nn.Module):
         self.grouped.W_down[e].t().contiguous().to(FP32)
       )
 
-  # ------------------------------ core MoE path ------------------------------
-
-  @torch.no_grad()
-  def _compute_capacity(self, T: int) -> int:
-    if self.static_capacity > 0:
-      return self.static_capacity
-    return int(math.ceil(self.capacity_factor * T / self.E))
-
   def _grouped_weights(self, dtype: torch.dtype):
     return (
       self.grouped.W_gate.to(dtype),
@@ -298,101 +271,70 @@ class DeepseekV3MoE(nn.Module):
       self.grouped.W_down.to(dtype),
     )
 
+  def _cpu_gmm(
+    self, x: torch.Tensor, W: torch.Tensor, group_sizes: torch.Tensor
+  ) -> torch.Tensor:
+    """CPU-friendly implementation of Grouped Matrix Multiply."""
+    # Split the input tensor into a list of tensors, one for each expert group.
+    # We filter out groups of size 0 to avoid errors with torch.split.
+    non_zero_sizes = [size for size in group_sizes.tolist() if size > 0]
+    expert_inputs = torch.split(x, non_zero_sizes, dim=0)
+
+    output_chunks = []
+    input_idx = 0
+    for e in range(self.E):
+      if group_sizes[e] > 0:
+        # Perform standard matrix multiplication for the current expert
+        output_chunks.append(torch.matmul(expert_inputs[input_idx], W[e]))
+        input_idx += 1
+
+    return torch.cat(output_chunks, dim=0)
+
   @xp.trace_me("DeepseekV3MoE")
   def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
     B, S, D = hidden_states.shape
-    assert D == self.D
-    device, dtype = hidden_states.device, hidden_states.dtype
     T = B * S
-    E, K = self.E, self.K
+    x = hidden_states.view(T, self.D)
 
-    # Flatten tokens
-    x = hidden_states.reshape(T, D)
+    topk_idx, topk_w = self.gate(x)  # [T, K], [T, K]
+    topk_w = topk_w.to(x.dtype)
+    expert_ids = topk_idx.view(-1)
 
-    # Router (cast back to FP32 if topk forced f32)
-    topk_idx, topk_w = self.gate(x)  # [T,K], [T,K]
-    topk_w = topk_w.to(dtype)
+    expert_one_hot = F.one_hot(expert_ids, num_classes=self.E)
+    group_sizes = expert_one_hot.sum(dim=0).to(torch.int32)
 
-    # Build flat arrays of length N=T*K
-    token_ids = (
-      torch.arange(T, device=device, dtype=torch.long)
-      .view(T, 1)
-      .expand(T, K)
-      .reshape(-1)
-    )  # [N]
-    expert_ids = topk_idx.reshape(-1).to(torch.long)  # [N]
-    weights = topk_w.reshape(-1)  # [N]
+    _, sort_ix = torch.sort(expert_ids)
+    replicated_x = x.unsqueeze(1).expand(-1, self.K, -1).reshape(-1, self.D)
+    sorted_x = replicated_x[sort_ix]
 
-    # Sort tokens by expert
-    expert_ids_sorted, sort_ix = torch.sort(expert_ids)  # [N], [N]
-    token_ids = torch.gather(token_ids, 0, sort_ix)  # [N]
-    weights = torch.gather(weights, 0, sort_ix)  # [N]
+    W_gate, W_up, W_down = self._grouped_weights(x.dtype)
 
-    # Per-expert counts via scatter_add_ (int32 robust on XLA)
-    counts_i32 = torch.zeros(E, device=device, dtype=torch.int32)
-    ones_i32 = torch.ones_like(expert_ids_sorted, dtype=torch.int32)
-    counts_i32.scatter_add_(0, expert_ids_sorted.to(torch.int32), ones_i32)  # [E]
-    counts = counts_i32.to(torch.long)  # [E]
+    # Conditional logic to switch between GMM kernel and CPU fallback
+    if self.use_gmm_kernel_for_moe and GMM is not None:
+      gate_out = GMM.apply(sorted_x, W_gate, group_sizes)
+      up_out = GMM.apply(sorted_x, W_up, group_sizes)
+      act_out = self.act_fn(gate_out) * up_out
+      mlp_output_sorted = GMM.apply(act_out, W_down, group_sizes)
+    else:
+      if GMM is None and self.use_gmm_kernel_for_moe:
+        logger.warning_once(
+          "GMM custom kernel not available. Falling back to CPU-friendly MoE implementation. "
+          "This will be slower. To disable this warning, set `use_gmm_kernel_for_moe: false` in your config."
+        )
 
-    # Start offset of each expert's segment
-    group_start = torch.cumsum(
-      torch.cat([counts.new_zeros(1), counts[:-1]], dim=0), dim=0
-    )  # [E], long
+      gate_out = self._cpu_gmm(sorted_x, W_gate, group_sizes)
+      up_out = self._cpu_gmm(sorted_x, W_up, group_sizes)
+      act_out = self.act_fn(gate_out) * up_out
+      mlp_output_sorted = self._cpu_gmm(act_out, W_down, group_sizes)
 
-    # Position within expert after sort
-    N = expert_ids_sorted.numel()
-    arangeN = torch.arange(N, device=device, dtype=torch.long)  # [N]
-    offsets_rep = torch.gather(group_start, 0, expert_ids_sorted)  # [N]
-    pos_in_exp = arangeN - offsets_rep  # [N], long
+    mlp_output_unsorted = torch.empty_like(mlp_output_sorted)
+    mlp_output_unsorted[sort_ix] = mlp_output_sorted
 
-    # Capacity & destination slot (dropped → expert's slot 0 with weight=0)
-    C = self._compute_capacity(T)
-    C_long = torch.tensor(C, device=device, dtype=torch.long)
-    valid = pos_in_exp < C_long  # [N] bool
-    dest = expert_ids_sorted * C_long + torch.minimum(pos_in_exp, C_long - 1)  # [N]
-    dest = torch.where(
-      valid, dest, expert_ids_sorted * C_long + torch.zeros_like(pos_in_exp)
-    )  # route dropped to slot 0
+    weighted_output = (
+      mlp_output_unsorted.view(T, self.K, self.D) * topk_w.unsqueeze(-1)
+    ).sum(dim=1)
 
-    # Slot tables of length EC = E*C
-    EC = E * C
-    slots_token = torch.zeros(EC, device=device, dtype=torch.long)  # token id per slot
-    slots_w = torch.zeros(EC, device=device, dtype=dtype)  # gate weight per slot
-    slot_fill = torch.zeros(
-      EC, device=device, dtype=dtype
-    )  # 1.0 if slot filled else 0.0
-
-    valid_f = valid.to(dtype)
-    valid_l = valid.to(torch.long)
-
-    # Unique mapping ensures no collisions among valid slots
-    slots_token.index_add_(
-      0, dest, token_ids * valid_l
-    )  # int add; valid rows write token id
-    slots_w.index_add_(0, dest, weights * valid_f)  # write gate weights at valid slots
-    slot_fill.index_add_(0, dest, valid_f)  # 1.0 for valid slots
-
-    # Gather packed inputs [E, C, D]; dummy slots point to token 0 (weight 0 → no contribution)
-    gather_idx = slots_token.view(-1, 1).expand(EC, D)  # [EC, D]
-    X_packed = torch.gather(x, 0, gather_idx).view(E, C, D)  # [E, C, D]
-
-    # ---------- Grouped MLP via einsum ----------
-    W_gate, W_up, W_down = self._grouped_weights(dtype)  # [E,D,I], [E,D,I], [E,I,D]
-    # dims: e=experts, c=capacity, d=hidden, i=intermediate
-    G = torch.einsum("ecd,edi->eci", X_packed, W_gate)  # [E, C, I]
-    U = torch.einsum("ecd,edi->eci", X_packed, W_up)  # [E, C, I]
-    A = self.act_fn(G) * U  # [E, C, I]
-    Y_packed = torch.einsum("eci,eid->ecd", A, W_down)  # [E, C, D]
-
-    # Apply per-slot gate weight (dropped → weight 0 → no contribution)
-    Y_flat = Y_packed.view(EC, D) * slots_w.unsqueeze(-1)  # [EC, D]
-
-    # One global scatter back to [T, D]
-    out = torch.zeros(T, D, device=device, dtype=dtype)
-    out.index_add_(0, slots_token, Y_flat)  # [T, D]
-
-    # Shared path + reshape
-    out = out.view(B, S, D) + self.shared_experts(hidden_states)
+    out = weighted_output.view(B, S, D) + self.shared_experts(hidden_states)
     return out
 
 
@@ -618,121 +560,3 @@ class DeepseekV3ForCausalLM(BaseCausalLM):
       return logits, None
     loss = cross_entropy_loss(logits, labels=labels, vocab_size=self.config.vocab_size)
     return logits, loss
-
-
-def convert_hf_state_dict_for_grouped_moe(hf_state_dict, config):
-  """
-  Converts a Hugging Face state_dict with per-expert weights in-place
-  to use the grouped weight format.
-
-  Args:
-    hf_state_dict (dict): The state_dict from the Hugging Face model.
-    config: The model configuration, used to get the number of experts.
-
-  Returns:
-    dict: The modified state_dict.
-  """
-  # Find all unique MoE layer prefixes (e.g., "model.layers.0.mlp.", "model.layers.1.mlp.", etc.)
-  moe_prefixes = set()
-  for key in hf_state_dict.keys():  # noqa: SIM118
-    if "experts.0.gate_proj.weight" in key:
-      # Assumes key format is like '...<prefix>.experts.0.gate_proj.weight'
-      prefix = key.split("experts.0.gate_proj.weight")[0]
-      moe_prefixes.add(prefix)
-
-  if not moe_prefixes:
-    print("No MoE layers with per-expert weights found to convert.")
-    return hf_state_dict
-
-  E = config.n_routed_experts
-
-  print(f"Found and converting {len(moe_prefixes)} MoE layers with {E} experts each...")
-
-  for prefix in moe_prefixes:
-    # Pop all the old per-expert weights from the dictionary, transposing them
-    w_g_list = [
-      hf_state_dict.pop(f"{prefix}experts.{e}.gate_proj.weight").t() for e in range(E)
-    ]
-    w_u_list = [
-      hf_state_dict.pop(f"{prefix}experts.{e}.up_proj.weight").t() for e in range(E)
-    ]
-    w_d_list = [
-      hf_state_dict.pop(f"{prefix}experts.{e}.down_proj.weight").t() for e in range(E)
-    ]
-
-    # Stack them to create the new grouped tensors
-    Wg = torch.stack(w_g_list, dim=0)
-    Wu = torch.stack(w_u_list, dim=0)
-    Wd = torch.stack(w_d_list, dim=0)
-
-    # Add the new grouped weight keys to the dictionary
-    hf_state_dict[f"{prefix}grouped.W_gate"] = Wg
-    hf_state_dict[f"{prefix}grouped.W_up"] = Wu
-    hf_state_dict[f"{prefix}grouped.W_down"] = Wd
-
-    print(f"  - Converted weights for prefix: {prefix}")
-
-  return hf_state_dict
-
-
-def revert_grouped_moe_to_hf_state_dict(
-  grouped_state_dict, n_routed_experts, keep_existing_grad: bool = True
-):
-  """
-  Converts a state_dict with grouped MoE weights back into the standard HF format.
-
-  The returned tensors are always detached from the computation graph.
-
-  Args:
-    grouped_state_dict (dict): The state_dict with keys like '...grouped.W_gate'.
-    n_routed_experts: The number of experts used in the model.
-    keep_existing_grad (bool, optional): If True, any existing .grad attribute
-      on a tensor will be copied to the new, detached tensor. If False,
-      the .grad attribute will be discarded. Defaults to True.
-
-  Returns:
-    dict: The modified state_dict with per-expert, detached keys.
-  """
-  moe_prefixes = set()
-  for key in list(grouped_state_dict.keys()):
-    if key.endswith("grouped.W_gate"):
-      prefix = key.split("grouped.W_gate")[0]
-      moe_prefixes.add(prefix)
-
-  if not moe_prefixes:
-    print("No grouped MoE layers found to revert.")
-    return grouped_state_dict
-
-  E = n_routed_experts
-  print(f"Found and reverting {len(moe_prefixes)} MoE layers to {E} experts each...")
-
-  for prefix in moe_prefixes:
-    Wg = grouped_state_dict.pop(f"{prefix}grouped.W_gate")
-    Wu = grouped_state_dict.pop(f"{prefix}grouped.W_up")
-    Wd = grouped_state_dict.pop(f"{prefix}grouped.W_down")
-
-    for e in range(E):
-      # --- Process Gate Weight ---
-      # 1. Slice and transpose the parameter tensor, then detach it.
-      new_gate_tensor = Wg[e].t().detach()
-      # 2. Check for grad on the PARENT tensor (Wg).
-      if keep_existing_grad and Wg.grad is not None:
-        # 3. Slice the PARENT's grad, transpose it, and assign it.
-        new_gate_tensor.grad = Wg.grad[e].t().detach().clone()
-      grouped_state_dict[f"{prefix}experts.{e}.gate_proj.weight"] = new_gate_tensor
-
-      # --- Process Up Weight ---
-      new_up_tensor = Wu[e].t().detach()
-      if keep_existing_grad and Wu.grad is not None:
-        new_up_tensor.grad = Wu.grad[e].t().detach().clone()
-      grouped_state_dict[f"{prefix}experts.{e}.up_proj.weight"] = new_up_tensor
-
-      # --- Process Down Weight ---
-      new_down_tensor = Wd[e].t().detach()
-      if keep_existing_grad and Wd.grad is not None:
-        new_down_tensor.grad = Wd.grad[e].t().detach().clone()
-      grouped_state_dict[f"{prefix}experts.{e}.down_proj.weight"] = new_down_tensor
-
-    print(f"  - Reverted weights for prefix: {prefix}")
-
-  return grouped_state_dict
