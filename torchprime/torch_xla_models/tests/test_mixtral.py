@@ -119,31 +119,12 @@ def test_forward_and_backward_our_model_against_hf_model(
   )
 
   # Assert
-  try:
-    torch.testing.assert_close(
-      hf_logits, model_logits, atol=1e-2, rtol=1e-4, msg="Logits are not equal"
-    )
-  except AssertionError as e:
-    diff = (hf_logits - model_logits).abs()
-    max_diff = diff.max()
-    max_diff_idx = diff.argmax()
-    print(f"\nLogits assertion failed. Max absolute difference: {max_diff.item()}")
-    print(f"hf_logit at max diff: {hf_logits.flatten()[max_diff_idx]}")
-    print(f"model_logit at max diff: {model_logits.flatten()[max_diff_idx]}")
-    raise e
-  try:
-    torch.testing.assert_close(
-      hf_loss, model_loss, atol=1e-4, rtol=1e-9, msg="Losses are not equal"
-    )
-  except AssertionError as e:
-    diff = (hf_loss - model_loss).abs()
-    max_diff = diff.max()
-    max_diff_idx = diff.argmax()
-    print(f"\nLoss assertion failed. Max absolute difference: {max_diff.item()}")
-    print(f"hf_loss at max diff: {hf_loss.flatten()[max_diff_idx]}")
-    print(f"model_loss at max diff: {model_loss.flatten()[max_diff_idx]}")
-    raise e
-
+  torch.testing.assert_close(
+    hf_logits, model_logits, atol=1e-2, rtol=1e-4, msg="Logits are not equal"
+  )
+  torch.testing.assert_close(
+    hf_loss, model_loss, atol=1e-4, rtol=1e-9, msg="Losses are not equal"
+  )
   for (name_hf, p_hf), (name_model, p_model) in zip(
     hf_params, model_params, strict=True
   ):
@@ -157,24 +138,13 @@ def test_forward_and_backward_our_model_against_hf_model(
         f"Model grad for {name_model} is not zero when HF grad is None"
       )
     else:
-      try:
-        torch.testing.assert_close(
-          p_hf.grad,
-          p_model.grad,
-          atol=1e-2,
-          rtol=1e-6,
-          msg=f"Gradients for '{name_hf}' differ",
-        )
-      except AssertionError as e:
-        diff = (p_hf.grad - p_model.grad).abs()
-        max_diff = diff.max()
-        max_diff_idx = diff.argmax()
-        print(
-          f"\nGradient assertion failed for '{name_hf}'. Max absolute difference: {max_diff.item()}"
-        )
-        print(f"hf_grad at max diff: {p_hf.grad.flatten()[max_diff_idx]}")
-        print(f"model_grad at max diff: {p_model.grad.flatten()[max_diff_idx]}")
-        raise e
+      torch.testing.assert_close(
+        p_hf.grad,
+        p_model.grad,
+        atol=1e-2,
+        rtol=1e-6,
+        msg=f"Gradients for '{name_hf}' differ",
+      )
 
 
 @pytest.mark.parametrize(
@@ -211,57 +181,30 @@ def test_forward_and_backward_torch_xla_against_native(fixture):
   )
 
   # Assert
-  try:
-    torch.testing.assert_close(
-      logits_native,
-      logits_xla.to("cpu"),
-      atol=1e-2,
-      rtol=1e-4,
-      msg="CPU run and XLA run logits are not equal",
-    )
-  except AssertionError as e:
-    diff = (logits_native - logits_xla.to("cpu")).abs()
-    max_diff = diff.max()
-    max_diff_idx = diff.argmax()
-    print(
-      f"\nCPU vs XLA logits assertion failed. Max absolute difference: {max_diff.item()}"
-    )
-    print(f"native_logit at max diff: {logits_native.flatten()[max_diff_idx]}")
-    print(f"xla_logit at max diff: {logits_xla.to('cpu').flatten()[max_diff_idx]}")
-    raise e
-
-  try:
-    torch.testing.assert_close(
-      loss_native,
-      loss_xla.to("cpu"),
-      atol=1e-2,
-      rtol=1e-4,
-      msg="CPU run and XLA run loss is not equal",
-    )
-  except AssertionError as e:
-    max_diff = (loss_native - loss_xla.to("cpu")).abs().max()
-    print(
-      f"\nCPU vs XLA loss assertion failed. Max absolute difference: {max_diff.item()}"
-    )
-    raise e
-
+  torch.testing.assert_close(
+    logits_native,
+    logits_xla.to("cpu"),
+    atol=1e-2,
+    rtol=1e-4,
+    msg="CPU run and XLA run logits are not equal",
+  )
+  torch.testing.assert_close(
+    loss_native,
+    loss_xla.to("cpu"),
+    atol=1e-2,
+    rtol=1e-4,
+    msg="CPU run and XLA run loss is not equal",
+  )
   for (name_native, p_native), (name_xla, p_xla) in zip(
     params_native, params_xla, strict=True
   ):
     assert name_native == name_xla
     assert p_native.grad is not None
     assert p_xla.grad is not None
-    try:
-      torch.testing.assert_close(
-        p_native.grad,
-        p_xla.grad.cpu(),
-        atol=1e-2,
-        rtol=1e-4,
-        msg=f"Gradients for '{name_native}' differ between Native and XLA",
-      )
-    except AssertionError as e:
-      max_diff = (p_native.grad - p_xla.grad.cpu()).abs().max()
-      print(
-        f"\nCPU vs XLA gradient assertion failed for '{name_native}'. Max absolute difference: {max_diff.item()}"
-      )
-      raise e
+    torch.testing.assert_close(
+      p_native.grad,
+      p_xla.grad.cpu(),
+      atol=1e-2,
+      rtol=1e-4,
+      msg=f"Gradients for '{name_native}' differ between Native and XLA",
+    )
