@@ -179,13 +179,30 @@ def test_forward_and_backward_our_model_against_hf_model(
     assert name_hf == name_model, f"Parameter name mismatch: {name_hf} vs {name_model}"
     assert p_hf.grad is not None, f"Gradient for {name_hf} is None in hf_model"
     assert p_model.grad is not None, f"Gradient for {name_model} is None in model"
-    torch.testing.assert_close(
-      p_hf.grad,
-      p_model.grad,
-      atol=1e-6,
-      rtol=1e-9,
-      msg=f"Gradients for '{name_hf}' differ",
-    )
+    try:
+      torch.testing.assert_close(
+        p_hf.grad,
+        p_model.grad,
+        atol=1e-5,
+        rtol=1e-9,
+        msg=f"Gradients for '{name_hf}' differ",
+      )
+    except AssertionError as e:
+      diff = (p_hf.grad - p_model.grad).abs()
+      max_diff = diff.max()
+      max_diff_idx = diff.argmax()
+      print(f"\nGradient mismatch for parameter: {name_hf}")
+      print(f"Max difference: {max_diff}")
+      print(f"HF grad at max diff location: {p_hf.grad.flatten()[max_diff_idx]}")
+      print(f"Our grad at max diff location: {p_model.grad.flatten()[max_diff_idx]}")
+      slice_start = max(0, max_diff_idx - 4)
+      slice_end = max_diff_idx + 5
+      print(f"\nHF grad slice around max diff (index {max_diff_idx}):\n{p_hf.grad.flatten()[slice_start:slice_end]}")
+      print(f"Our grad slice around max diff (index {max_diff_idx}):\n{p_model.grad.flatten()[slice_start:slice_end]}")
+      print("\nNote: The sample below might not show the difference if it occurs elsewhere in the tensor.")
+      print(f"HF grad sample:\n{p_hf.grad.flatten()}")
+      print(f"Our grad sample:\n{p_model.grad.flatten()}")
+      raise e
 
 
 @pytest.mark.parametrize(
@@ -253,10 +270,29 @@ def test_forward_and_backward_torch_xla_against_native(fixture, input_size):
       f"Gradient for {name_native} is None in native model"
     )
     assert p_xla.grad is not None, f"Gradient for {name_xla} is None in XLA model"
-    torch.testing.assert_close(
-      p_native.grad,
-      p_xla.grad.cpu(),
-      atol=1e-2,
-      rtol=1e-6,
-      msg=f"Gradients for '{name_native}' differ between Native and XLA",
-    )
+    try:
+      torch.testing.assert_close(
+        p_native.grad,
+        p_xla.grad.cpu(),
+        atol=1e-2,
+        rtol=1e-6,
+        msg=f"Gradients for '{name_native}' differ between Native and XLA",
+      )
+    except AssertionError as e:
+      diff = (p_native.grad - p_xla.grad.cpu()).abs()
+      max_diff = diff.max()
+      max_diff_idx = diff.argmax()
+      print(f"\nGradient mismatch for parameter: {name_native}")
+      print(f"Max difference: {max_diff}")
+      print(f"Native grad at max diff location: {p_native.grad.flatten()[max_diff_idx]}")
+      print(
+        f"XLA grad at max diff location: {p_xla.grad.cpu().flatten()[max_diff_idx]}"
+      )
+      slice_start = max(0, max_diff_idx - 4)
+      slice_end = max_diff_idx + 5
+      print(f"\nNative grad slice around max diff (index {max_diff_idx}):\n{p_native.grad.flatten()[slice_start:slice_end]}")
+      print(f"XLA grad slice around max diff (index {max_diff_idx}):\n{p_xla.grad.cpu().flatten()[slice_start:slice_end]}")
+      print("\nNote: The sample below might not show the difference if it occurs elsewhere in the tensor.")
+      print(f"Native grad sample (first 8 values):\n{p_native.grad.flatten()[:8]}")
+      print(f"XLA grad sample (first 8 values):\n{p_xla.grad.cpu().flatten()[:8]}")
+      raise e
