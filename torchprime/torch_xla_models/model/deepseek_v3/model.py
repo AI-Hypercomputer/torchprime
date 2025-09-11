@@ -310,7 +310,7 @@ class DeepseekV3MoE(nn.Module):
     W_gate, W_up, W_down = self._grouped_weights(x.dtype)
 
     # Conditional logic to switch between GMM kernel and CPU fallback
-    if self.use_gmm_kernel_for_moe and GMM is not None:
+    if self.use_gmm_kernel_for_moe and GMM is not None and x.device.type == "xla":
       gate_out = GMM.apply(sorted_x, W_gate, group_sizes)
       up_out = GMM.apply(sorted_x, W_up, group_sizes)
       act_out = self.act_fn(gate_out) * up_out

@@ -51,8 +51,8 @@ def get_deepseek_v3_dummy() -> DeepseekFixture:
     print(
       "\n\n\n!!! Running deepseek convergence test on TPU, this is not fully tested yet..."
     )
-    # TODO(jialei): also need to add global mesh for splash_attention
-    config.attention_kernel = "splash_attention"
+    # TODO(jialei): Enable splash_attention after setting global mesh
+    config.attention_kernel = "pytorch"
     config.use_gmm_kernel_for_moe = True
   else:
     config.attention_kernel = "pytorch"
