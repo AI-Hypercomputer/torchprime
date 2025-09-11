@@ -381,7 +381,7 @@ def run(
       "--priority",
       priority if priority else "medium",
       "--zone",
-      config.zone,
+      config.zone + "-b",
       "--project",
       config.project,
       "--enable-debug-logs",

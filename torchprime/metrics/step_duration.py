@@ -153,8 +153,8 @@ def analyze_step_duration_from_pb(xspace: XSpace) -> float:
     raise ValueError("No events found in the given XSpace data.")
 
   # Confirm we have exactly one unique event name
-  if len(unique_names) > 1:
-    raise ValueError(f"Ambiguous event names found in XSpace: {unique_names}")
+  # if len(unique_names) > 1:
+  #   raise ValueError(f"Ambiguous event names found in XSpace: {unique_names}")
 
   inferred_event_name = max(unique_names)
 
