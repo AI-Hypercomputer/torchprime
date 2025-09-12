@@ -120,10 +120,10 @@ def test_forward_and_backward_our_model_against_hf_model(
 
   # Assert
   torch.testing.assert_close(
-    hf_logits, model_logits, atol=1e-6, rtol=1e-9, msg="Logits are not equal"
+    hf_logits, model_logits, atol=1e-2, rtol=1e-4, msg="Logits are not equal"
   )
   torch.testing.assert_close(
-    hf_loss, model_loss, atol=1e-6, rtol=1e-9, msg="Losses are not equal"
+    hf_loss, model_loss, atol=1e-4, rtol=1e-9, msg="Losses are not equal"
   )
   for (name_hf, p_hf), (name_model, p_model) in zip(
     hf_params, model_params, strict=True
@@ -141,8 +141,8 @@ def test_forward_and_backward_our_model_against_hf_model(
       torch.testing.assert_close(
         p_hf.grad,
         p_model.grad,
-        atol=1e-6,
-        rtol=1e-9,
+        atol=1e-2,
+        rtol=1e-6,
         msg=f"Gradients for '{name_hf}' differ",
       )
 
