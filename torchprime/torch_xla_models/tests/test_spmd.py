@@ -341,6 +341,7 @@ class TestConfigSpmd(unittest.TestCase):
         "router_aux_loss_coef": 0.02,
         "attention_bias": False,
         "attention_dropout": 0.0,
+        "attention_kernel": "splash_attention",
         "flash_attention": True,
         "moe_implementation": "gmm",
       }

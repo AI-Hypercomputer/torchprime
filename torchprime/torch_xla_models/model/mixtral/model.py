@@ -334,6 +334,24 @@ class Gmm(torch.autograd.Function):
     return torch.cat(grad_lhs), torch.stack(grad_rhs)
 
   @staticmethod
+  def _histogram(input: torch.Tensor, min: int, max: int) -> torch.Tensor:
+    """
+    Compute the histogram of a int32 tensor. The bin edges are defined by the min and max values, with step = 1.
+    """
+    assert input.dtype == torch.int32, "input must be of torch.int32 dtype."
+    assert min <= max, "min must be less than or equal to max."
+
+    def searchsorted(
+      sorted_sequence: torch.Tensor, values_to_search: torch.Tensor
+    ) -> torch.Tensor:
+      return (sorted_sequence.unsqueeze(1) == values_to_search).sum(dim=1)
+
+    bin_edges = torch.linspace(min, max, max - min + 1, dtype=input.dtype).to(
+      input.device
+    )
+    return searchsorted(bin_edges, input).to(torch.int32)
+
+  @staticmethod
   @xp.trace_me("gmm_forward")
   def forward(
     ctx,
@@ -352,7 +370,7 @@ class Gmm(torch.autograd.Function):
     w2: [num_experts, ffn_dim, hidden_size]
     w3: [num_experts, hidden_size, ffn_dim]
     """
-    from torch_xla.experimental.custom_kernel import _histogram, gmm
+    from torch_xla.experimental.custom_kernel import gmm
 
     device = hidden_states.device
     if device == torch.device("cpu"):
@@ -397,7 +415,7 @@ class Gmm(torch.autograd.Function):
     ).repeat_interleave(k)[hidden_states_order]
     hidden_states_sorted = hidden_states[hidden_states_indices]
 
-    group_sizes = _histogram(top_flat.to(torch.int32), 0, num_experts - 1)
+    group_sizes = Gmm._histogram(top_flat.to(torch.int32), 0, num_experts - 1)
     gmm1 = gmm(hidden_states_sorted, w1, group_sizes, tiling=(512, 1024, 1024))
     gmm3 = gmm(hidden_states_sorted, w3, group_sizes, tiling=(512, 1024, 1024))
     silu = F.silu(gmm1)
