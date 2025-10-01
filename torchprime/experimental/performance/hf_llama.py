@@ -3,10 +3,11 @@ from transformers.models.qwen2 import modeling_qwen2
 import torch
 from typing import Any
 
+
 import time
 import numpy as np
-import torch_xla.core.xla_model as xm
 import torch_xla
+import os
 
 
 def get_llama3_model(torch_dtype: torch.dtype):
@@ -110,31 +111,52 @@ input_ids = input_ids.to(device)
 if USE_TORCH_COMPILE:
   # To use torch.compile with XLA, you should specify the 'openxla' or 'openxla_eval' backend.
   model_tpu = torch.compile(model_tpu)
+  
+# Preheat the cache.
+print("Preheating...")
+preheat_start_time = time.perf_counter()
+with torch.no_grad():
+    output_tpu = model_tpu(input_ids).logits
+torch_xla.sync()
+preheat_end_time = time.perf_counter()
+preheat_time = preheat_end_time - preheat_start_time
+print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
 
 # Initial run (warm-up) to trigger XLA compilation
 print("Warming up...")
+warmup_start_time = time.perf_counter()
 with torch.no_grad():
     output_tpu = model_tpu(input_ids).logits
-
 torch_xla.sync()
+warmup_end_time = time.perf_counter()
+warmup_time = warmup_end_time - warmup_start_time
+
 # Subsequent runs for measurement
 print(f"Starting benchmark for {NUM_RUNS} runs...")
 times = []
+cuda_memory_usage = []
 for i in range(NUM_RUNS):
     start_time = time.perf_counter()
     with torch.no_grad():
       # The model forward pass is intentionally not assigned to a variable
       # to measure only the execution time.
       model_tpu(input_ids)
+      
     torch_xla.sync()
     end_time = time.perf_counter()
     times.append(end_time - start_time)
     print(f"Run {i+1}/{NUM_RUNS}: {(end_time - start_time) * 1000:.2f} ms")
-    
-    
+
+actual_time_taken = times
+print(f"ACTUAL WALL TIME: {1000 * sum(actual_time_taken) / NUM_RUNS:.4f} ms")
+
 # Print final performance results
 print("\n--- Benchmark Results ---")
+print(f"Preheat time:    {preheat_time * 1000:.2f} ms")
+print(f"Warm-up time:    {warmup_time * 1000:.2f} ms (includes compilation)")
 print(f"Number of runs: {len(times)}")
+print(f"ACTUAL WALL TIME: {1000 * sum(actual_time_taken) / NUM_RUNS:.4f} ms")
+
 print(f"Average latency: {np.mean(times) * 1000:.2f} ms")
 print(f"Median latency:  {np.median(times) * 1000:.2f} ms")
 print(f"P90 latency:     {np.percentile(times, 90) * 1000:.2f} ms")
@@ -145,3 +167,4 @@ print(f"Max latency:     {np.max(times) * 1000:.2f} ms")
 # Add this line to wait for the TPU to finish and ensure a clean exit
 torch_xla.sync()
 print("Script finished and exited cleanly.")
+# os._exit(0) # <-- Use os._exit() instead of sys.exit()
