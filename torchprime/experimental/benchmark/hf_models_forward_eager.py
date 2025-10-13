@@ -40,7 +40,8 @@ def main(args):
   print("Preheating...")
   preheat_start_time = time.perf_counter()
   with torch.no_grad():
-    _ = model_tpu(input_ids).logits
+    # Assign to a variable to prevent garbage collection before sync.
+    logits = model_tpu(input_ids).logits
   preheat_end_time = time.perf_counter()
   preheat_time = preheat_end_time - preheat_start_time
   print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
@@ -49,7 +50,7 @@ def main(args):
   print("Warming up...")
   warmup_start_time = time.perf_counter()
   with torch.no_grad():
-    _ = model_tpu(input_ids).logits
+    logits = model_tpu(input_ids).logits
   warmup_end_time = time.perf_counter()
   warmup_time = warmup_end_time - warmup_start_time
 
@@ -59,12 +60,11 @@ def main(args):
   for i in range(args.num_runs):
     start_time = time.perf_counter()
     with torch.no_grad():
-      # The model forward pass is intentionally not assigned to a variable
-      # to measure only the execution time.
-      model_tpu(input_ids)
+      # Assign to a variable to prevent garbage collection before sync.
+      logits = model_tpu(input_ids).logits
       
-    # Do we need this???
-    torch_xla.sync()
+    # This is critical for accurate timing. XLA operations are asynchronous.
+    torch_xla.sync()  # Wait for the computation to complete.
 
     end_time = time.perf_counter()
     times.append(end_time - start_time)
