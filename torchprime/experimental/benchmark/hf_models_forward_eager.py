@@ -93,7 +93,7 @@ if __name__ == "__main__":
       "--model_name",
       type=str,
       default="llama3.2-1B",
-      choices=["llama3.2-1B", "qwen2-1.7B"],
+      choices=["llama3.2-1B", "qwen3-1.7B"],
       help="Model to benchmark (must match a config file name).",
   )
   parser.add_argument(

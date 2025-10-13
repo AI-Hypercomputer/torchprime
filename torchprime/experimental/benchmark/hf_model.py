@@ -2,7 +2,7 @@ from typing import Any
 
 import torch
 from transformers.models.llama import modeling_llama
-from transformers.models.qwen2 import modeling_qwen2
+from transformers.models.qwen3 import modeling_qwen3
 
 
 def get_llama3_model(torch_dtype: torch.dtype):
@@ -40,9 +40,9 @@ def get_llama3_model(torch_dtype: torch.dtype):
   return model
 
 
-def get_qwen2_model(torch_dtype: torch.dtype):
-  """Returns the Qwen2 1.7B model."""
-  config = modeling_qwen2.Qwen2Config(
+def get_qwen3_model(torch_dtype: torch.dtype):
+  """Returns the Qwen3 1.7B model."""
+  config = modeling_qwen3.Qwen3Config(
       attention_bias=False,
       attention_dropout=0.0,
       bos_token_id=151643,
@@ -67,7 +67,7 @@ def get_qwen2_model(torch_dtype: torch.dtype):
       vocab_size=151936,
       _attn_implementation="eager",
   )
-  model = modeling_qwen2.Qwen2ForCausalLM(config).to(torch_dtype)
+  model = modeling_qwen3.Qwen3ForCausalLM(config).to(torch_dtype)
   return model
 
 
@@ -75,7 +75,7 @@ def get_model(model_name: str, dtype: torch.dtype) -> Any:
   match model_name:
     case "llama3.2-1B":
       return get_llama3_model(dtype)
-    case "qwen2-1.7B":
-      return get_qwen2_model(dtype)
+    case "qwen3-1.7B":
+      return get_qwen3_model(dtype)
     case _:
       raise ValueError(f"Unsupported model: {model_name}")
