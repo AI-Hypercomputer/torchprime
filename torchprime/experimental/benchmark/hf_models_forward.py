@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch_xla
+import torch_xla.core.xla_model as xm
 
 from torchprime.experimental.benchmark.hf_model import get_model
 
@@ -33,23 +34,14 @@ def main(args):
   # Move inputs to the XLA device as well.
   input_ids = input_ids.to(device)
 
-  # Preheat the cache.
-  print("Preheating...")
-  preheat_start_time = time.perf_counter()
-  with torch.no_grad():
-    # Assign to a variable to prevent garbage collection before sync.
-    logits = model_tpu(input_ids).logits
-  torch_xla.sync()
-  preheat_end_time = time.perf_counter()
-  preheat_time = preheat_end_time - preheat_start_time
-  print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
-
   # Initial run (warm-up) to trigger XLA compilation
-  print("Warming up...")
+  print("Warming up (includes XLA graph compilation)...")
   warmup_start_time = time.perf_counter()
   with torch.no_grad():
+    # The first run triggers compilation, which is a one-time cost.
+    # Subsequent runs will be much faster as they hit the compilation cache.
     logits = model_tpu(input_ids).logits
-  torch_xla.sync()
+  xm.wait_device_ops()  # Block until the graph compilation and execution is complete.
   warmup_end_time = time.perf_counter()
   warmup_time = warmup_end_time - warmup_start_time
 
@@ -62,7 +54,7 @@ def main(args):
       # Assign to a variable to prevent garbage collection before sync.
       logits = model_tpu(input_ids).logits
 
-    torch_xla.sync()  # Wait for the computation to complete.
+    xm.wait_device_ops()  # Block until the step's computation is complete for accurate timing.
     end_time = time.perf_counter()
     times.append(end_time - start_time)
     print(f"Run {i+1}/{args.num_runs}: {(end_time - start_time) * 1000:.2f} ms")
@@ -71,7 +63,6 @@ def main(args):
   print("\n--- Benchmark Results (Lazy Mode) ---")
   print(f"Model: {args.model_name}, DType: {args.dtype}")
   print(f"Batch Size: {args.batch_size}, Sequence Length: {args.seq_len}")
-  print(f"Preheat time:    {preheat_time * 1000:.2f} ms")
   print(f"Warm-up time:    {warmup_time * 1000:.2f} ms (includes compilation)")
   print(f"Number of runs: {len(times)}")
   print(f"Average latency: {np.mean(times) * 1000:.2f} ms")
@@ -81,7 +72,7 @@ def main(args):
   print(f"Max latency:     {np.max(times) * 1000:.2f} ms")
 
   # Add this line to wait for the TPU to finish and ensure a clean exit
-  torch_xla.sync()
+  xm.wait_device_ops()  # Final sync to ensure all pending operations are done.
   print("Script finished and exited cleanly.")
   os._exit(0)  # <-- Use os._exit() instead of sys.exit()
 

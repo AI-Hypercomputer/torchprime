@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch_xla
+import torch_xla.core.xla_model as xm
 
 from torchprime.experimental.benchmark.hf_model import get_model
 
@@ -42,6 +43,7 @@ def main(args):
   with torch.no_grad():
     # Assign to a variable to prevent garbage collection before sync.
     logits = model_tpu(input_ids).logits
+  xm.wait_device_ops()
   preheat_end_time = time.perf_counter()
   preheat_time = preheat_end_time - preheat_start_time
   print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
@@ -51,6 +53,8 @@ def main(args):
   warmup_start_time = time.perf_counter()
   with torch.no_grad():
     logits = model_tpu(input_ids).logits
+  # Block until the operation is complete.
+  xm.wait_device_ops()
   warmup_end_time = time.perf_counter()
   warmup_time = warmup_end_time - warmup_start_time
 
@@ -62,9 +66,7 @@ def main(args):
     with torch.no_grad():
       # Assign to a variable to prevent garbage collection before sync.
       logits = model_tpu(input_ids).logits
-      
-    # This is critical for accurate timing. XLA operations are asynchronous.
-    torch_xla.sync()  # Wait for the computation to complete.
+    xm.wait_device_ops()
 
     end_time = time.perf_counter()
     times.append(end_time - start_time)
