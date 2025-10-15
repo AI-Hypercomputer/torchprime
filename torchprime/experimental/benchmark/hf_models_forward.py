@@ -34,12 +34,21 @@ def main(args):
   # Move inputs to the XLA device as well.
   input_ids = input_ids.to(device)
 
+  # Preheat the cache.
+  print("Preheating...")
+  preheat_start_time = time.perf_counter()
+  with torch.no_grad():
+    # Assign to a variable to prevent garbage collection before sync.
+    logits = model_tpu(input_ids).logits
+  xm.wait_device_ops()
+  preheat_end_time = time.perf_counter()
+  preheat_time = preheat_end_time - preheat_start_time
+  print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
+
   # Initial run (warm-up) to trigger XLA compilation
   print("Warming up (includes XLA graph compilation)...")
   warmup_start_time = time.perf_counter()
   with torch.no_grad():
-    # The first run triggers compilation, which is a one-time cost.
-    # Subsequent runs will be much faster as they hit the compilation cache.
     logits = model_tpu(input_ids).logits
   xm.wait_device_ops()  # Block until the graph compilation and execution is complete.
   warmup_end_time = time.perf_counter()
@@ -63,6 +72,7 @@ def main(args):
   print("\n--- Benchmark Results (Lazy Mode) ---")
   print(f"Model: {args.model_name}, DType: {args.dtype}")
   print(f"Batch Size: {args.batch_size}, Sequence Length: {args.seq_len}")
+  print(f"Preheat time:    {preheat_time * 1000:.2f} ms")
   print(f"Warm-up time:    {warmup_time * 1000:.2f} ms (includes compilation)")
   print(f"Number of runs: {len(times)}")
   print(f"Average latency: {np.mean(times) * 1000:.2f} ms")
