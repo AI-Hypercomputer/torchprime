@@ -43,7 +43,7 @@ def main(args):
   with torch.no_grad():
     # Assign to a variable to prevent garbage collection before sync.
     logits = model_tpu(input_ids).logits
-  xm.wait_device_ops()
+  torch_xla.sync()
   preheat_end_time = time.perf_counter()
   preheat_time = preheat_end_time - preheat_start_time
   print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")

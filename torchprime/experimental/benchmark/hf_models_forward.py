@@ -40,7 +40,8 @@ def main(args):
   with torch.no_grad():
     # Assign to a variable to prevent garbage collection before sync.
     logits = model_tpu(input_ids).logits
-  xm.wait_device_ops()
+  torch_xla.sync()
+  # xm.wait_device_ops()
   preheat_end_time = time.perf_counter()
   preheat_time = preheat_end_time - preheat_start_time
   print(f"PREHEAT WALL TIME: {preheat_time*1000:.4f} ms")
@@ -73,7 +74,7 @@ def main(args):
   print(f"Model: {args.model_name}, DType: {args.dtype}")
   print(f"Batch Size: {args.batch_size}, Sequence Length: {args.seq_len}")
   print(f"Preheat time:    {preheat_time * 1000:.2f} ms")
-  print(f"Warm-up time:    {warmup_time * 1000:.2f} ms (includes compilation)")
+  print(f"Warm-up time:    {warmup_time * 1000:.2f} ms")
   print(f"Number of runs: {len(times)}")
   print(f"Average latency: {np.mean(times) * 1000:.2f} ms")
   print(f"Median latency:  {np.median(times) * 1000:.2f} ms")
