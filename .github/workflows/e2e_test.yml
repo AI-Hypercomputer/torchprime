@@ -58,11 +58,13 @@ jobs:
       - name: Setup Docker URL option
         id: docker-url-option
         run: |
-          if [ -n "${{ github.event.inputs.docker_url }}" ]; then
-            echo "value=--base-docker-url ${{ github.event.inputs.docker_url }}" >> "$GITHUB_OUTPUT"
+          if [ -n "${GITHUB_EVENT_INPUTS_DOCKER_URL}" ]; then
+            echo "value=--base-docker-url ${GITHUB_EVENT_INPUTS_DOCKER_URL}" >> "$GITHUB_OUTPUT"
           else
             echo "value=" >> "$GITHUB_OUTPUT"
           fi
+        env:
+          GITHUB_EVENT_INPUTS_DOCKER_URL: ${{ github.event.inputs.docker_url }}
       # Launch training workloads.
 
       - name: Run Llama 3.0 8B
@@ -70,10 +72,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -91,10 +94,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-pure-mlp)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -113,10 +117,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -135,10 +140,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-scan-offload)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -157,10 +163,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2d)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -180,10 +187,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-fsdp-cp)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b-cp \
@@ -202,10 +210,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py mixtral-8x7b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=mixtral-8x7b \
@@ -224,10 +233,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2-slice)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             --num-slices 2 \
             torchprime/torch_xla_models/train.py \
@@ -248,10 +258,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-sft)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             --config-name llama-3-8b-sft-w-gsm8k \
@@ -268,10 +279,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-ddp-fsdp)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             --num-slices 2 \
             torchprime/torch_xla_models/train.py \
@@ -292,10 +304,11 @@ jobs:
         env:
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py ds-v3-shallow)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=deepseek-v3 \
