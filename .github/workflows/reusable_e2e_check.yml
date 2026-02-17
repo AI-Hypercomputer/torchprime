@@ -33,22 +33,36 @@ jobs:
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
       - name: Get GKE credentials
         run: |
-          gcloud container clusters get-credentials ${{ vars.XPK_CLUSTER_NAME }} --region=${{ vars.GCP_ZONE }} --project=${{ vars.GCP_PROJECT }}
+          gcloud container clusters get-credentials ${VARS_XPK_CLUSTER_NAME} --region=${VARS_GCP_ZONE} --project=${VARS_GCP_PROJECT}
           kubectl config view
           kubectl config set-context --current --namespace=default
+        env:
+          VARS_XPK_CLUSTER_NAME: ${{ vars.XPK_CLUSTER_NAME }}
+          VARS_GCP_ZONE: ${{ vars.GCP_ZONE }}
+          VARS_GCP_PROJECT: ${{ vars.GCP_PROJECT }}
       - name: Stream logs
         run: |
-          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
+          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${INPUTS_JOBSET_NAME} -o json | jq --raw-output '.items[0].metadata.name')
           # Save logs to a file for later checks
           kubectl logs -c jax-tpu -f $pod_name | tee /tmp/pod-$pod_name.log
+        env:
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Wait for workload to complete
         run: |
-          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }}
+          xpk workload list --cluster ${VARS_XPK_CLUSTER_NAME} --wait-for-job-completion=${INPUTS_JOBSET_NAME}
+        env:
+          VARS_XPK_CLUSTER_NAME: ${{ vars.XPK_CLUSTER_NAME }}
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Validate logs
         run: |
-          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o json | jq --raw-output '.items[0].metadata.name')
+          pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${INPUTS_JOBSET_NAME} -o json | jq --raw-output '.items[0].metadata.name')
           e2e_testing/check_logs.py /tmp/pod-$pod_name.log
+        env:
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Validate profile
         run: |
-          profile_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/profile/0-0"
+          profile_dir="${INPUTS_ARTIFACT_DIR}/${INPUTS_JOBSET_NAME}/profile/0-0"
           e2e_testing/check_profile.py "$profile_dir"
+        env:
+          INPUTS_ARTIFACT_DIR: ${{ inputs.artifact_dir }}
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}

@@ -62,10 +62,16 @@ runs:
     - name: tp use
       run: >
         tp use
-        --project '${{ inputs.gcp_project }}'
-        --zone '${{ inputs.gcp_zone }}'
-        --cluster '${{ inputs.xpk_cluster_name }}'
+        --project '${INPUTS_GCP_PROJECT}'
+        --zone '${INPUTS_GCP_ZONE}'
+        --cluster '${INPUTS_XPK_CLUSTER_NAME}'
         --num-slices 1
-        --artifact-dir '${{ inputs.artifact_dir }}'
-        --tpu-type '${{ inputs.tpu_type }}'
+        --artifact-dir '${INPUTS_ARTIFACT_DIR}'
+        --tpu-type '${INPUTS_TPU_TYPE}'
       shell: bash
+      env:
+        INPUTS_GCP_PROJECT: ${{ inputs.gcp_project }}
+        INPUTS_GCP_ZONE: ${{ inputs.gcp_zone }}
+        INPUTS_XPK_CLUSTER_NAME: ${{ inputs.xpk_cluster_name }}
+        INPUTS_ARTIFACT_DIR: ${{ inputs.artifact_dir }}
+        INPUTS_TPU_TYPE: ${{ inputs.tpu_type }}
