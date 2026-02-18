@@ -53,11 +53,13 @@ jobs:
       - name: Setup Docker URL option
         id: docker-url-option
         run: |
-          if [ -n "${{ github.event.inputs.docker_url }}" ]; then
-            echo "value=--base-docker-url ${{ github.event.inputs.docker_url }}" >> "$GITHUB_OUTPUT"
+          if [ -n "${GITHUB_EVENT_INPUTS_DOCKER_URL}" ]; then
+            echo "value=--base-docker-url ${GITHUB_EVENT_INPUTS_DOCKER_URL}" >> "$GITHUB_OUTPUT"
           else
             echo "value=" >> "$GITHUB_OUTPUT"
           fi
+        env:
+          GITHUB_EVENT_INPUTS_DOCKER_URL: ${{ github.event.inputs.docker_url }}
 
       # Launch training workloads.
 
@@ -67,10 +69,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -86,10 +89,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -106,10 +110,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3dot1-8b-sa)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3.1-8b \
@@ -126,10 +131,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2d)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=llama-3-8b \
@@ -147,10 +153,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py mixtral-8x7b)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             torchprime/torch_xla_models/train.py \
             model=mixtral-8x7b \
@@ -167,10 +174,11 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           XLA_IR_DEBUG: 1
           XLA_HLO_DEBUG: 1
+          STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE: ${{ steps.docker-url-option.outputs.value }}
         run: |
           name=$(e2e_testing/gen_name.py llama-3-8b-2-slice)
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          tp run ${{ steps.docker-url-option.outputs.value }} \
+          tp run ${STEPS_DOCKER_URL_OPTION_OUTPUTS_VALUE} \
             --name $name \
             --num-slices 2 \
             torchprime/torch_xla_models/train.py \
