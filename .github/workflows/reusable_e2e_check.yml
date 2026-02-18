@@ -49,15 +49,19 @@ jobs:
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
       - name: Get GKE credentials
         run: |
-          gcloud container clusters get-credentials ${{ vars.XPK_CLUSTER_NAME }} --region=${{ vars.GCP_ZONE }} --project=${{ vars.GCP_PROJECT }}
+          gcloud container clusters get-credentials ${VARS_XPK_CLUSTER_NAME} --region=${VARS_GCP_ZONE} --project=${VARS_GCP_PROJECT}
           kubectl config view
           kubectl config set-context --current --namespace=default
+        env:
+          VARS_XPK_CLUSTER_NAME: ${{ vars.XPK_CLUSTER_NAME }}
+          VARS_GCP_ZONE: ${{ vars.GCP_ZONE }}
+          VARS_GCP_PROJECT: ${{ vars.GCP_PROJECT }}
       - name: Get pod name
         id: get_pod_name
         run: |
           # Wait for pod to exist
           for i in {1..60}; do
-            pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${{ inputs.jobset_name }} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            pod_name=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${INPUTS_JOBSET_NAME} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
             if [[ -n "$pod_name" && "$pod_name" != "null" ]]; then
               echo "pod_name=$pod_name" >> $GITHUB_OUTPUT
               exit 0
@@ -67,9 +71,11 @@ jobs:
           done
           echo "❌ ERROR: Pod not found after 60 minutes"
           exit 1
+        env:
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Wait for workload to start
         run: |
-          pod_name="${{ steps.get_pod_name.outputs.pod_name }}"
+          pod_name="${STEPS_GET_POD_NAME_OUTPUTS_POD_NAME}"
           # Check if pod is already done or running
           for i in {1..60}; do
             phase=$(kubectl get pod "$pod_name" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
@@ -91,27 +97,47 @@ jobs:
           done
           echo "❌ ERROR: Timeout waiting for pod to start"
           exit 1
+        env:
+          STEPS_GET_POD_NAME_OUTPUTS_POD_NAME: ${{ steps.get_pod_name.outputs.pod_name }}
       - name: Stream logs
         run: |
           # Save logs to a file for later checks
-          kubectl logs -c jax-tpu -f ${{ steps.get_pod_name.outputs.pod_name }} | tee /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log
+          kubectl logs -c jax-tpu -f ${STEPS_GET_POD_NAME_OUTPUTS_POD_NAME} | tee /tmp/pod-${STEPS_GET_POD_NAME_OUTPUTS_POD_NAME}.log
+        env:
+          STEPS_GET_POD_NAME_OUTPUTS_POD_NAME: ${{ steps.get_pod_name.outputs.pod_name }}
       - name: Wait for workload to complete
         run: |
-          xpk workload list --cluster ${{ vars.XPK_CLUSTER_NAME }} --wait-for-job-completion=${{ inputs.jobset_name }} --project ${{ vars.GCP_PROJECT }} --zone ${{ vars.GCP_ZONE }}
+          xpk workload list --cluster ${VARS_XPK_CLUSTER_NAME} --wait-for-job-completion=${INPUTS_JOBSET_NAME} --project ${VARS_GCP_PROJECT} --zone ${VARS_GCP_ZONE}
+        env:
+          VARS_XPK_CLUSTER_NAME: ${{ vars.XPK_CLUSTER_NAME }}
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
+          VARS_GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          VARS_GCP_ZONE: ${{ vars.GCP_ZONE }}
       - name: Validate logs
         run: |
-          e2e_testing/check_logs.py /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log
+          e2e_testing/check_logs.py /tmp/pod-${STEPS_GET_POD_NAME_OUTPUTS_POD_NAME}.log
+        env:
+          STEPS_GET_POD_NAME_OUTPUTS_POD_NAME: ${{ steps.get_pod_name.outputs.pod_name }}
       - name: Validate profile
         run: |
-          profile_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/profile/0-0"
+          profile_dir="${INPUTS_ARTIFACT_DIR}/${INPUTS_JOBSET_NAME}/profile/0-0"
           e2e_testing/check_profile.py "$profile_dir"
+        env:
+          INPUTS_ARTIFACT_DIR: ${{ inputs.artifact_dir }}
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Validate metrics
         run: |
-          output_dir="${{ inputs.artifact_dir }}/${{ inputs.jobset_name }}/outputs/0-0"
+          output_dir="${INPUTS_ARTIFACT_DIR}/${INPUTS_JOBSET_NAME}/outputs/0-0"
           e2e_testing/check_step_time.py "$output_dir" "${{ inputs.step_time_lower_bound }}" "${{ inputs.step_time_upper_bound }}"
+        env:
+          INPUTS_ARTIFACT_DIR: ${{ inputs.artifact_dir }}
+          INPUTS_JOBSET_NAME: ${{ inputs.jobset_name }}
       - name: Validate loss
         if: ${{ inputs.target_loss }}
         run: |
           e2e_testing/check_loss.py \
-            /tmp/pod-${{ steps.get_pod_name.outputs.pod_name }}.log \
+            /tmp/pod-${STEPS_GET_POD_NAME_OUTPUTS_POD_NAME}.log \
             "${{ inputs.target_loss }}" "${{ inputs.loss_tolerance }}"
+
+        env:
+          STEPS_GET_POD_NAME_OUTPUTS_POD_NAME: ${{ steps.get_pod_name.outputs.pod_name }}
