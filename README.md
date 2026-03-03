@@ -5,7 +5,15 @@
 #### High-performance training for PyTorch on Cloud TPU
 
 </div>
-<br /><br />
+
+> [!NOTE]
+> 
+> <b>This repository is no longer under active development.</b>
+> We are moving toward a more native direction for PyTorch on TPU. As the core
+> framework matures, we'll provide a new reference implementation.
+>
+> Learn more about the new framework at pytorch/xla#9684.
+>
 
 `torchprime` is a reference implementation for training PyTorch models on TPU. It
 is designed to showcase best practices for large-scale, high-performance model
