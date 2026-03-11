@@ -32,7 +32,7 @@ MODEL_PATTERNS = [
 
 
 def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
-  """Uploads the contents of a local directory to GCS using gsutil.
+  """Uploads the contents of a local directory to GCS using gcloud storage.
 
   Args:
       local_path: The local directory whose contents will be uploaded.
@@ -42,7 +42,7 @@ def _upload_directory_to_gcs(local_path: Path, gcs_path: str):
     raise ValueError("GCS path must start with gs://")
 
   logger.info(f"Uploading contents of '{local_path}' to '{gcs_path}'...")
-  command = ["gsutil", "-m", "cp", "-r", f"{str(local_path).rstrip('/')}/*", gcs_path]
+  command = ["gcloud", "storage", "cp", "--recursive", f"{str(local_path).rstrip('/')}/*", gcs_path]
   try:
     subprocess.run(command, check=True, capture_output=True, text=True)
     logger.info(f"Successfully uploaded assets to {gcs_path}.")
