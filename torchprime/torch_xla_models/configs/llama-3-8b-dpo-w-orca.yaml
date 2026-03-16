@@ -1,0 +1,15 @@
+# Configuration for DPO training on the Orca dataset
+
+defaults:
+  - default
+  - override model: llama-3-8b
+  - override dataset: orca
+  - override task: dpo
+  - _self_
+
+task:
+  convert_to_safetensors: False
+
+model:
+  pretrained_model: meta-llama/Meta-Llama-3-8B
+  reference_model: meta-llama/Meta-Llama-3-8B

@@ -1,0 +1,7 @@
+# Dataset configuration for DPO using the Orca pairs dataset
+hf_dataset_name: Intel/orca_dpo_pairs
+hf_dataset_config_name: null
+split: train
+block_size: 256
+cache_dir: /tmp/
+truncation: drop
