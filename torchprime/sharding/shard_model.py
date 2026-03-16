@@ -315,3 +315,13 @@ class ShardedModule(torch.nn.Module):
 
   def forward(self, *args, **kwargs):
     return self.mark_sharding(self._orig_mod(*args, **kwargs), self.spec)
+
+  @property
+  def module(self):
+    return self._orig_mod
+
+  def __getattr__(self, name: str):
+    try:
+      return super().__getattr__(name) # defer to nn.Module's logic
+    except AttributeError:
+      return getattr(self.module, name)
