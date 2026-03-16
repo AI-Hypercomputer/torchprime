@@ -15,6 +15,12 @@
 > Learn more about the new framework at pytorch/xla#9684.
 >
 
+> [!NOTE]
+> `torchprime` is no longer under active development. We are working on a
+> [new framework](https://github.com/pytorch/xla/issues/9684) for
+> PyTorch on TPU. See [MaxText](https://github.com/AI-Hypercomputer/maxtext)
+> for pre-training and post-training with JAX on TPU.
+
 `torchprime` is a reference implementation for training PyTorch models on TPU. It
 is designed to showcase best practices for large-scale, high-performance model
 training using `torch_xla` ([project][torch_xla]), with
